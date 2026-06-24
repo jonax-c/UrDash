@@ -327,6 +327,7 @@ class UrDashPanel extends HTMLElement {
         <div>
           <strong>${escapeHtml(resource.name)} <em>${resource.installed ? "installed" : resource.checked ? "missing" : "not checked"}</em></strong>
           <p>${escapeHtml(resource.used_for || resource.usedFor || "")}</p>
+          ${resource.installed ? "" : `<a class="install-link" href="${escapeHtml(resource.hacs_url || "")}" target="_blank" rel="noopener">Open in HACS</a>`}
         </div>
       </div>
     `).join("");
@@ -564,6 +565,19 @@ const styles = `
     font-weight: 700;
     margin-left: 4px;
     text-transform: uppercase;
+  }
+
+  .install-link {
+    display: inline-flex;
+    margin-top: 4px;
+    color: #0b6f7f;
+    font-size: 12px;
+    font-weight: 800;
+    text-decoration: none;
+  }
+
+  .install-link:hover {
+    text-decoration: underline;
   }
 
   .dot {

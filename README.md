@@ -94,6 +94,8 @@ The panel checks Home Assistant's configured Lovelace resources and marks recomm
 - `missing` with an orange dot when the resource list was checked but the package was not found.
 - `not checked` when Home Assistant's resource storage could not be read.
 
+Missing packages include an **Open in HACS** shortcut that opens the corresponding HACS repository through Home Assistant's HACS redirect flow.
+
 ## Services
 
 UrDash also exposes `urdash.generate_dashboard`. The service generates a dashboard draft from the current Home Assistant state registry and fires an `urdash_dashboard_generated` event containing the generated dashboard object and YAML.
