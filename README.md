@@ -1,5 +1,7 @@
 # UrDash
 
+![UrDash icon](assets/urdash-icon.png)
+
 UrDash is a HACS-installable Home Assistant custom integration that helps create polished Lovelace dashboards from a natural-language request and the entities already available in Home Assistant.
 
 It adds a native Home Assistant sidebar panel where users can:
