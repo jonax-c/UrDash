@@ -121,3 +121,12 @@ custom_components/urdash/
 ```
 
 This repository is now shaped as a HACS custom integration, not a Home Assistant add-on. It does not require Home Assistant OS.
+
+## Updating
+
+After updating UrDash through HACS:
+
+1. Restart Home Assistant.
+2. Hard-refresh the browser.
+
+UrDash version-tags its frontend panel URL to reduce stale JavaScript cache issues, but a hard refresh is still recommended after frontend changes.

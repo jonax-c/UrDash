@@ -31,6 +31,7 @@ from .const import (
     DOMAIN,
     FRONTEND_DIR,
     FRONTEND_JS,
+    FRONTEND_VERSION,
     PANEL_ICON,
     PANEL_TITLE,
     PANEL_URL,
@@ -110,7 +111,7 @@ def _register_panel(hass: HomeAssistant) -> None:
         config={
             "_panel_custom": {
                 "name": "urdash-panel",
-                "js_url": f"{STATIC_URL}/{FRONTEND_JS}",
+                "js_url": f"{STATIC_URL}/{FRONTEND_JS}?v={FRONTEND_VERSION}",
                 "embed_iframe": False,
                 "trust_external_script": False,
             }
@@ -223,6 +224,7 @@ async def websocket_settings(
         vol.Optional(
             "allow_custom_cards", default=DEFAULT_ALLOW_CUSTOM_CARDS
         ): cv.boolean,
+        vol.Optional("use_ai"): cv.boolean,
         vol.Optional("mode", default="dashboard"): vol.In(["dashboard", "new_view"]),
         vol.Optional("reference_dashboard"): dict,
     }

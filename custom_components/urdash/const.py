@@ -4,6 +4,7 @@ PANEL_TITLE = "UrDash"
 PANEL_ICON = "mdi:view-dashboard-edit"
 FRONTEND_DIR = "frontend"
 FRONTEND_JS = "urdash-panel.js"
+FRONTEND_VERSION = "20260624.1"
 STATIC_URL = f"/{DOMAIN}/static"
 
 DEFAULT_STYLE = "modern"
