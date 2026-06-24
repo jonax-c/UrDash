@@ -1,0 +1,37 @@
+{
+  "config": {
+    "abort": {
+      "single_instance_allowed": "UrDash is already configured."
+    },
+    "step": {
+      "user": {
+        "title": "Set up UrDash",
+        "description": "Create the UrDash dashboard designer panel.",
+        "data": {
+          "ai_provider": "AI provider",
+          "api_key": "API key",
+          "model": "Model",
+          "base_url": "API base URL",
+          "default_style": "Default dashboard style",
+          "allow_custom_cards": "Allow custom Lovelace cards"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "UrDash options",
+        "description": "Configure the AI provider used by the dashboard design agent. Leave the provider as local to use the built-in generator without an external API.",
+        "data": {
+          "ai_provider": "AI provider",
+          "api_key": "API key",
+          "model": "Model",
+          "base_url": "API base URL",
+          "default_style": "Default dashboard style",
+          "allow_custom_cards": "Allow custom Lovelace cards"
+        }
+      }
+    }
+  }
+}

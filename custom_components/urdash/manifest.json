@@ -1,0 +1,12 @@
+{
+  "domain": "urdash",
+  "name": "UrDash",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["frontend", "lovelace"],
+  "documentation": "https://github.com/local/urdash",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/local/urdash/issues",
+  "version": "0.1.0"
+}
+

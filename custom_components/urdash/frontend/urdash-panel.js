@@ -1,0 +1,712 @@
+class UrDashPanel extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._entities = [];
+    this._resources = [];
+    this._settings = {
+      ai_enabled: false,
+      ai_provider: "local",
+      model: "",
+      default_style: "modern",
+      allow_custom_cards: true,
+    };
+    this._result = null;
+    this._style = "modern";
+    this._allowCustomCards = true;
+    this._useAi = true;
+    this._mode = "new_view";
+    this._loaded = false;
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._loaded) {
+      this._loaded = true;
+      this._load();
+    }
+  }
+
+  async _load() {
+    this._render();
+    try {
+      const [entityPayload, resourcePayload, settingsPayload] = await Promise.all([
+        this._hass.connection.sendMessagePromise({ type: "urdash/entities" }),
+        this._hass.connection.sendMessagePromise({ type: "urdash/resources" }),
+        this._hass.connection.sendMessagePromise({ type: "urdash/settings" }),
+      ]);
+      this._entities = entityPayload.entities || [];
+      this._resources = resourcePayload.resources || [];
+      this._settings = { ...this._settings, ...settingsPayload };
+      this._style = this._settings.default_style || this._style;
+      this._allowCustomCards = Boolean(this._settings.allow_custom_cards);
+      this._useAi = Boolean(this._settings.ai_enabled);
+      this._render();
+    } catch (error) {
+      this._renderError(error);
+    }
+  }
+
+  async _generate() {
+    const requestInput = this.shadowRoot.querySelector("#request");
+    const referenceInput = this.shadowRoot.querySelector("#referenceDashboard");
+    const request = requestInput.value.trim();
+    if (!request) return;
+
+    const button = this.shadowRoot.querySelector("#generate");
+    button.disabled = true;
+    button.innerHTML = '<span class="spin">*</span> Generating';
+
+    try {
+      this._result = await this._hass.connection.sendMessagePromise({
+        type: "urdash/generate",
+        request,
+        style: this._style,
+        allow_custom_cards: this._allowCustomCards,
+        use_ai: this._useAi,
+        mode: this._mode,
+        reference_dashboard: parseReferenceDashboard(referenceInput.value),
+      });
+      this._render();
+    } catch (error) {
+      this._renderError(error);
+    } finally {
+      const currentButton = this.shadowRoot.querySelector("#generate");
+      if (currentButton) {
+        currentButton.disabled = false;
+        currentButton.innerHTML = "<span>*</span> Generate dashboard";
+      }
+    }
+  }
+
+  async _copyYaml() {
+    if (!this._result?.yaml) return;
+    await navigator.clipboard.writeText(this._result.yaml);
+    const copyButton = this.shadowRoot.querySelector("#copyYaml");
+    copyButton.textContent = "OK";
+    window.setTimeout(() => {
+      const currentButton = this.shadowRoot.querySelector("#copyYaml");
+      if (currentButton) currentButton.textContent = "Copy";
+    }, 1400);
+  }
+
+  _setStyle(style) {
+    this._style = style;
+    this._render();
+  }
+
+  _toggleCustomCards(checked) {
+    this._allowCustomCards = checked;
+    this._render();
+  }
+
+  _toggleUseAi(checked) {
+    this._useAi = checked;
+    this._render();
+  }
+
+  _setMode(mode) {
+    this._mode = mode;
+    this._render();
+  }
+
+  _domainStats() {
+    const counts = new Map();
+    for (const entity of this._entities) {
+      const domain = entity.entity_id?.split(".")[0];
+      if (domain) counts.set(domain, (counts.get(domain) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  }
+
+  _render() {
+    this.shadowRoot.innerHTML = `
+      <style>${styles}</style>
+      <main class="app-shell">
+        <section class="workbench">
+          <aside class="control-panel">
+            <div class="brand-row">
+              <div class="brand-mark">UD</div>
+              <div>
+                <h1>UrDash</h1>
+                <p>Custom Lovelace dashboard designer</p>
+              </div>
+            </div>
+
+            <label class="field">
+              <span>Dashboard request</span>
+              <textarea id="request" rows="7">${escapeHtml(this._currentRequest())}</textarea>
+            </label>
+
+            <div class="field">
+              <span>Visual style</span>
+              <div class="segmented" id="styleButtons">
+                ${["modern", "minimal", "glass", "compact"].map((style) => `
+                  <button class="${this._style === style ? "active" : ""}" data-style="${style}" type="button">${style}</button>
+                `).join("")}
+              </div>
+            </div>
+
+            <div class="field">
+              <span>Generation mode</span>
+              <div class="segmented two" id="modeButtons">
+                <button class="${this._mode === "new_view" ? "active" : ""}" data-mode="new_view" type="button">new tab</button>
+                <button class="${this._mode === "dashboard" ? "active" : ""}" data-mode="dashboard" type="button">full dashboard</button>
+              </div>
+            </div>
+
+            <label class="field ${this._mode === "new_view" ? "" : "hidden"}">
+              <span>Reference dashboard YAML or JSON</span>
+              <textarea id="referenceDashboard" rows="6" placeholder="Paste current dashboard YAML here. UrDash uses it only as reference and generates a new tab.">${escapeHtml(this._currentReference())}</textarea>
+            </label>
+
+            <label class="toggle-row">
+              <input id="allowCustomCards" ${this._allowCustomCards ? "checked" : ""} type="checkbox" />
+              <span>Use premium custom cards</span>
+            </label>
+
+            <label class="toggle-row">
+              <input id="useAi" ${this._useAi ? "checked" : ""} ${this._settings.ai_enabled ? "" : "disabled"} type="checkbox" />
+              <span>Use configured AI agent</span>
+            </label>
+
+            <button class="primary-action" id="generate" type="button">
+              <span>*</span>
+              Generate dashboard
+            </button>
+
+            <div class="stats-panel">
+              <div class="stat">
+                <span>HA</span>
+                <strong>${this._entities.length}</strong>
+                <span>entities</span>
+              </div>
+              <div class="ai-status">
+                <strong>${this._settings.ai_enabled ? "AI ready" : "Local mode"}</strong>
+                <span>${escapeHtml(this._settings.ai_enabled ? this._settings.model : "Add an API key in integration options")}</span>
+              </div>
+              <div class="domain-list">
+                ${this._domainStats().map(([domain, count]) => `<span>${escapeHtml(domain)} ${count}</span>`).join("")}
+              </div>
+            </div>
+
+            <section class="dependency-panel">
+              <div class="section-title">
+                <span>Pkg</span>
+                <h3>Card packages</h3>
+              </div>
+              ${this._dependencyMarkup()}
+            </section>
+          </aside>
+
+          <section class="preview-panel">
+            <div class="preview-toolbar">
+              <div>
+                <h2>Preview</h2>
+                <p>${escapeHtml(this._result?.summary || "Your generated dashboard will appear here.")}</p>
+                ${this._result?.warning ? `<p class="warning">${escapeHtml(this._result.warning)}</p>` : ""}
+                ${this._result?.mode === "new_view" ? '<p class="warning">Output is a new view/tab YAML snippet. Existing dashboard is not modified.</p>' : ""}
+              </div>
+              <button class="icon-button" id="copyYaml" ${this._result?.yaml ? "" : "disabled"} title="Copy YAML" type="button">Copy</button>
+            </div>
+
+            <div class="dashboard-preview ${this._style}">
+              <header class="preview-header">
+                <div>
+                  <span>Home Assistant</span>
+                  <h2>${escapeHtml(this._result?.dashboard?.title || "Family Home")}</h2>
+                </div>
+                <div class="weather-pill">Live</div>
+              </header>
+              <div class="preview-grid">
+                ${this._previewMarkup()}
+              </div>
+            </div>
+
+            <section class="yaml-panel">
+              <div class="section-title">
+                <span>YAML</span>
+                <h3>Lovelace YAML</h3>
+              </div>
+              <pre>${escapeHtml(this._result?.yaml || "Generate a dashboard to see YAML output.")}</pre>
+            </section>
+          </section>
+        </section>
+      </main>
+    `;
+
+    this.shadowRoot.querySelector("#generate").addEventListener("click", () => this._generate());
+    this.shadowRoot.querySelector("#copyYaml").addEventListener("click", () => this._copyYaml());
+    this.shadowRoot.querySelector("#allowCustomCards").addEventListener("change", (event) => {
+      this._toggleCustomCards(event.target.checked);
+    });
+    this.shadowRoot.querySelector("#useAi").addEventListener("change", (event) => {
+      this._toggleUseAi(event.target.checked);
+    });
+    this.shadowRoot.querySelector("#styleButtons").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-style]");
+      if (button) this._setStyle(button.dataset.style);
+    });
+    this.shadowRoot.querySelector("#modeButtons").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-mode]");
+      if (button) this._setMode(button.dataset.mode);
+    });
+  }
+
+  _currentRequest() {
+    const existing = this.shadowRoot.querySelector("#request")?.value;
+    return existing || "Create a beautiful family dashboard with quick controls for lights, climate, doors, energy, and room-by-room status.";
+  }
+
+  _currentReference() {
+    return this.shadowRoot.querySelector("#referenceDashboard")?.value || "";
+  }
+
+  _dependencyMarkup() {
+    if (!this._allowCustomCards) {
+      return '<p class="muted">Custom cards are disabled for this dashboard.</p>';
+    }
+    return this._resources.map((resource) => `
+      <div class="dependency-row">
+        <span class="${resource.installed ? "dot installed" : "dot"}"></span>
+        <div>
+          <strong>${escapeHtml(resource.name)}</strong>
+          <p>${escapeHtml(resource.used_for || resource.usedFor || "")}</p>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  _previewMarkup() {
+    const cards = this._result?.dashboard?.views?.[0]?.sections?.[0]?.cards;
+    if (!cards) {
+      return this._entities.slice(0, 6).map((entity) => tileMarkup(entity.entity_id, entity.attributes?.friendly_name)).join("");
+    }
+    return cards.flatMap((card) => renderPreviewCard(card)).join("");
+  }
+
+  _renderError(error) {
+    this.shadowRoot.innerHTML = `
+      <style>${styles}</style>
+      <main class="app-shell">
+        <section class="error-panel">
+          <h1>UrDash could not load</h1>
+          <p>${escapeHtml(error?.message || String(error))}</p>
+        </section>
+      </main>
+    `;
+  }
+}
+
+function renderPreviewCard(card) {
+  if (card.type?.includes("title") || card.type === "heading") {
+    return [`<h3 class="preview-heading">${escapeHtml(card.title || card.heading || "Section")}</h3>`];
+  }
+  if (card.type === "grid") {
+    return (card.cards || []).map((child) => tileMarkup(child.entity || child.entities?.[0] || "sensor.home"));
+  }
+  if (card.type === "entities") {
+    return [`
+      <div class="entity-stack">
+        ${(card.entities || []).slice(0, 5).map((entity) => `<span>${escapeHtml(entity)}</span>`).join("")}
+      </div>
+    `];
+  }
+  return [tileMarkup(card.entity || card.entities?.[0] || "sensor.home")];
+}
+
+function tileMarkup(entityId, label) {
+  const domain = entityId?.split(".")[0] || "sensor";
+  const name = label || entityId.split(".").pop().replaceAll("_", " ");
+  return `
+    <article class="preview-tile ${escapeHtml(domain)}">
+      <span>${escapeHtml(domain)}</span>
+      <strong>${escapeHtml(name)}</strong>
+      <p>${domain === "sensor" ? "Trend ready" : "Tap to control"}</p>
+    </article>
+  `;
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function parseReferenceDashboard(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  try {
+    return JSON.parse(trimmed);
+  } catch (_error) {
+    return { raw_yaml: trimmed };
+  }
+}
+
+const styles = `
+  :host {
+    display: block;
+    min-height: 100vh;
+    color: #152126;
+    font-family: var(--paper-font-body1_-_font-family, Inter, ui-sans-serif, system-ui, sans-serif);
+  }
+
+  * { box-sizing: border-box; }
+  button, textarea { font: inherit; }
+  h1, h2, h3, p { margin: 0; }
+
+  .app-shell {
+    min-height: 100vh;
+    padding: 20px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.85), rgba(235,241,239,0.82)), #e7edee;
+  }
+
+  .workbench {
+    display: grid;
+    grid-template-columns: minmax(300px, 390px) minmax(0, 1fr);
+    gap: 18px;
+    max-width: 1480px;
+    margin: 0 auto;
+  }
+
+  .control-panel, .preview-panel, .error-panel {
+    background: rgba(255,255,255,0.82);
+    border: 1px solid rgba(118,137,139,0.22);
+    border-radius: 8px;
+    box-shadow: 0 18px 42px rgba(35,54,59,0.12);
+  }
+
+  .control-panel {
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .brand-row, .preview-toolbar, .section-title, .stat, .dependency-row, .toggle-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .brand-row { gap: 12px; }
+
+  .brand-mark {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    background: #143d3a;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 900;
+  }
+
+  h1 { font-size: 24px; }
+  .brand-row p, .preview-toolbar p, .muted, .dependency-row p, .preview-tile p, .ai-status span {
+    color: #5d6f72;
+    font-size: 13px;
+  }
+
+  .field { display: grid; gap: 8px; }
+  .field.hidden { display: none; }
+  .field > span {
+    color: #314347;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  textarea {
+    width: 100%;
+    resize: vertical;
+    border: 1px solid #cad5d6;
+    border-radius: 8px;
+    padding: 12px;
+    color: #1d2f33;
+    background: #ffffff;
+    line-height: 1.45;
+  }
+
+  .segmented {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid #ccd7d8;
+    border-radius: 8px;
+    background: #f6f8f8;
+  }
+
+  .segmented.two {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .segmented button, .icon-button, .primary-action {
+    border: 0;
+    cursor: pointer;
+  }
+
+  .segmented button {
+    min-height: 34px;
+    border-radius: 6px;
+    background: transparent;
+    color: #3b4e52;
+  }
+
+  .segmented button.active {
+    background: #ffffff;
+    color: #103c38;
+    box-shadow: 0 1px 4px rgba(27,50,55,0.16);
+  }
+
+  .toggle-row {
+    gap: 10px;
+    color: #25383c;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .primary-action {
+    min-height: 44px;
+    display: inline-flex;
+    gap: 9px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: #103c38;
+    color: #ffffff;
+    font-weight: 800;
+  }
+
+  .primary-action:disabled, .icon-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .stats-panel, .dependency-panel, .yaml-panel {
+    border: 1px solid #d7e0e1;
+    border-radius: 8px;
+    padding: 14px;
+    background: rgba(248,250,250,0.78);
+  }
+
+  .stat { gap: 8px; }
+  .stat strong { font-size: 24px; }
+
+  .ai-status {
+    display: grid;
+    gap: 3px;
+    margin-top: 10px;
+  }
+
+  .ai-status strong {
+    color: #18383a;
+    font-size: 13px;
+  }
+
+  .warning {
+    margin-top: 4px;
+    color: #9a5b13;
+  }
+
+  .domain-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 12px;
+  }
+
+  .domain-list span {
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: #e7eeee;
+    color: #385054;
+    font-size: 12px;
+  }
+
+  .dependency-panel { display: grid; gap: 12px; }
+  .section-title { gap: 7px; }
+  .section-title h3 { font-size: 15px; }
+  .dependency-row { gap: 10px; margin-top: 10px; }
+  .dependency-row strong { font-size: 13px; }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: #c98d35;
+  }
+
+  .dot.installed { background: #28835f; }
+
+  .preview-panel {
+    min-width: 0;
+    padding: 18px;
+    display: grid;
+    gap: 16px;
+  }
+
+  .preview-toolbar {
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .icon-button {
+    display: grid;
+    place-items: center;
+    min-width: 48px;
+    height: 40px;
+    border-radius: 8px;
+    background: #e8eeee;
+    color: #18383a;
+    padding: 0 10px;
+  }
+
+  .dashboard-preview {
+    min-height: 440px;
+    border-radius: 8px;
+    padding: 18px;
+    overflow: hidden;
+    color: #10282b;
+    background: linear-gradient(145deg, #eaf4f1, #f8fbfb 48%, #dde9ec);
+  }
+
+  .dashboard-preview.glass {
+    background: linear-gradient(145deg, #e8f0f5, #ffffff 46%, #dbe6e1);
+  }
+
+  .dashboard-preview.minimal { background: #f8faf9; }
+  .dashboard-preview.compact { min-height: 380px; }
+
+  .preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .preview-header span {
+    color: #60777a;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .preview-header h2 { font-size: 34px; }
+
+  .weather-pill {
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.72);
+    font-weight: 800;
+  }
+
+  .preview-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(130px, 1fr));
+    gap: 12px;
+  }
+
+  .preview-heading {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+    color: #1e373b;
+    font-size: 18px;
+  }
+
+  .preview-tile, .entity-stack {
+    min-height: 118px;
+    border: 1px solid rgba(119,144,146,0.23);
+    border-radius: 8px;
+    padding: 14px;
+    background: rgba(255,255,255,0.72);
+    box-shadow: 0 9px 22px rgba(53,73,78,0.1);
+  }
+
+  .preview-tile {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 9px;
+  }
+
+  .preview-tile span {
+    color: #5b7276;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .preview-tile strong { color: #142d31; }
+  .preview-tile.light { background: #fff8e7; }
+  .preview-tile.climate { background: #e9f5f7; }
+  .preview-tile.lock { background: #f2ece8; }
+  .preview-tile.sensor { background: #eef6ed; }
+
+  .entity-stack {
+    grid-column: span 2;
+    display: grid;
+    gap: 8px;
+    min-height: auto;
+  }
+
+  .entity-stack span {
+    overflow: hidden;
+    color: #41595d;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .yaml-panel {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  pre {
+    max-height: 340px;
+    margin: 0;
+    overflow: auto;
+    border-radius: 8px;
+    padding: 14px;
+    background: #152326;
+    color: #e8f2ee;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .error-panel {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 22px;
+  }
+
+  .spin {
+    display: inline-block;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (max-width: 980px) {
+    .workbench { grid-template-columns: 1fr; }
+    .preview-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+  }
+
+  @media (max-width: 560px) {
+    .app-shell { padding: 10px; }
+    .preview-grid { grid-template-columns: 1fr; }
+    .segmented { grid-template-columns: repeat(2, 1fr); }
+    .entity-stack { grid-column: auto; }
+  }
+`;
+
+customElements.define("urdash-panel", UrDashPanel);

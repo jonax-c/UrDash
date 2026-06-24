@@ -1,0 +1,244 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from typing import Any
+
+import yaml
+
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+from .const import DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL
+from .generator import CUSTOM_CARDS
+
+SYSTEM_PROMPT = """You are UrDash, a Home Assistant Lovelace dashboard designer.
+Create dashboards that are beautiful, usable, fast to scan, and practical for daily home control.
+Return only structured JSON matching the requested schema.
+Prefer installed or allowed custom cards when useful, but keep the YAML valid Lovelace.
+Do not invent entity IDs. Use only entity IDs from the provided entity list.
+If asked for a new view, generate a single new Lovelace view/tab that can be appended to an existing dashboard.
+Never modify, remove, or rewrite the reference dashboard.
+"""
+
+DASHBOARD_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["dashboard", "summary", "notes"],
+    "properties": {
+        "dashboard": {
+            "type": "object",
+            "additionalProperties": True,
+            "required": ["title", "views"],
+            "properties": {
+                "title": {"type": "string"},
+                "views": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+            },
+        },
+        "summary": {"type": "string"},
+        "notes": {"type": "array", "items": {"type": "string"}},
+    },
+}
+
+
+class AiGenerationError(Exception):
+    """Raised when AI generation fails."""
+
+
+async def async_generate_with_openai(
+    hass: HomeAssistant,
+    *,
+    api_key: str,
+    base_url: str,
+    model: str,
+    request: str,
+    entities: list[dict[str, Any]],
+    local_dashboard: dict[str, Any],
+    style: str,
+    allow_custom_cards: bool,
+    mode: str = "dashboard",
+    reference_dashboard: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Generate a dashboard with the OpenAI Responses API."""
+    if not api_key:
+        raise AiGenerationError("OpenAI API key is not configured.")
+
+    payload = {
+        "model": model or DEFAULT_OPENAI_MODEL,
+        "input": [
+            {
+                "role": "system",
+                "content": [{"type": "input_text", "text": SYSTEM_PROMPT}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": json.dumps(
+                            {
+                                "request": request,
+                                "style": style,
+                                "mode": mode,
+                                "allow_custom_cards": allow_custom_cards,
+                                "available_custom_cards": CUSTOM_CARDS if allow_custom_cards else [],
+                                "entities": _compact_entities(entities),
+                                "baseline_dashboard": local_dashboard,
+                                "reference_dashboard": _compact_dashboard(reference_dashboard),
+                                "requirements": [
+                                    "Use Lovelace YAML-compatible JSON.",
+                                    "Use sections view when it improves usability.",
+                                    "Group controls by purpose and room.",
+                                    "Make the first view immediately useful on phone and desktop.",
+                                    "Prefer built-in tile/entities/grid cards when custom cards are disabled.",
+                                    "For mode new_view, return dashboard.views with exactly one new view.",
+                                    "For mode new_view, use the reference dashboard only for style and context.",
+                                    "For mode new_view, do not include existing views in the returned dashboard.",
+                                ],
+                            },
+                            separators=(",", ":"),
+                        ),
+                    }
+                ],
+            },
+        ],
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "urdash_dashboard",
+                "schema": DASHBOARD_SCHEMA,
+                "strict": True,
+            }
+        },
+    }
+
+    session = async_get_clientsession(hass)
+    url = f"{(base_url or DEFAULT_OPENAI_BASE_URL).rstrip('/')}/responses"
+
+    try:
+        async with asyncio.timeout(60):
+            response = await session.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            response_text = await response.text()
+    except TimeoutError as err:
+        raise AiGenerationError("AI request timed out.") from err
+
+    if response.status >= 400:
+        raise AiGenerationError(f"AI provider returned HTTP {response.status}: {response_text[:240]}")
+
+    try:
+        response_json = json.loads(response_text)
+        output_text = _extract_output_text(response_json)
+        generated = json.loads(output_text)
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as err:
+        raise AiGenerationError("AI provider returned an unexpected response.") from err
+
+    dashboard = generated["dashboard"]
+    if mode == "new_view":
+        views = dashboard.get("views") or []
+        if not views:
+            raise AiGenerationError("AI provider did not return a Lovelace view.")
+        view = views[0]
+        yaml_value = yaml.safe_dump(
+            view,
+            sort_keys=False,
+            allow_unicode=False,
+            width=120,
+        )
+    else:
+        view = None
+        yaml_value = yaml.safe_dump(
+            dashboard,
+            sort_keys=False,
+            allow_unicode=False,
+            width=120,
+        )
+
+    return {
+        "dashboard": dashboard,
+        "yaml": yaml_value,
+        "dependencies": [
+            {
+                **card,
+                "required": card["id"] in {"mushroom", "mini-graph-card"},
+                "installed": False,
+                "checked": False,
+            }
+            for card in CUSTOM_CARDS
+        ]
+        if allow_custom_cards
+        else [],
+        "summary": generated.get("summary", "Generated with AI."),
+        "notes": generated.get("notes", []),
+        "engine": "ai",
+        "mode": mode,
+        "model": model or DEFAULT_OPENAI_MODEL,
+        **({"view": view} if view is not None else {}),
+    }
+
+
+def _extract_output_text(response_json: dict[str, Any]) -> str:
+    if isinstance(response_json.get("output_text"), str):
+        return response_json["output_text"]
+
+    for item in response_json.get("output", []):
+        for content in item.get("content", []):
+            if content.get("type") in {"output_text", "text"} and isinstance(content.get("text"), str):
+                return content["text"]
+
+    raise KeyError("output_text")
+
+
+def _compact_entities(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    compact = []
+    for entity in entities[:250]:
+        attributes = entity.get("attributes") or {}
+        compact.append(
+            {
+                "entity_id": entity.get("entity_id"),
+                "state": entity.get("state"),
+                "name": attributes.get("friendly_name"),
+                "device_class": attributes.get("device_class"),
+                "unit": attributes.get("unit_of_measurement"),
+            }
+        )
+    return compact
+
+
+def _compact_dashboard(reference_dashboard: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not reference_dashboard:
+        return None
+
+    views = []
+    for view in reference_dashboard.get("views", [])[:12]:
+        if not isinstance(view, dict):
+            continue
+        views.append(
+            {
+                "title": view.get("title"),
+                "path": view.get("path"),
+                "icon": view.get("icon"),
+                "type": view.get("type"),
+                "card_count": _count_cards(view),
+            }
+        )
+
+    return {
+        "title": reference_dashboard.get("title"),
+        "views": views,
+    }
+
+
+def _count_cards(value: Any) -> int:
+    if isinstance(value, dict):
+        count = 1 if "type" in value else 0
+        return count + sum(_count_cards(child) for child in value.values())
+    if isinstance(value, list):
+        return sum(_count_cards(child) for child in value)
+    return 0
