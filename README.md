@@ -48,7 +48,16 @@ UrDash defaults to a non-destructive workflow for existing dashboards:
 3. Describe the modification you want.
 4. UrDash generates one new Lovelace view/tab.
 
-The reference dashboard is used only as context for style, structure, and existing view paths. UrDash does not write to Home Assistant storage and does not modify the source dashboard. The generated YAML is a view snippet that should be appended as a new tab after review.
+The reference dashboard is used only as context for style, structure, and existing view paths. Generating a tab does not write to Home Assistant storage or modify the source dashboard. The generated YAML is a view snippet that can be appended as a new tab after review.
+
+After generation, the panel can append the generated view directly to the default UI-managed Lovelace dashboard with **Add tab**. This action:
+
+- Appends one new view only.
+- Creates a timestamped backup of `.storage/lovelace` first.
+- Avoids duplicate view paths by adding a numeric suffix.
+- Does not support YAML-mode dashboards or non-default dashboards yet.
+
+Reload the Lovelace dashboard if the new tab is not visible immediately.
 
 ## Recommended Lovelace Cards
 

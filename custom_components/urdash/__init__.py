@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+import json
 from pathlib import Path
 from typing import Any
 
@@ -121,6 +123,7 @@ def _register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_resources)
     websocket_api.async_register_command(hass, websocket_settings)
     websocket_api.async_register_command(hass, websocket_generate)
+    websocket_api.async_register_command(hass, websocket_append_view)
 
 
 def _register_services(hass: HomeAssistant) -> None:
@@ -241,6 +244,28 @@ async def websocket_generate(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "urdash/append_view",
+        vol.Required("view"): dict,
+    }
+)
+@websocket_api.async_response
+async def websocket_append_view(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Append a generated view to the default UI-managed Lovelace dashboard."""
+    try:
+        result = await _async_append_view_to_default_dashboard(hass, msg["view"])
+    except ValueError as err:
+        connection.send_result(msg["id"], {"ok": False, "error": str(err)})
+        return
+
+    connection.send_result(msg["id"], {"ok": True, **result})
+
+
 async def _async_generate_from_hass(
     hass: HomeAssistant,
     request: str,
@@ -350,3 +375,78 @@ def _resource_installed(expected_url: str, installed_urls: set[str]) -> bool:
         if expected_tail and expected_tail in installed:
             return True
     return False
+
+
+async def _async_append_view_to_default_dashboard(
+    hass: HomeAssistant,
+    view: dict[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(view, dict):
+        raise ValueError("Generated view is invalid.")
+
+    storage_path = Path(hass.config.path(".storage/lovelace"))
+    if not storage_path.exists():
+        raise ValueError("Default UI-managed Lovelace dashboard storage was not found.")
+
+    def append_view() -> dict[str, Any]:
+        try:
+            payload = json.loads(storage_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as err:
+            raise ValueError("Could not read default Lovelace dashboard storage.") from err
+
+        config = (payload.get("data") or {}).get("config")
+        if not isinstance(config, dict):
+            raise ValueError("Default Lovelace dashboard storage has an unsupported format.")
+
+        views = config.setdefault("views", [])
+        if not isinstance(views, list):
+            raise ValueError("Default Lovelace dashboard views are not editable.")
+
+        new_view = dict(view)
+        new_view["title"] = str(new_view.get("title") or "UrDash")
+        new_view["path"] = _unique_view_path(str(new_view.get("path") or new_view["title"]), views)
+
+        backup_path = storage_path.with_name(
+            f"{storage_path.name}.urdash-backup-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        )
+        backup_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        views.append(new_view)
+        storage_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        return {
+            "title": new_view["title"],
+            "path": new_view["path"],
+            "backup": str(backup_path),
+        }
+
+    return await hass.async_add_executor_job(append_view)
+
+
+def _unique_view_path(requested_path: str, views: list[Any]) -> str:
+    base = _slugify(requested_path)
+    existing = {
+        view.get("path")
+        for view in views
+        if isinstance(view, dict) and view.get("path")
+    }
+
+    if base not in existing:
+        return base
+
+    suffix = 2
+    while f"{base}-{suffix}" in existing:
+        suffix += 1
+    return f"{base}-{suffix}"
+
+
+def _slugify(value: str) -> str:
+    slug = "".join(char.lower() if char.isalnum() else "-" for char in value)
+    slug = "-".join(part for part in slug.split("-") if part)
+    return slug or "urdash"

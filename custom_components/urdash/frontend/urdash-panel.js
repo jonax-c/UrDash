@@ -15,6 +15,7 @@ class UrDashPanel extends HTMLElement {
     this._style = "modern";
     this._allowCustomCards = true;
     this._mode = "new_view";
+    this._appendResult = null;
     this._loaded = false;
   }
 
@@ -64,6 +65,7 @@ class UrDashPanel extends HTMLElement {
         mode: this._mode,
         reference_dashboard: parseReferenceDashboard(referenceInput.value),
       });
+      this._appendResult = null;
       this._render();
     } catch (error) {
       this._renderError(error);
@@ -85,6 +87,25 @@ class UrDashPanel extends HTMLElement {
       const currentButton = this.shadowRoot.querySelector("#copyYaml");
       if (currentButton) currentButton.textContent = "Copy";
     }, 1400);
+  }
+
+  async _appendView() {
+    if (!this._result?.view) return;
+
+    const button = this.shadowRoot.querySelector("#appendView");
+    button.disabled = true;
+    button.textContent = "Adding";
+
+    try {
+      this._appendResult = await this._hass.connection.sendMessagePromise({
+        type: "urdash/append_view",
+        view: this._result.view,
+      });
+      this._render();
+    } catch (error) {
+      this._appendResult = { ok: false, error: error?.message || String(error) };
+      this._render();
+    }
   }
 
   _setStyle(style) {
@@ -195,8 +216,19 @@ class UrDashPanel extends HTMLElement {
                 ${this._result?.warning ? `<p class="warning">${escapeHtml(this._result.warning)}</p>` : ""}
                 ${this._result?.mode === "new_view" ? '<p class="warning">Output is a new view/tab YAML snippet. Existing dashboard is not modified.</p>' : ""}
               </div>
-              <button class="icon-button" id="copyYaml" ${this._result?.yaml ? "" : "disabled"} title="Copy YAML" type="button">Copy</button>
+              <div class="toolbar-actions">
+                <button class="icon-button" id="appendView" ${this._result?.view ? "" : "disabled"} title="Add as new Lovelace tab" type="button">Add tab</button>
+                <button class="icon-button" id="copyYaml" ${this._result?.yaml ? "" : "disabled"} title="Copy YAML" type="button">Copy</button>
+              </div>
             </div>
+
+            ${this._appendResult ? `
+              <div class="${this._appendResult.ok ? "status-box success" : "status-box error"}">
+                ${this._appendResult.ok
+                  ? `Added "${escapeHtml(this._appendResult.title)}" as path "${escapeHtml(this._appendResult.path)}". Reload Lovelace if it is not visible immediately.`
+                  : escapeHtml(this._appendResult.error || "Could not add the tab.")}
+              </div>
+            ` : ""}
 
             <div class="dashboard-preview ${this._style}">
               <header class="preview-header">
@@ -225,6 +257,7 @@ class UrDashPanel extends HTMLElement {
 
     this.shadowRoot.querySelector("#generate").addEventListener("click", () => this._generate());
     this.shadowRoot.querySelector("#copyYaml").addEventListener("click", () => this._copyYaml());
+    this.shadowRoot.querySelector("#appendView").addEventListener("click", () => this._appendView());
     this.shadowRoot.querySelector("#allowCustomCards").addEventListener("change", (event) => {
       this._toggleCustomCards(event.target.checked);
     });
@@ -554,6 +587,11 @@ const styles = `
     gap: 14px;
   }
 
+  .toolbar-actions {
+    display: flex;
+    gap: 8px;
+  }
+
   .icon-button {
     display: grid;
     place-items: center;
@@ -563,6 +601,23 @@ const styles = `
     background: #e8eeee;
     color: #18383a;
     padding: 0 10px;
+  }
+
+  .status-box {
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .status-box.success {
+    background: #e7f4ed;
+    color: #1d6a4d;
+  }
+
+  .status-box.error {
+    background: #f8e8e6;
+    color: #9b2f2f;
   }
 
   .dashboard-preview {
