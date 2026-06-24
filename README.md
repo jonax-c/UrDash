@@ -53,7 +53,8 @@ The reference dashboard is used only as context for style, structure, and existi
 After generation, the panel can append the generated view directly to the default UI-managed Lovelace dashboard with **Add tab**. This action:
 
 - Appends one new view only.
-- Creates a timestamped backup of `.storage/lovelace` first.
+- Searches for an editable UI-managed Lovelace storage file, such as `.storage/lovelace` or `.storage/lovelace.*`.
+- Creates a timestamped backup of the selected storage file first.
 - Avoids duplicate view paths by adding a numeric suffix.
 - Does not support YAML-mode dashboards or non-default dashboards yet.
 

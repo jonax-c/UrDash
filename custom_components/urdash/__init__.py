@@ -384,23 +384,12 @@ async def _async_append_view_to_default_dashboard(
     if not isinstance(view, dict):
         raise ValueError("Generated view is invalid.")
 
-    storage_path = Path(hass.config.path(".storage/lovelace"))
-    if not storage_path.exists():
-        raise ValueError("Default UI-managed Lovelace dashboard storage was not found.")
-
     def append_view() -> dict[str, Any]:
-        try:
-            payload = json.loads(storage_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as err:
-            raise ValueError("Could not read default Lovelace dashboard storage.") from err
-
-        config = (payload.get("data") or {}).get("config")
-        if not isinstance(config, dict):
-            raise ValueError("Default Lovelace dashboard storage has an unsupported format.")
+        storage_path, payload, config = _find_lovelace_storage_target(hass)
 
         views = config.setdefault("views", [])
         if not isinstance(views, list):
-            raise ValueError("Default Lovelace dashboard views are not editable.")
+            raise ValueError("Selected Lovelace dashboard views are not editable.")
 
         new_view = dict(view)
         new_view["title"] = str(new_view.get("title") or "UrDash")
@@ -423,10 +412,45 @@ async def _async_append_view_to_default_dashboard(
         return {
             "title": new_view["title"],
             "path": new_view["path"],
+            "storage": storage_path.name,
             "backup": str(backup_path),
         }
 
     return await hass.async_add_executor_job(append_view)
+
+
+def _find_lovelace_storage_target(
+    hass: HomeAssistant,
+) -> tuple[Path, dict[str, Any], dict[str, Any]]:
+    storage_dir = Path(hass.config.path(".storage"))
+    candidates = [
+        storage_dir / "lovelace",
+        *sorted(storage_dir.glob("lovelace.*")),
+    ]
+
+    skipped_names = {"lovelace_resources", "lovelace_dashboards"}
+    checked = []
+
+    for storage_path in candidates:
+        if not storage_path.exists() or storage_path.name in skipped_names:
+            continue
+
+        checked.append(storage_path.name)
+        try:
+            payload = json.loads(storage_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        config = (payload.get("data") or {}).get("config")
+        if isinstance(config, dict) and isinstance(config.get("views"), list):
+            return storage_path, payload, config
+
+    checked_text = ", ".join(checked) if checked else "none"
+    raise ValueError(
+        "No editable UI-managed Lovelace dashboard storage was found. "
+        "This usually means the dashboard is YAML-mode, storage uses an unsupported format, "
+        f"or no UI-managed dashboard has been created yet. Checked: {checked_text}."
+    )
 
 
 def _unique_view_path(requested_path: str, views: list[Any]) -> str:

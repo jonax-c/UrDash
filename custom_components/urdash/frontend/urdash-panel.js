@@ -225,7 +225,7 @@ class UrDashPanel extends HTMLElement {
             ${this._appendResult ? `
               <div class="${this._appendResult.ok ? "status-box success" : "status-box error"}">
                 ${this._appendResult.ok
-                  ? `Added "${escapeHtml(this._appendResult.title)}" as path "${escapeHtml(this._appendResult.path)}". Reload Lovelace if it is not visible immediately.`
+                  ? `Added "${escapeHtml(this._appendResult.title)}" as path "${escapeHtml(this._appendResult.path)}" in ${escapeHtml(this._appendResult.storage || "Lovelace storage")}. Reload Lovelace if it is not visible immediately.`
                   : escapeHtml(this._appendResult.error || "Could not add the tab.")}
               </div>
             ` : ""}
