@@ -43,7 +43,7 @@ The base URL can be changed for OpenAI-compatible providers. If the AI request f
 
 UrDash defaults to a non-destructive workflow for existing dashboards:
 
-1. Paste the current Lovelace dashboard YAML or JSON into the reference field.
+1. Select an existing dashboard tab from the reference dropdown.
 2. Keep generation mode set to `new tab`.
 3. Describe the modification you want.
 4. UrDash generates one new Lovelace view/tab.
@@ -104,7 +104,7 @@ Service fields:
 - `style`: `modern`, `minimal`, `glass`, or `compact`.
 - `allow_custom_cards`: whether generated YAML may use recommended custom cards.
 - `mode`: `new_view` for a new tab, or `dashboard` for a full dashboard draft.
-- `reference_dashboard`: optional existing dashboard YAML used as context only.
+- `reference_dashboard`: optional existing dashboard YAML used as context only, mainly for service calls.
 
 ## Development Layout
 

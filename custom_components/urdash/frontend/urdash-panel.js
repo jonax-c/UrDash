@@ -4,6 +4,7 @@ class UrDashPanel extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._entities = [];
     this._resources = [];
+    this._referenceViews = [];
     this._settings = {
       ai_enabled: false,
       ai_provider: "openai",
@@ -15,6 +16,7 @@ class UrDashPanel extends HTMLElement {
     this._style = "modern";
     this._allowCustomCards = true;
     this._mode = "new_view";
+    this._referenceViewId = "";
     this._appendResult = null;
     this._previewResult = null;
     this._loaded = false;
@@ -31,13 +33,16 @@ class UrDashPanel extends HTMLElement {
   async _load() {
     this._render();
     try {
-      const [entityPayload, resourcePayload, settingsPayload] = await Promise.all([
+      const [entityPayload, resourcePayload, settingsPayload, referencePayload] = await Promise.all([
         this._hass.connection.sendMessagePromise({ type: "urdash/entities" }),
         this._hass.connection.sendMessagePromise({ type: "urdash/resources" }),
         this._hass.connection.sendMessagePromise({ type: "urdash/settings" }),
+        this._hass.connection.sendMessagePromise({ type: "urdash/reference_views" }),
       ]);
       this._entities = entityPayload.entities || [];
       this._resources = resourcePayload.resources || [];
+      this._referenceViews = referencePayload.views || [];
+      this._referenceViewId = this._referenceViews[0]?.id || "";
       this._settings = { ...this._settings, ...settingsPayload };
       this._style = this._settings.default_style || this._style;
       this._allowCustomCards = Boolean(this._settings.allow_custom_cards);
@@ -49,7 +54,6 @@ class UrDashPanel extends HTMLElement {
 
   async _generate() {
     const requestInput = this.shadowRoot.querySelector("#request");
-    const referenceInput = this.shadowRoot.querySelector("#referenceDashboard");
     const request = requestInput.value.trim();
     if (!request) return;
 
@@ -64,7 +68,7 @@ class UrDashPanel extends HTMLElement {
         style: this._style,
         allow_custom_cards: this._allowCustomCards,
         mode: this._mode,
-        reference_dashboard: parseReferenceDashboard(referenceInput.value),
+        reference_view_id: this._mode === "new_view" ? this._referenceViewId : undefined,
       });
       this._appendResult = null;
       this._previewResult = null;
@@ -147,6 +151,11 @@ class UrDashPanel extends HTMLElement {
     this._render();
   }
 
+  _setReferenceView(referenceViewId) {
+    this._referenceViewId = referenceViewId;
+    this._render();
+  }
+
   _domainStats() {
     const counts = new Map();
     for (const entity of this._entities) {
@@ -193,8 +202,10 @@ class UrDashPanel extends HTMLElement {
             </div>
 
             <label class="field ${this._mode === "new_view" ? "" : "hidden"}">
-              <span>Reference dashboard YAML or JSON</span>
-              <textarea id="referenceDashboard" rows="6" placeholder="Paste current dashboard YAML here. UrDash uses it only as reference and generates a new tab.">${escapeHtml(this._currentReference())}</textarea>
+              <span>Reference tab</span>
+              <select id="referenceView">
+                ${this._referenceOptionsMarkup()}
+              </select>
             </label>
 
             <label class="toggle-row">
@@ -296,15 +307,14 @@ class UrDashPanel extends HTMLElement {
       const button = event.target.closest("button[data-mode]");
       if (button) this._setMode(button.dataset.mode);
     });
+    this.shadowRoot.querySelector("#referenceView")?.addEventListener("change", (event) => {
+      this._setReferenceView(event.target.value);
+    });
   }
 
   _currentRequest() {
     const existing = this.shadowRoot.querySelector("#request")?.value;
     return existing || "Create a beautiful family dashboard with quick controls for lights, climate, doors, energy, and room-by-room status.";
-  }
-
-  _currentReference() {
-    return this.shadowRoot.querySelector("#referenceDashboard")?.value || "";
   }
 
   _dependencyMarkup() {
@@ -319,6 +329,17 @@ class UrDashPanel extends HTMLElement {
           <p>${escapeHtml(resource.used_for || resource.usedFor || "")}</p>
         </div>
       </div>
+    `).join("");
+  }
+
+  _referenceOptionsMarkup() {
+    if (!this._referenceViews.length) {
+      return '<option value="">No UI-managed tabs found</option>';
+    }
+    return this._referenceViews.map((view) => `
+      <option value="${escapeHtml(view.id)}" ${view.id === this._referenceViewId ? "selected" : ""}>
+        ${escapeHtml(view.dashboard)} / ${escapeHtml(view.title)}
+      </option>
     `).join("");
   }
 
@@ -344,17 +365,6 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function parseReferenceDashboard(value) {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-
-  try {
-    return JSON.parse(trimmed);
-  } catch (_error) {
-    return { raw_yaml: trimmed };
-  }
-}
-
 const styles = `
   :host {
     display: block;
@@ -364,7 +374,7 @@ const styles = `
   }
 
   * { box-sizing: border-box; }
-  button, textarea { font: inherit; }
+  button, textarea, select { font: inherit; }
   h1, h2, h3, p { margin: 0; }
 
   .app-shell {
@@ -428,9 +438,8 @@ const styles = `
     font-weight: 700;
   }
 
-  textarea {
+  textarea, select {
     width: 100%;
-    resize: vertical;
     border: 1px solid #cad5d6;
     border-radius: 8px;
     padding: 12px;
@@ -438,6 +447,8 @@ const styles = `
     background: #ffffff;
     line-height: 1.45;
   }
+
+  textarea { resize: vertical; }
 
   .segmented {
     display: grid;

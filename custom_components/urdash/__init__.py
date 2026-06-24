@@ -122,6 +122,7 @@ def _register_panel(hass: HomeAssistant) -> None:
 def _register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_entities)
     websocket_api.async_register_command(hass, websocket_resources)
+    websocket_api.async_register_command(hass, websocket_reference_views)
     websocket_api.async_register_command(hass, websocket_settings)
     websocket_api.async_register_command(hass, websocket_generate)
     websocket_api.async_register_command(hass, websocket_append_view)
@@ -193,6 +194,18 @@ async def websocket_resources(
     connection.send_result(msg["id"], {"resources": resources})
 
 
+@websocket_api.websocket_command({vol.Required("type"): "urdash/reference_views"})
+@websocket_api.async_response
+async def websocket_reference_views(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return existing UI-managed Lovelace views that can be used as reference."""
+    views = await _async_reference_views(hass)
+    connection.send_result(msg["id"], {"views": views})
+
+
 @websocket_api.websocket_command({vol.Required("type"): "urdash/settings"})
 @websocket_api.async_response
 async def websocket_settings(
@@ -227,6 +240,7 @@ async def websocket_settings(
         vol.Optional("use_ai"): cv.boolean,
         vol.Optional("mode", default="dashboard"): vol.In(["dashboard", "new_view"]),
         vol.Optional("reference_dashboard"): dict,
+        vol.Optional("reference_view_id"): str,
     }
 )
 @websocket_api.async_response
@@ -242,7 +256,7 @@ async def websocket_generate(
         msg["style"],
         msg["allow_custom_cards"],
         msg["mode"],
-        _normalize_reference_dashboard(msg.get("reference_dashboard")),
+        await _async_reference_dashboard_from_message(hass, msg),
     )
     connection.send_result(msg["id"], result)
 
@@ -447,6 +461,27 @@ async def _async_append_view_to_default_dashboard(
 def _find_lovelace_storage_target(
     hass: HomeAssistant,
 ) -> tuple[Path, dict[str, Any], dict[str, Any]]:
+    dashboards = _editable_lovelace_storage_candidates(hass)
+    if dashboards:
+        return dashboards[0]
+
+    storage_dir = Path(hass.config.path(".storage"))
+    checked = [
+        path.name
+        for path in [storage_dir / "lovelace", *sorted(storage_dir.glob("lovelace.*"))]
+        if path.exists() and path.name not in {"lovelace_resources", "lovelace_dashboards"}
+    ]
+    checked_text = ", ".join(checked) if checked else "none"
+    raise ValueError(
+        "No editable UI-managed Lovelace dashboard storage was found. "
+        "This usually means the dashboard is YAML-mode, storage uses an unsupported format, "
+        f"or no UI-managed dashboard has been created yet. Checked: {checked_text}."
+    )
+
+
+def _editable_lovelace_storage_candidates(
+    hass: HomeAssistant,
+) -> list[tuple[Path, dict[str, Any], dict[str, Any]]]:
     storage_dir = Path(hass.config.path(".storage"))
     candidates = [
         storage_dir / "lovelace",
@@ -454,28 +489,113 @@ def _find_lovelace_storage_target(
     ]
 
     skipped_names = {"lovelace_resources", "lovelace_dashboards"}
-    checked = []
-
+    dashboards = []
     for storage_path in candidates:
         if not storage_path.exists() or storage_path.name in skipped_names:
             continue
-
-        checked.append(storage_path.name)
         try:
             payload = json.loads(storage_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-
         config = (payload.get("data") or {}).get("config")
         if isinstance(config, dict) and isinstance(config.get("views"), list):
-            return storage_path, payload, config
+            dashboards.append((storage_path, payload, config))
+    return dashboards
 
-    checked_text = ", ".join(checked) if checked else "none"
-    raise ValueError(
-        "No editable UI-managed Lovelace dashboard storage was found. "
-        "This usually means the dashboard is YAML-mode, storage uses an unsupported format, "
-        f"or no UI-managed dashboard has been created yet. Checked: {checked_text}."
-    )
+
+async def _async_reference_views(hass: HomeAssistant) -> list[dict[str, Any]]:
+    def read_views() -> list[dict[str, Any]]:
+        options = []
+        for storage_path, _payload, config in _editable_lovelace_storage_candidates(hass):
+            dashboard_title = str(config.get("title") or _dashboard_title_from_storage(storage_path))
+            dashboard_url = _dashboard_url_for_storage(storage_path)
+            for index, view in enumerate(config.get("views", [])):
+                if not isinstance(view, dict):
+                    continue
+                view_path = str(view.get("path") or f"view-{index + 1}")
+                title = str(view.get("title") or view_path)
+                options.append(
+                    {
+                        "id": f"{storage_path.name}::{index}",
+                        "dashboard": dashboard_title,
+                        "dashboard_path": dashboard_url,
+                        "storage": storage_path.name,
+                        "title": title,
+                        "path": view_path,
+                        "url": f"{dashboard_url}/{view_path}",
+                        "card_count": _count_cards(view),
+                    }
+                )
+        return options
+
+    return await hass.async_add_executor_job(read_views)
+
+
+async def _async_reference_dashboard_from_message(
+    hass: HomeAssistant,
+    msg: dict[str, Any],
+) -> dict[str, Any] | None:
+    reference_view_id = msg.get("reference_view_id")
+    if reference_view_id:
+        return await _async_reference_dashboard_for_view(hass, reference_view_id)
+    return _normalize_reference_dashboard(msg.get("reference_dashboard"))
+
+
+async def _async_reference_dashboard_for_view(
+    hass: HomeAssistant,
+    reference_view_id: str,
+) -> dict[str, Any] | None:
+    def read_reference() -> dict[str, Any] | None:
+        try:
+            storage_name, index_text = reference_view_id.split("::", 1)
+            view_index = int(index_text)
+        except (ValueError, TypeError):
+            return None
+
+        for storage_path, _payload, config in _editable_lovelace_storage_candidates(hass):
+            if storage_path.name != storage_name:
+                continue
+            views = config.get("views", [])
+            if view_index < 0 or view_index >= len(views):
+                return None
+            view = views[view_index]
+            if not isinstance(view, dict):
+                return None
+            return {
+                "title": config.get("title") or _dashboard_title_from_storage(storage_path),
+                "views": [view],
+                "reference": {
+                    "storage": storage_path.name,
+                    "dashboard_path": _dashboard_url_for_storage(storage_path),
+                    "view_index": view_index,
+                    "view_title": view.get("title"),
+                    "view_path": view.get("path"),
+                },
+            }
+        return None
+
+    return await hass.async_add_executor_job(read_reference)
+
+
+def _dashboard_title_from_storage(storage_path: Path) -> str:
+    if storage_path.name == "lovelace":
+        return "Overview"
+    return storage_path.name.removeprefix("lovelace.").replace("_", " ").replace("-", " ").title()
+
+
+def _dashboard_url_for_storage(storage_path: Path) -> str:
+    if storage_path.name == "lovelace":
+        return "/lovelace"
+    return f"/{storage_path.name.removeprefix('lovelace.')}"
+
+
+def _count_cards(value: Any) -> int:
+    if isinstance(value, dict):
+        count = 1 if "type" in value else 0
+        return count + sum(_count_cards(child) for child in value.values())
+    if isinstance(value, list):
+        return sum(_count_cards(child) for child in value)
+    return 0
 
 
 def _unique_view_path(requested_path: str, views: list[Any]) -> str:
