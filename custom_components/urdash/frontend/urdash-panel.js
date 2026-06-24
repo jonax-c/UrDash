@@ -6,7 +6,7 @@ class UrDashPanel extends HTMLElement {
     this._resources = [];
     this._settings = {
       ai_enabled: false,
-      ai_provider: "local",
+      ai_provider: "openai",
       model: "",
       default_style: "modern",
       allow_custom_cards: true,
@@ -14,7 +14,6 @@ class UrDashPanel extends HTMLElement {
     this._result = null;
     this._style = "modern";
     this._allowCustomCards = true;
-    this._useAi = true;
     this._mode = "new_view";
     this._loaded = false;
   }
@@ -40,7 +39,6 @@ class UrDashPanel extends HTMLElement {
       this._settings = { ...this._settings, ...settingsPayload };
       this._style = this._settings.default_style || this._style;
       this._allowCustomCards = Boolean(this._settings.allow_custom_cards);
-      this._useAi = Boolean(this._settings.ai_enabled);
       this._render();
     } catch (error) {
       this._renderError(error);
@@ -63,7 +61,6 @@ class UrDashPanel extends HTMLElement {
         request,
         style: this._style,
         allow_custom_cards: this._allowCustomCards,
-        use_ai: this._useAi,
         mode: this._mode,
         reference_dashboard: parseReferenceDashboard(referenceInput.value),
       });
@@ -97,11 +94,6 @@ class UrDashPanel extends HTMLElement {
 
   _toggleCustomCards(checked) {
     this._allowCustomCards = checked;
-    this._render();
-  }
-
-  _toggleUseAi(checked) {
-    this._useAi = checked;
     this._render();
   }
 
@@ -165,11 +157,6 @@ class UrDashPanel extends HTMLElement {
               <span>Use premium custom cards</span>
             </label>
 
-            <label class="toggle-row">
-              <input id="useAi" ${this._useAi ? "checked" : ""} ${this._settings.ai_enabled ? "" : "disabled"} type="checkbox" />
-              <span>Use configured AI agent</span>
-            </label>
-
             <button class="primary-action" id="generate" type="button">
               <span>*</span>
               Generate dashboard
@@ -182,8 +169,8 @@ class UrDashPanel extends HTMLElement {
                 <span>entities</span>
               </div>
               <div class="ai-status">
-                <strong>${this._settings.ai_enabled ? "AI ready" : "Local mode"}</strong>
-                <span>${escapeHtml(this._settings.ai_enabled ? this._settings.model : "Add an API key in integration options")}</span>
+                <strong>${this._settings.ai_enabled ? "AI ready" : "API key required"}</strong>
+                <span>${escapeHtml(this._settings.ai_enabled ? this._settings.model : "Add an OpenAI API key in integration options")}</span>
               </div>
               <div class="domain-list">
                 ${this._domainStats().map(([domain, count]) => `<span>${escapeHtml(domain)} ${count}</span>`).join("")}
@@ -204,6 +191,7 @@ class UrDashPanel extends HTMLElement {
               <div>
                 <h2>Preview</h2>
                 <p>${escapeHtml(this._result?.summary || "Your generated dashboard will appear here.")}</p>
+                ${this._result?.error ? `<p class="error-text">${escapeHtml(this._result.error)}</p>` : ""}
                 ${this._result?.warning ? `<p class="warning">${escapeHtml(this._result.warning)}</p>` : ""}
                 ${this._result?.mode === "new_view" ? '<p class="warning">Output is a new view/tab YAML snippet. Existing dashboard is not modified.</p>' : ""}
               </div>
@@ -239,9 +227,6 @@ class UrDashPanel extends HTMLElement {
     this.shadowRoot.querySelector("#copyYaml").addEventListener("click", () => this._copyYaml());
     this.shadowRoot.querySelector("#allowCustomCards").addEventListener("change", (event) => {
       this._toggleCustomCards(event.target.checked);
-    });
-    this.shadowRoot.querySelector("#useAi").addEventListener("change", (event) => {
-      this._toggleUseAi(event.target.checked);
     });
     this.shadowRoot.querySelector("#styleButtons").addEventListener("click", (event) => {
       const button = event.target.closest("button[data-style]");
@@ -508,9 +493,13 @@ const styles = `
     font-size: 13px;
   }
 
-  .warning {
+  .warning, .error-text {
     margin-top: 4px;
     color: #9a5b13;
+  }
+
+  .error-text {
+    color: #9b2f2f;
   }
 
   .domain-list {

@@ -8,7 +8,6 @@
         "title": "Set up UrDash",
         "description": "Create the UrDash dashboard designer panel.",
         "data": {
-          "ai_provider": "AI provider",
           "api_key": "API key",
           "model": "Model",
           "base_url": "API base URL",
@@ -22,9 +21,8 @@
     "step": {
       "init": {
         "title": "UrDash options",
-        "description": "Configure the AI provider used by the dashboard design agent. Leave the provider as local to use the built-in generator without an external API.",
+        "description": "Configure the OpenAI-compatible provider used by the dashboard design agent.",
         "data": {
-          "ai_provider": "AI provider",
           "api_key": "API key",
           "model": "Model",
           "base_url": "API base URL",

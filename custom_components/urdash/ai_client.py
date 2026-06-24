@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL
-from .generator import CUSTOM_CARDS
+from .dashboard_context import CUSTOM_CARDS
 
 SYSTEM_PROMPT = """You are UrDash, a Home Assistant Lovelace dashboard designer.
 Create dashboards that are beautiful, usable, fast to scan, and practical for daily home control.
@@ -24,17 +24,9 @@ Never modify, remove, or rewrite the reference dashboard.
 DASHBOARD_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["dashboard", "summary", "notes"],
+    "required": ["yaml", "summary", "notes"],
     "properties": {
-        "dashboard": {
-            "type": "object",
-            "additionalProperties": True,
-            "required": ["title", "views"],
-            "properties": {
-                "title": {"type": "string"},
-                "views": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
-            },
-        },
+        "yaml": {"type": "string"},
         "summary": {"type": "string"},
         "notes": {"type": "array", "items": {"type": "string"}},
     },
@@ -53,7 +45,6 @@ async def async_generate_with_openai(
     model: str,
     request: str,
     entities: list[dict[str, Any]],
-    local_dashboard: dict[str, Any],
     style: str,
     allow_custom_cards: bool,
     mode: str = "dashboard",
@@ -83,17 +74,18 @@ async def async_generate_with_openai(
                                 "allow_custom_cards": allow_custom_cards,
                                 "available_custom_cards": CUSTOM_CARDS if allow_custom_cards else [],
                                 "entities": _compact_entities(entities),
-                                "baseline_dashboard": local_dashboard,
                                 "reference_dashboard": _compact_dashboard(reference_dashboard),
                                 "requirements": [
-                                    "Use Lovelace YAML-compatible JSON.",
+                                    "Return Lovelace YAML in the yaml field.",
+                                    "The yaml field must contain valid YAML only, without Markdown fences.",
                                     "Use sections view when it improves usability.",
                                     "Group controls by purpose and room.",
                                     "Make the first view immediately useful on phone and desktop.",
                                     "Prefer built-in tile/entities/grid cards when custom cards are disabled.",
-                                    "For mode new_view, return dashboard.views with exactly one new view.",
+                                    "For mode new_view, return exactly one Lovelace view object as YAML.",
                                     "For mode new_view, use the reference dashboard only for style and context.",
-                                    "For mode new_view, do not include existing views in the returned dashboard.",
+                                    "For mode new_view, do not include title/views wrapping or existing views.",
+                                    "For mode dashboard, return a complete Lovelace dashboard YAML object with title and views.",
                                 ],
                             },
                             separators=(",", ":"),
@@ -139,26 +131,27 @@ async def async_generate_with_openai(
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as err:
         raise AiGenerationError("AI provider returned an unexpected response.") from err
 
-    dashboard = generated["dashboard"]
+    yaml_value = generated["yaml"].strip()
+    try:
+        parsed_yaml = yaml.safe_load(yaml_value)
+    except yaml.YAMLError as err:
+        raise AiGenerationError("AI provider returned invalid YAML.") from err
+
+    if not isinstance(parsed_yaml, dict):
+        raise AiGenerationError("AI provider returned YAML that is not a Lovelace object.")
+
     if mode == "new_view":
-        views = dashboard.get("views") or []
-        if not views:
-            raise AiGenerationError("AI provider did not return a Lovelace view.")
-        view = views[0]
-        yaml_value = yaml.safe_dump(
-            view,
-            sort_keys=False,
-            allow_unicode=False,
-            width=120,
-        )
+        view = parsed_yaml
+        if "views" in view or "title" in view and isinstance(view.get("views"), list):
+            raise AiGenerationError("AI provider returned a full dashboard instead of a single view.")
+        if "type" not in view and "cards" not in view and "sections" not in view:
+            raise AiGenerationError("AI provider returned YAML that does not look like a Lovelace view.")
+        dashboard = {"title": "UrDash", "views": [view]}
     else:
         view = None
-        yaml_value = yaml.safe_dump(
-            dashboard,
-            sort_keys=False,
-            allow_unicode=False,
-            width=120,
-        )
+        dashboard = parsed_yaml
+        if "views" not in dashboard:
+            raise AiGenerationError("AI provider returned a dashboard without views.")
 
     return {
         "dashboard": dashboard,

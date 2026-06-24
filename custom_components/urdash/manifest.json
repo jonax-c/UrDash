@@ -4,9 +4,8 @@
   "codeowners": [],
   "config_flow": true,
   "dependencies": ["frontend", "lovelace"],
-  "documentation": "https://github.com/local/urdash",
+  "documentation": "https://github.com/jonax-c/UrDash",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/local/urdash/issues",
+  "issue_tracker": "https://github.com/jonax-c/UrDash/issues",
   "version": "0.1.0"
 }
-

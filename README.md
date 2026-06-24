@@ -30,20 +30,14 @@ After setup, UrDash appears in the sidebar.
 
 ## AI Setup
 
-During setup, users can choose:
-
-- `openai` to use their own OpenAI API key.
-- `local` to use the built-in non-AI generator.
-
-The API key is entered in Home Assistant's integration setup or options flow. It is used only by the Home Assistant backend and is never sent to the UrDash frontend panel.
+During setup, users enter their own OpenAI API key. The API key is stored in Home Assistant's integration entry and is used only by the Home Assistant backend. It is never sent to the UrDash frontend panel.
 
 Defaults:
 
-- Provider: `openai`
 - Model: `gpt-5.2`
 - Base URL: `https://api.openai.com/v1`
 
-The base URL can be changed for OpenAI-compatible providers. If the AI request fails or no key is configured, UrDash falls back to the local generator and shows the warning in the panel.
+The base URL can be changed for OpenAI-compatible providers. If the AI request fails or no key is configured, UrDash returns an error instead of generating a fallback.
 
 ## Reference Dashboard Mode
 
@@ -77,7 +71,6 @@ Service fields:
 - `request`: natural-language dashboard request.
 - `style`: `modern`, `minimal`, `glass`, or `compact`.
 - `allow_custom_cards`: whether generated YAML may use recommended custom cards.
-- `use_ai`: whether to call the configured AI provider.
 - `mode`: `new_view` for a new tab, or `dashboard` for a full dashboard draft.
 - `reference_dashboard`: optional existing dashboard YAML used as context only.
 
@@ -88,7 +81,7 @@ custom_components/urdash/
   __init__.py
   config_flow.py
   const.py
-  generator.py
+  dashboard_context.py
   manifest.json
   services.yaml
   frontend/urdash-panel.js

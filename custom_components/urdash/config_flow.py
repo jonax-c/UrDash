@@ -6,16 +6,12 @@ from homeassistant import config_entries
 from homeassistant.helpers import selector
 
 from .const import (
-    AI_PROVIDER_LOCAL,
-    AI_PROVIDER_OPENAI,
-    CONF_AI_PROVIDER,
     CONF_ALLOW_CUSTOM_CARDS,
     CONF_API_KEY,
     CONF_BASE_URL,
     CONF_DEFAULT_STYLE,
     CONF_MODEL,
     DEFAULT_ALLOW_CUSTOM_CARDS,
-    DEFAULT_AI_PROVIDER,
     DEFAULT_OPENAI_BASE_URL,
     DEFAULT_OPENAI_MODEL,
     DEFAULT_STYLE,
@@ -23,7 +19,6 @@ from .const import (
 )
 
 STYLE_OPTIONS = ["modern", "minimal", "glass", "compact"]
-PROVIDER_OPTIONS = [AI_PROVIDER_OPENAI, AI_PROVIDER_LOCAL]
 
 
 class UrDashConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -77,19 +72,9 @@ class UrDashOptionsFlow(config_entries.OptionsFlow):
 
 
 def _schema(current):
-    provider = current.get(CONF_AI_PROVIDER, DEFAULT_AI_PROVIDER)
     return vol.Schema(
         {
-            vol.Optional(
-                CONF_AI_PROVIDER,
-                default=provider,
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=PROVIDER_OPTIONS,
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                )
-            ),
-            vol.Optional(
+            vol.Required(
                 CONF_API_KEY,
                 default=current.get(CONF_API_KEY, ""),
             ): selector.TextSelector(
@@ -124,7 +109,5 @@ def _schema(current):
 
 def _normalize_input(user_input):
     normalized = dict(user_input)
-    if normalized.get(CONF_AI_PROVIDER) == AI_PROVIDER_LOCAL:
-        normalized[CONF_API_KEY] = ""
     normalized[CONF_BASE_URL] = normalized.get(CONF_BASE_URL, DEFAULT_OPENAI_BASE_URL).rstrip("/")
     return normalized

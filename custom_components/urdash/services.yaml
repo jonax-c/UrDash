@@ -28,13 +28,6 @@ generate_dashboard:
       default: true
       selector:
         boolean:
-    use_ai:
-      name: Use AI
-      description: Use the configured AI provider. Falls back to the local generator if unavailable.
-      required: false
-      default: true
-      selector:
-        boolean:
     mode:
       name: Generation mode
       description: Generate a full dashboard or a new tab/view that can be appended to an existing dashboard.

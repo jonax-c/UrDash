@@ -17,15 +17,12 @@ except ImportError:
     StaticPathConfig = None
 
 from .const import (
-    AI_PROVIDER_OPENAI,
-    CONF_AI_PROVIDER,
     CONF_ALLOW_CUSTOM_CARDS,
     CONF_API_KEY,
     CONF_BASE_URL,
     CONF_DEFAULT_STYLE,
     CONF_MODEL,
     DEFAULT_ALLOW_CUSTOM_CARDS,
-    DEFAULT_AI_PROVIDER,
     DEFAULT_OPENAI_BASE_URL,
     DEFAULT_OPENAI_MODEL,
     DEFAULT_STYLE,
@@ -38,7 +35,7 @@ from .const import (
     STATIC_URL,
 )
 from .ai_client import AiGenerationError, async_generate_with_openai
-from .generator import CUSTOM_CARDS, build_dashboard, build_new_view, serialize_state
+from .dashboard_context import CUSTOM_CARDS, serialize_state
 
 PLATFORMS: list[str] = []
 
@@ -53,7 +50,6 @@ GENERATE_SERVICE_SCHEMA = vol.Schema(
         vol.Optional(
             "allow_custom_cards", default=DEFAULT_ALLOW_CUSTOM_CARDS
         ): cv.boolean,
-        vol.Optional("use_ai", default=True): cv.boolean,
         vol.Optional("mode", default="dashboard"): vol.In(["dashboard", "new_view"]),
         vol.Optional("reference_dashboard", default=""): cv.string,
     }
@@ -137,7 +133,6 @@ def _register_services(hass: HomeAssistant) -> None:
             call.data["request"],
             call.data["style"],
             call.data["allow_custom_cards"],
-            call.data["use_ai"],
             call.data["mode"],
             _parse_reference_dashboard(call.data.get("reference_dashboard")),
         )
@@ -200,8 +195,8 @@ async def websocket_settings(
     connection.send_result(
         msg["id"],
         {
-            "ai_provider": settings[CONF_AI_PROVIDER],
-            "ai_enabled": _ai_enabled(settings),
+            "ai_provider": "openai",
+            "ai_enabled": bool(settings[CONF_API_KEY]),
             "model": settings[CONF_MODEL],
             "default_style": settings[CONF_DEFAULT_STYLE],
             "allow_custom_cards": settings[CONF_ALLOW_CUSTOM_CARDS],
@@ -219,7 +214,6 @@ async def websocket_settings(
         vol.Optional(
             "allow_custom_cards", default=DEFAULT_ALLOW_CUSTOM_CARDS
         ): cv.boolean,
-        vol.Optional("use_ai", default=True): cv.boolean,
         vol.Optional("mode", default="dashboard"): vol.In(["dashboard", "new_view"]),
         vol.Optional("reference_dashboard"): dict,
     }
@@ -236,7 +230,6 @@ async def websocket_generate(
         msg["request"],
         msg["style"],
         msg["allow_custom_cards"],
-        msg["use_ai"],
         msg["mode"],
         _normalize_reference_dashboard(msg.get("reference_dashboard")),
     )
@@ -248,26 +241,19 @@ async def _async_generate_from_hass(
     request: str,
     style: str,
     allow_custom_cards: bool,
-    use_ai: bool = True,
     mode: str = "dashboard",
     reference_dashboard: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     entities = [serialize_state(state) for state in hass.states.async_all()]
-    if mode == "new_view":
-        local_result = build_new_view(
-            request,
-            entities,
-            style,
-            allow_custom_cards,
-            reference_dashboard,
-        )
-    else:
-        local_result = build_dashboard(request, entities, style, allow_custom_cards)
     settings = _settings(hass)
 
-    if not use_ai or not _ai_enabled(settings):
-        local_result["engine"] = "local"
-        return local_result
+    if not settings[CONF_API_KEY]:
+        return {
+            "error": "OpenAI API key is not configured.",
+            "summary": "Configure an API key in UrDash integration options.",
+            "engine": "ai",
+            "mode": mode,
+        }
 
     try:
         return await async_generate_with_openai(
@@ -277,16 +263,18 @@ async def _async_generate_from_hass(
             model=settings[CONF_MODEL],
             request=request,
             entities=entities,
-            local_dashboard=local_result["dashboard"],
             style=style,
             allow_custom_cards=allow_custom_cards,
             mode=mode,
             reference_dashboard=reference_dashboard,
         )
     except AiGenerationError as err:
-        local_result["engine"] = "local"
-        local_result["warning"] = str(err)
-        return local_result
+        return {
+            "error": str(err),
+            "summary": "AI generation failed.",
+            "engine": "ai",
+            "mode": mode,
+        }
 
 
 def _settings(hass: HomeAssistant) -> dict[str, Any]:
@@ -297,17 +285,12 @@ def _settings(hass: HomeAssistant) -> dict[str, Any]:
         data.update(entries[0].options)
 
     return {
-        CONF_AI_PROVIDER: data.get(CONF_AI_PROVIDER, DEFAULT_AI_PROVIDER),
         CONF_API_KEY: data.get(CONF_API_KEY, ""),
         CONF_MODEL: data.get(CONF_MODEL, DEFAULT_OPENAI_MODEL),
         CONF_BASE_URL: data.get(CONF_BASE_URL, DEFAULT_OPENAI_BASE_URL),
         CONF_DEFAULT_STYLE: data.get(CONF_DEFAULT_STYLE, DEFAULT_STYLE),
         CONF_ALLOW_CUSTOM_CARDS: data.get(CONF_ALLOW_CUSTOM_CARDS, DEFAULT_ALLOW_CUSTOM_CARDS),
     }
-
-
-def _ai_enabled(settings: dict[str, Any]) -> bool:
-    return settings[CONF_AI_PROVIDER] == AI_PROVIDER_OPENAI and bool(settings[CONF_API_KEY])
 
 
 def _parse_reference_dashboard(value: str | None) -> dict[str, Any] | None:
