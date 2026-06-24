@@ -255,7 +255,7 @@ class UrDashPanel extends HTMLElement {
       <div class="dependency-row">
         <span class="${resource.installed ? "dot installed" : "dot"}"></span>
         <div>
-          <strong>${escapeHtml(resource.name)}</strong>
+          <strong>${escapeHtml(resource.name)} <em>${resource.installed ? "installed" : resource.checked ? "missing" : "not checked"}</em></strong>
           <p>${escapeHtml(resource.used_for || resource.usedFor || "")}</p>
         </div>
       </div>
@@ -522,6 +522,15 @@ const styles = `
   .section-title h3 { font-size: 15px; }
   .dependency-row { gap: 10px; margin-top: 10px; }
   .dependency-row strong { font-size: 13px; }
+
+  .dependency-row em {
+    color: #5d6f72;
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 700;
+    margin-left: 4px;
+    text-transform: uppercase;
+  }
 
   .dot {
     width: 10px;

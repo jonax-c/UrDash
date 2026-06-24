@@ -62,6 +62,12 @@ UrDash can generate YAML that uses these optional custom cards:
 
 HACS integrations cannot declare other HACS frontend cards as hard dependencies. UrDash treats them as dashboard recommendations and can fall back to built-in Home Assistant cards when custom cards are disabled.
 
+The panel checks Home Assistant's configured Lovelace resources and marks recommended packages as:
+
+- `installed` with a green dot when the resource URL is configured.
+- `missing` with an orange dot when the resource list was checked but the package was not found.
+- `not checked` when Home Assistant's resource storage could not be read.
+
 ## Services
 
 UrDash also exposes `urdash.generate_dashboard`. The service generates a dashboard draft from the current Home Assistant state registry and fires an `urdash_dashboard_generated` event containing the generated dashboard object and YAML.

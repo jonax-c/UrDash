@@ -171,15 +171,20 @@ async def websocket_resources(
     msg: dict[str, Any],
 ) -> None:
     """Return recommended Lovelace card resources."""
-    resources = [
-        {
-            **card,
-            "required": card["id"] in {"mushroom", "mini-graph-card"},
-            "installed": False,
-            "checked": False,
-        }
-        for card in CUSTOM_CARDS
-    ]
+    installed_urls = await _async_lovelace_resource_urls(hass)
+    checked = installed_urls is not None
+    installed_urls = installed_urls or set()
+
+    resources = []
+    for card in CUSTOM_CARDS:
+        resources.append(
+            {
+                **card,
+                "required": card["id"] in {"mushroom", "mini-graph-card"},
+                "installed": _resource_installed(card["resource"], installed_urls),
+                "checked": checked,
+            }
+        )
     connection.send_result(msg["id"], {"resources": resources})
 
 
@@ -307,3 +312,41 @@ def _normalize_reference_dashboard(value: dict[str, Any] | None) -> dict[str, An
     if isinstance(raw_yaml, str):
         return _parse_reference_dashboard(raw_yaml)
     return value
+
+
+async def _async_lovelace_resource_urls(hass: HomeAssistant) -> set[str] | None:
+    """Read configured Lovelace resources from HA storage when available."""
+    storage_path = Path(hass.config.path(".storage/lovelace_resources"))
+    if not storage_path.exists():
+        return set()
+
+    def read_storage() -> set[str] | None:
+        try:
+            payload = yaml.safe_load(storage_path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            return None
+
+        data = payload.get("data") or {}
+        items = data.get("items") or []
+        urls = {
+            item.get("url", "").split("?", 1)[0].rstrip("/")
+            for item in items
+            if isinstance(item, dict) and item.get("url")
+        }
+        return {url for url in urls if url}
+
+    return await hass.async_add_executor_job(read_storage)
+
+
+def _resource_installed(expected_url: str, installed_urls: set[str]) -> bool:
+    expected = expected_url.split("?", 1)[0].rstrip("/")
+    expected_tail = expected.removeprefix("/hacsfiles/")
+
+    for installed in installed_urls:
+        if installed == expected:
+            return True
+        if installed.endswith(expected):
+            return True
+        if expected_tail and expected_tail in installed:
+            return True
+    return False
