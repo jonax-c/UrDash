@@ -202,7 +202,7 @@ async def websocket_reference_views(
     msg: dict[str, Any],
 ) -> None:
     """Return existing UI-managed Lovelace views that can be used as reference."""
-    views = await _async_reference_views(hass)
+    views = await _async_reference_views(hass, connection.user.id)
     connection.send_result(msg["id"], {"views": views})
 
 
@@ -503,7 +503,10 @@ def _editable_lovelace_storage_candidates(
     return dashboards
 
 
-async def _async_reference_views(hass: HomeAssistant) -> list[dict[str, Any]]:
+async def _async_reference_views(
+    hass: HomeAssistant,
+    user_id: str,
+) -> list[dict[str, Any]]:
     def read_views() -> list[dict[str, Any]]:
         options = []
         for storage_path, _payload, config in _editable_lovelace_storage_candidates(hass):
@@ -513,6 +516,8 @@ async def _async_reference_views(hass: HomeAssistant) -> list[dict[str, Any]]:
                 if not isinstance(view, dict):
                     continue
                 view_path = str(view.get("path") or f"view-{index + 1}")
+                if not _is_visible_reference_view(view, user_id, view_path):
+                    continue
                 title = str(view.get("title") or view_path)
                 options.append(
                     {
@@ -529,6 +534,45 @@ async def _async_reference_views(hass: HomeAssistant) -> list[dict[str, Any]]:
         return options
 
     return await hass.async_add_executor_job(read_views)
+
+
+def _is_visible_reference_view(
+    view: dict[str, Any],
+    user_id: str,
+    view_path: str,
+) -> bool:
+    if view_path == "urdash-preview":
+        return False
+    if view.get("subview") is True:
+        return False
+
+    visible = view.get("visible")
+    if visible is None:
+        return True
+    if isinstance(visible, bool):
+        return visible
+    if isinstance(visible, str):
+        return visible == user_id
+    if isinstance(visible, dict):
+        return visible.get("user") == user_id or visible.get("users") == user_id
+    if isinstance(visible, list):
+        if not visible:
+            return False
+        for rule in visible:
+            if isinstance(rule, str) and rule == user_id:
+                return True
+            if isinstance(rule, dict):
+                user = rule.get("user")
+                users = rule.get("users")
+                if user == user_id:
+                    return True
+                if isinstance(users, list) and user_id in users:
+                    return True
+                if users == user_id:
+                    return True
+        return False
+
+    return True
 
 
 async def _async_reference_dashboard_from_message(
