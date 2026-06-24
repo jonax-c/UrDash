@@ -9,7 +9,7 @@ It adds a native Home Assistant sidebar panel where users can:
 - Describe the dashboard they want.
 - Analyze current Home Assistant entities.
 - Generate Lovelace YAML.
-- Preview the proposed layout.
+- Preview generated views with Home Assistant's real Lovelace renderer.
 - Copy the dashboard YAML into a manual Lovelace dashboard.
 - Generate a new Lovelace tab/view using an existing dashboard as reference.
 - See recommended custom-card packages for richer designs.
@@ -59,6 +59,22 @@ After generation, the panel can append the generated view directly to the defaul
 - Does not support YAML-mode dashboards or non-default dashboards yet.
 
 Reload the Lovelace dashboard if the new tab is not visible immediately.
+
+## Real Lovelace Preview
+
+UrDash does not use a simulated card preview. The panel's **Preview** button writes the generated view to an isolated preview dashboard:
+
+```text
+.storage/lovelace.urdash_preview
+```
+
+It also registers a hidden dashboard entry for:
+
+```text
+/urdash-preview/preview
+```
+
+This lets Home Assistant render the generated view with the real Lovelace renderer and installed custom cards. The preview dashboard is separate from the user's normal dashboards.
 
 ## Recommended Lovelace Cards
 

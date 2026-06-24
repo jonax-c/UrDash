@@ -16,6 +16,7 @@ class UrDashPanel extends HTMLElement {
     this._allowCustomCards = true;
     this._mode = "new_view";
     this._appendResult = null;
+    this._previewResult = null;
     this._loaded = false;
   }
 
@@ -66,6 +67,7 @@ class UrDashPanel extends HTMLElement {
         reference_dashboard: parseReferenceDashboard(referenceInput.value),
       });
       this._appendResult = null;
+      this._previewResult = null;
       this._render();
     } catch (error) {
       this._renderError(error);
@@ -104,6 +106,28 @@ class UrDashPanel extends HTMLElement {
       this._render();
     } catch (error) {
       this._appendResult = { ok: false, error: error?.message || String(error) };
+      this._render();
+    }
+  }
+
+  async _writePreview() {
+    if (!this._result?.view) return;
+
+    const button = this.shadowRoot.querySelector("#writePreview");
+    button.disabled = true;
+    button.textContent = "Preparing";
+
+    try {
+      this._previewResult = await this._hass.connection.sendMessagePromise({
+        type: "urdash/preview_view",
+        view: this._result.view,
+      });
+      this._render();
+      if (this._previewResult?.ok && this._previewResult.path) {
+        window.open(this._previewResult.path, "_blank", "noopener");
+      }
+    } catch (error) {
+      this._previewResult = { ok: false, error: error?.message || String(error) };
       this._render();
     }
   }
@@ -217,10 +241,19 @@ class UrDashPanel extends HTMLElement {
                 ${this._result?.mode === "new_view" ? '<p class="warning">Output is a new view/tab YAML snippet. Existing dashboard is not modified.</p>' : ""}
               </div>
               <div class="toolbar-actions">
+                <button class="icon-button" id="writePreview" ${this._result?.view ? "" : "disabled"} title="Preview in real Lovelace" type="button">Preview</button>
                 <button class="icon-button" id="appendView" ${this._result?.view ? "" : "disabled"} title="Add as new Lovelace tab" type="button">Add tab</button>
                 <button class="icon-button" id="copyYaml" ${this._result?.yaml ? "" : "disabled"} title="Copy YAML" type="button">Copy</button>
               </div>
             </div>
+
+            ${this._previewResult ? `
+              <div class="${this._previewResult.ok ? "status-box success" : "status-box error"}">
+                ${this._previewResult.ok
+                  ? `Preview dashboard updated. <a href="${escapeHtml(this._previewResult.path)}" target="_blank" rel="noopener">Open real Lovelace preview</a>.`
+                  : escapeHtml(this._previewResult.error || "Could not prepare the preview dashboard.")}
+              </div>
+            ` : ""}
 
             ${this._appendResult ? `
               <div class="${this._appendResult.ok ? "status-box success" : "status-box error"}">
@@ -230,18 +263,11 @@ class UrDashPanel extends HTMLElement {
               </div>
             ` : ""}
 
-            <div class="dashboard-preview ${this._style}">
-              <header class="preview-header">
-                <div>
-                  <span>Home Assistant</span>
-                  <h2>${escapeHtml(this._result?.dashboard?.title || "Family Home")}</h2>
-                </div>
-                <div class="weather-pill">Live</div>
-              </header>
-              <div class="preview-grid">
-                ${this._previewMarkup()}
-              </div>
-            </div>
+            <section class="real-preview-panel">
+              <h3>Real Lovelace Preview</h3>
+              <p>Use Preview to render the generated tab in Home Assistant's actual Lovelace renderer. The old simulated preview has been removed because it does not reflect real cards or layout.</p>
+              ${this._previewResult?.ok ? `<iframe title="UrDash Lovelace preview" src="${escapeHtml(this._previewResult.path)}"></iframe>` : ""}
+            </section>
 
             <section class="yaml-panel">
               <div class="section-title">
@@ -258,6 +284,7 @@ class UrDashPanel extends HTMLElement {
     this.shadowRoot.querySelector("#generate").addEventListener("click", () => this._generate());
     this.shadowRoot.querySelector("#copyYaml").addEventListener("click", () => this._copyYaml());
     this.shadowRoot.querySelector("#appendView").addEventListener("click", () => this._appendView());
+    this.shadowRoot.querySelector("#writePreview").addEventListener("click", () => this._writePreview());
     this.shadowRoot.querySelector("#allowCustomCards").addEventListener("change", (event) => {
       this._toggleCustomCards(event.target.checked);
     });
@@ -295,14 +322,6 @@ class UrDashPanel extends HTMLElement {
     `).join("");
   }
 
-  _previewMarkup() {
-    const cards = this._result?.dashboard?.views?.[0]?.sections?.[0]?.cards;
-    if (!cards) {
-      return this._entities.slice(0, 6).map((entity) => tileMarkup(entity.entity_id, entity.attributes?.friendly_name)).join("");
-    }
-    return cards.flatMap((card) => renderPreviewCard(card)).join("");
-  }
-
   _renderError(error) {
     this.shadowRoot.innerHTML = `
       <style>${styles}</style>
@@ -314,35 +333,6 @@ class UrDashPanel extends HTMLElement {
       </main>
     `;
   }
-}
-
-function renderPreviewCard(card) {
-  if (card.type?.includes("title") || card.type === "heading") {
-    return [`<h3 class="preview-heading">${escapeHtml(card.title || card.heading || "Section")}</h3>`];
-  }
-  if (card.type === "grid") {
-    return (card.cards || []).map((child) => tileMarkup(child.entity || child.entities?.[0] || "sensor.home"));
-  }
-  if (card.type === "entities") {
-    return [`
-      <div class="entity-stack">
-        ${(card.entities || []).slice(0, 5).map((entity) => `<span>${escapeHtml(entity)}</span>`).join("")}
-      </div>
-    `];
-  }
-  return [tileMarkup(card.entity || card.entities?.[0] || "sensor.home")];
-}
-
-function tileMarkup(entityId, label) {
-  const domain = entityId?.split(".")[0] || "sensor";
-  const name = label || entityId.split(".").pop().replaceAll("_", " ");
-  return `
-    <article class="preview-tile ${escapeHtml(domain)}">
-      <span>${escapeHtml(domain)}</span>
-      <strong>${escapeHtml(name)}</strong>
-      <p>${domain === "sensor" ? "Trend ready" : "Tap to control"}</p>
-    </article>
-  `;
 }
 
 function escapeHtml(value) {
@@ -425,7 +415,7 @@ const styles = `
   }
 
   h1 { font-size: 24px; }
-  .brand-row p, .preview-toolbar p, .muted, .dependency-row p, .preview-tile p, .ai-status span {
+  .brand-row p, .preview-toolbar p, .muted, .dependency-row p, .ai-status span {
     color: #5d6f72;
     font-size: 13px;
   }
@@ -620,100 +610,26 @@ const styles = `
     color: #9b2f2f;
   }
 
-  .dashboard-preview {
-    min-height: 440px;
-    border-radius: 8px;
-    padding: 18px;
-    overflow: hidden;
-    color: #10282b;
-    background: linear-gradient(145deg, #eaf4f1, #f8fbfb 48%, #dde9ec);
-  }
-
-  .dashboard-preview.glass {
-    background: linear-gradient(145deg, #e8f0f5, #ffffff 46%, #dbe6e1);
-  }
-
-  .dashboard-preview.minimal { background: #f8faf9; }
-  .dashboard-preview.compact { min-height: 380px; }
-
-  .preview-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 18px;
-  }
-
-  .preview-header span {
-    color: #60777a;
-    font-size: 13px;
-    font-weight: 700;
-  }
-
-  .preview-header h2 { font-size: 34px; }
-
-  .weather-pill {
-    padding: 10px 14px;
-    border-radius: 8px;
-    background: rgba(255,255,255,0.72);
-    font-weight: 800;
-  }
-
-  .preview-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(130px, 1fr));
-    gap: 12px;
-  }
-
-  .preview-heading {
-    grid-column: 1 / -1;
-    margin-top: 4px;
-    color: #1e373b;
-    font-size: 18px;
-  }
-
-  .preview-tile, .entity-stack {
-    min-height: 118px;
-    border: 1px solid rgba(119,144,146,0.23);
+  .real-preview-panel {
+    border: 1px solid #d7e0e1;
     border-radius: 8px;
     padding: 14px;
-    background: rgba(255,255,255,0.72);
-    box-shadow: 0 9px 22px rgba(53,73,78,0.1);
-  }
-
-  .preview-tile {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 9px;
-  }
-
-  .preview-tile span {
-    color: #5b7276;
-    font-size: 11px;
-    font-weight: 800;
-    text-transform: uppercase;
-  }
-
-  .preview-tile strong { color: #142d31; }
-  .preview-tile.light { background: #fff8e7; }
-  .preview-tile.climate { background: #e9f5f7; }
-  .preview-tile.lock { background: #f2ece8; }
-  .preview-tile.sensor { background: #eef6ed; }
-
-  .entity-stack {
-    grid-column: span 2;
+    background: rgba(248,250,250,0.78);
     display: grid;
-    gap: 8px;
-    min-height: auto;
+    gap: 10px;
   }
 
-  .entity-stack span {
-    overflow: hidden;
-    color: #41595d;
-    font-size: 12px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .real-preview-panel p {
+    color: #5d6f72;
+    font-size: 13px;
+  }
+
+  .real-preview-panel iframe {
+    width: 100%;
+    min-height: 680px;
+    border: 1px solid #cad5d6;
+    border-radius: 8px;
+    background: #ffffff;
   }
 
   .yaml-panel {
@@ -751,14 +667,11 @@ const styles = `
 
   @media (max-width: 980px) {
     .workbench { grid-template-columns: 1fr; }
-    .preview-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
   }
 
   @media (max-width: 560px) {
     .app-shell { padding: 10px; }
-    .preview-grid { grid-template-columns: 1fr; }
     .segmented { grid-template-columns: repeat(2, 1fr); }
-    .entity-stack { grid-column: auto; }
   }
 `;
 

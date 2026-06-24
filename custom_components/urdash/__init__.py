@@ -124,6 +124,7 @@ def _register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_settings)
     websocket_api.async_register_command(hass, websocket_generate)
     websocket_api.async_register_command(hass, websocket_append_view)
+    websocket_api.async_register_command(hass, websocket_preview_view)
 
 
 def _register_services(hass: HomeAssistant) -> None:
@@ -259,6 +260,28 @@ async def websocket_append_view(
     """Append a generated view to the default UI-managed Lovelace dashboard."""
     try:
         result = await _async_append_view_to_default_dashboard(hass, msg["view"])
+    except ValueError as err:
+        connection.send_result(msg["id"], {"ok": False, "error": str(err)})
+        return
+
+    connection.send_result(msg["id"], {"ok": True, **result})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "urdash/preview_view",
+        vol.Required("view"): dict,
+    }
+)
+@websocket_api.async_response
+async def websocket_preview_view(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Write a generated view to an isolated UrDash preview dashboard."""
+    try:
+        result = await _async_write_preview_dashboard(hass, msg["view"])
     except ValueError as err:
         connection.send_result(msg["id"], {"ok": False, "error": str(err)})
         return
@@ -474,3 +497,95 @@ def _slugify(value: str) -> str:
     slug = "".join(char.lower() if char.isalnum() else "-" for char in value)
     slug = "-".join(part for part in slug.split("-") if part)
     return slug or "urdash"
+
+
+async def _async_write_preview_dashboard(
+    hass: HomeAssistant,
+    view: dict[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(view, dict):
+        raise ValueError("Generated view is invalid.")
+
+    def write_preview() -> dict[str, Any]:
+        storage_path = Path(hass.config.path(".storage/lovelace.urdash_preview"))
+        dashboards_path = Path(hass.config.path(".storage/lovelace_dashboards"))
+        preview_view = dict(view)
+        preview_view["title"] = str(preview_view.get("title") or "Preview")
+        preview_view["path"] = "preview"
+
+        payload = {
+            "version": 1,
+            "minor_version": 1,
+            "key": "lovelace.urdash_preview",
+            "data": {
+                "config": {
+                    "title": "UrDash Preview",
+                    "views": [preview_view],
+                }
+            },
+        }
+
+        if storage_path.exists():
+            backup_path = storage_path.with_name(
+                f"{storage_path.name}.backup-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            )
+            backup_path.write_text(storage_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+        storage_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        _ensure_preview_dashboard_registry(dashboards_path)
+
+        return {
+            "title": preview_view["title"],
+            "path": "/urdash-preview/preview",
+            "storage": storage_path.name,
+        }
+
+    return await hass.async_add_executor_job(write_preview)
+
+
+def _ensure_preview_dashboard_registry(dashboards_path: Path) -> None:
+    dashboard = {
+        "id": "urdash-preview",
+        "url_path": "urdash-preview",
+        "title": "UrDash Preview",
+        "icon": "mdi:view-dashboard-edit",
+        "show_in_sidebar": False,
+        "mode": "storage",
+        "require_admin": False,
+    }
+
+    if dashboards_path.exists():
+        try:
+            payload = json.loads(dashboards_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = _empty_dashboards_payload()
+    else:
+        payload = _empty_dashboards_payload()
+
+    items = (payload.setdefault("data", {})).setdefault("items", [])
+    if not isinstance(items, list):
+        payload["data"]["items"] = items = []
+
+    for index, item in enumerate(items):
+        if isinstance(item, dict) and item.get("url_path") == "urdash-preview":
+            items[index] = {**item, **dashboard}
+            break
+    else:
+        items.append(dashboard)
+
+    dashboards_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _empty_dashboards_payload() -> dict[str, Any]:
+    return {
+        "version": 1,
+        "minor_version": 1,
+        "key": "lovelace_dashboards",
+        "data": {"items": []},
+    }
