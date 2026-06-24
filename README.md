@@ -62,19 +62,19 @@ Reload the Lovelace dashboard if the new tab is not visible immediately.
 
 ## Real Lovelace Preview
 
-UrDash does not use a simulated card preview. The panel's **Preview** button writes the generated view to an isolated preview dashboard:
+UrDash does not use a simulated card preview. The panel's **Preview** button writes the generated view to a reserved preview tab in an existing UI-managed dashboard:
 
 ```text
-.storage/lovelace.urdash_preview
+path: urdash-preview
 ```
 
-It also registers a hidden dashboard entry for:
+The preview action:
 
-```text
-/urdash-preview/preview
-```
+- Replaces only a previous UrDash preview tab.
+- Creates a timestamped backup first.
+- Opens the real Lovelace URL for that tab.
 
-This lets Home Assistant render the generated view with the real Lovelace renderer and installed custom cards. The preview dashboard is separate from the user's normal dashboards.
+This avoids dynamic dashboard-route registration issues and lets Home Assistant render the generated view with the real Lovelace renderer and installed custom cards.
 
 ## Recommended Lovelace Cards
 

@@ -281,7 +281,7 @@ async def websocket_preview_view(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Write a generated view to an isolated UrDash preview dashboard."""
+    """Write a generated view to a reserved preview tab in an existing dashboard."""
     try:
         result = await _async_write_preview_dashboard(hass, msg["view"])
     except ValueError as err:
@@ -509,85 +509,51 @@ async def _async_write_preview_dashboard(
         raise ValueError("Generated view is invalid.")
 
     def write_preview() -> dict[str, Any]:
-        storage_path = Path(hass.config.path(".storage/lovelace.urdash_preview"))
-        dashboards_path = Path(hass.config.path(".storage/lovelace_dashboards"))
+        storage_path, payload, config = _find_lovelace_storage_target(hass)
+        views = config.setdefault("views", [])
+        if not isinstance(views, list):
+            raise ValueError("Selected Lovelace dashboard views are not editable.")
+
         preview_view = dict(view)
-        preview_view["title"] = str(preview_view.get("title") or "Preview")
-        preview_view["path"] = "preview"
+        preview_view["title"] = str(preview_view.get("title") or "UrDash Preview")
+        preview_view["path"] = "urdash-preview"
 
-        payload = {
-            "version": 1,
-            "minor_version": 1,
-            "key": "lovelace.urdash_preview",
-            "data": {
-                "config": {
-                    "title": "UrDash Preview",
-                    "views": [preview_view],
-                }
-            },
-        }
+        backup_path = storage_path.with_name(
+            f"{storage_path.name}.urdash-preview-backup-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        )
+        backup_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
-        if storage_path.exists():
-            backup_path = storage_path.with_name(
-                f"{storage_path.name}.backup-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            )
-            backup_path.write_text(storage_path.read_text(encoding="utf-8"), encoding="utf-8")
+        replaced = False
+        for index, existing_view in enumerate(views):
+            if isinstance(existing_view, dict) and existing_view.get("path") == "urdash-preview":
+                views[index] = preview_view
+                replaced = True
+                break
+        if not replaced:
+            views.append(preview_view)
 
         storage_path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        _ensure_preview_dashboard_registry(dashboards_path)
 
         return {
             "title": preview_view["title"],
-            "path": "/urdash-preview/preview",
+            "path": _view_url_for_storage(storage_path, "urdash-preview"),
             "storage": storage_path.name,
+            "backup": str(backup_path),
         }
 
     return await hass.async_add_executor_job(write_preview)
 
 
-def _ensure_preview_dashboard_registry(dashboards_path: Path) -> None:
-    dashboard = {
-        "id": "urdash-preview",
-        "url_path": "urdash-preview",
-        "title": "UrDash Preview",
-        "icon": "mdi:view-dashboard-edit",
-        "show_in_sidebar": False,
-        "mode": "storage",
-        "require_admin": False,
-    }
-
-    if dashboards_path.exists():
-        try:
-            payload = json.loads(dashboards_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            payload = _empty_dashboards_payload()
-    else:
-        payload = _empty_dashboards_payload()
-
-    items = (payload.setdefault("data", {})).setdefault("items", [])
-    if not isinstance(items, list):
-        payload["data"]["items"] = items = []
-
-    for index, item in enumerate(items):
-        if isinstance(item, dict) and item.get("url_path") == "urdash-preview":
-            items[index] = {**item, **dashboard}
-            break
-    else:
-        items.append(dashboard)
-
-    dashboards_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-
-def _empty_dashboards_payload() -> dict[str, Any]:
-    return {
-        "version": 1,
-        "minor_version": 1,
-        "key": "lovelace_dashboards",
-        "data": {"items": []},
-    }
+def _view_url_for_storage(storage_path: Path, view_path: str) -> str:
+    if storage_path.name == "lovelace":
+        return f"/lovelace/{view_path}"
+    if storage_path.name.startswith("lovelace."):
+        dashboard_path = storage_path.name.removeprefix("lovelace.")
+        return f"/{dashboard_path}/{view_path}"
+    return f"/lovelace/{view_path}"

@@ -250,7 +250,7 @@ class UrDashPanel extends HTMLElement {
             ${this._previewResult ? `
               <div class="${this._previewResult.ok ? "status-box success" : "status-box error"}">
                 ${this._previewResult.ok
-                  ? `Preview dashboard updated. <a href="${escapeHtml(this._previewResult.path)}" target="_blank" rel="noopener">Open real Lovelace preview</a>.`
+                  ? `Preview tab updated in ${escapeHtml(this._previewResult.storage || "Lovelace storage")}. <a href="${escapeHtml(this._previewResult.path)}" target="_blank" rel="noopener">Open real Lovelace preview</a>.`
                   : escapeHtml(this._previewResult.error || "Could not prepare the preview dashboard.")}
               </div>
             ` : ""}
@@ -265,7 +265,7 @@ class UrDashPanel extends HTMLElement {
 
             <section class="real-preview-panel">
               <h3>Real Lovelace Preview</h3>
-              <p>Use Preview to render the generated tab in Home Assistant's actual Lovelace renderer. The old simulated preview has been removed because it does not reflect real cards or layout.</p>
+              <p>Use Preview to render the generated tab in Home Assistant's actual Lovelace renderer. UrDash writes or replaces a reserved preview tab named <strong>urdash-preview</strong> in an existing UI-managed dashboard.</p>
               ${this._previewResult?.ok ? `<iframe title="UrDash Lovelace preview" src="${escapeHtml(this._previewResult.path)}"></iframe>` : ""}
             </section>
 
