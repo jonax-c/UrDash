@@ -64,19 +64,16 @@ Reload the Lovelace dashboard if the new tab is not visible immediately.
 
 ## Real Lovelace Preview
 
-UrDash does not use a simulated card preview. The panel's **Preview** button writes the generated view to a reserved preview tab in an existing UI-managed dashboard:
-
-```text
-path: urdash-preview
-```
+UrDash does not use the old lightweight simulated preview. The panel's **Preview** button renders the generated view directly inside UrDash with Home Assistant's Lovelace card helpers.
 
 The preview action:
 
-- Replaces only a previous UrDash preview tab.
-- Creates a timestamped backup first.
-- Opens the real Lovelace URL for that tab.
+- Uses Home Assistant's built-in Lovelace card creation path.
+- Uses installed custom cards when the generated YAML references them.
+- Renders generated sections or card grids inline in the UrDash panel.
+- Does not write to `.storage/lovelace` and does not create a temporary preview tab.
 
-This avoids dynamic dashboard-route registration issues and lets Home Assistant render the generated view with the real Lovelace renderer and installed custom cards.
+This shows the generated card layout before users decide whether to copy the YAML or use **Add tab**. Some full dashboard chrome and route-level behavior can still differ from an opened Lovelace dashboard, but the cards themselves are rendered by Home Assistant's frontend card system.
 
 ## Recommended Lovelace Cards
 

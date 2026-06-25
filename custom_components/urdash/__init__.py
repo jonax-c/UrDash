@@ -126,7 +126,6 @@ def _register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_settings)
     websocket_api.async_register_command(hass, websocket_generate)
     websocket_api.async_register_command(hass, websocket_append_view)
-    websocket_api.async_register_command(hass, websocket_preview_view)
 
 
 def _register_services(hass: HomeAssistant) -> None:
@@ -276,28 +275,6 @@ async def websocket_append_view(
     """Append a generated view to the default UI-managed Lovelace dashboard."""
     try:
         result = await _async_append_view_to_default_dashboard(hass, msg["view"])
-    except ValueError as err:
-        connection.send_result(msg["id"], {"ok": False, "error": str(err)})
-        return
-
-    connection.send_result(msg["id"], {"ok": True, **result})
-
-
-@websocket_api.websocket_command(
-    {
-        vol.Required("type"): "urdash/preview_view",
-        vol.Required("view"): dict,
-    }
-)
-@websocket_api.async_response
-async def websocket_preview_view(
-    hass: HomeAssistant,
-    connection: websocket_api.ActiveConnection,
-    msg: dict[str, Any],
-) -> None:
-    """Write a generated view to a reserved preview tab in an existing dashboard."""
-    try:
-        result = await _async_write_preview_dashboard(hass, msg["view"])
     except ValueError as err:
         connection.send_result(msg["id"], {"ok": False, "error": str(err)})
         return
@@ -664,60 +641,3 @@ def _slugify(value: str) -> str:
     slug = "-".join(part for part in slug.split("-") if part)
     return slug or "urdash"
 
-
-async def _async_write_preview_dashboard(
-    hass: HomeAssistant,
-    view: dict[str, Any],
-) -> dict[str, Any]:
-    if not isinstance(view, dict):
-        raise ValueError("Generated view is invalid.")
-
-    def write_preview() -> dict[str, Any]:
-        storage_path, payload, config = _find_lovelace_storage_target(hass)
-        views = config.setdefault("views", [])
-        if not isinstance(views, list):
-            raise ValueError("Selected Lovelace dashboard views are not editable.")
-
-        preview_view = dict(view)
-        preview_view["title"] = str(preview_view.get("title") or "UrDash Preview")
-        preview_view["path"] = "urdash-preview"
-
-        backup_path = storage_path.with_name(
-            f"{storage_path.name}.urdash-preview-backup-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        )
-        backup_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-
-        replaced = False
-        for index, existing_view in enumerate(views):
-            if isinstance(existing_view, dict) and existing_view.get("path") == "urdash-preview":
-                views[index] = preview_view
-                replaced = True
-                break
-        if not replaced:
-            views.append(preview_view)
-
-        storage_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-
-        return {
-            "title": preview_view["title"],
-            "path": _view_url_for_storage(storage_path, "urdash-preview"),
-            "storage": storage_path.name,
-            "backup": str(backup_path),
-        }
-
-    return await hass.async_add_executor_job(write_preview)
-
-
-def _view_url_for_storage(storage_path: Path, view_path: str) -> str:
-    if storage_path.name == "lovelace":
-        return f"/lovelace/{view_path}"
-    if storage_path.name.startswith("lovelace."):
-        dashboard_path = storage_path.name.removeprefix("lovelace.")
-        return f"/{dashboard_path}/{view_path}"
-    return f"/lovelace/{view_path}"

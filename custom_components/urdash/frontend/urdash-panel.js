@@ -27,6 +27,8 @@ class UrDashPanel extends HTMLElement {
     if (!this._loaded) {
       this._loaded = true;
       this._load();
+    } else {
+      this._refreshPreviewHass();
     }
   }
 
@@ -115,24 +117,32 @@ class UrDashPanel extends HTMLElement {
   }
 
   async _writePreview() {
-    if (!this._result?.view) return;
+    const view = this._previewView();
+    if (!view) return;
 
     const button = this.shadowRoot.querySelector("#writePreview");
     button.disabled = true;
-    button.textContent = "Preparing";
+    button.textContent = "Rendering";
+    this._previewResult = { ok: null, message: "Preparing Lovelace preview." };
+    this._render();
 
     try {
-      this._previewResult = await this._hass.connection.sendMessagePromise({
-        type: "urdash/preview_view",
-        view: this._result.view,
-      });
-      this._render();
-      if (this._previewResult?.ok && this._previewResult.path) {
-        window.open(this._previewResult.path, "_blank", "noopener");
-      }
+      await this._nextFrame();
+      await this._mountLovelacePreview(view);
+      this._previewResult = {
+        ok: true,
+        message: "Rendered with Home Assistant Lovelace card helpers.",
+      };
+      this._updatePreviewStatus();
     } catch (error) {
       this._previewResult = { ok: false, error: error?.message || String(error) };
       this._render();
+    } finally {
+      const currentButton = this.shadowRoot.querySelector("#writePreview");
+      if (currentButton) {
+        currentButton.disabled = false;
+        currentButton.textContent = "Preview";
+      }
     }
   }
 
@@ -163,6 +173,117 @@ class UrDashPanel extends HTMLElement {
       if (domain) counts.set(domain, (counts.get(domain) || 0) + 1);
     }
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  }
+
+  _previewView() {
+    if (this._result?.view) return this._result.view;
+    const views = this._result?.dashboard?.views;
+    return Array.isArray(views) ? views[0] : null;
+  }
+
+  async _mountLovelacePreview(view) {
+    const host = this.shadowRoot.querySelector("#lovelacePreviewHost");
+    if (!host) throw new Error("Preview host was not found.");
+    host.innerHTML = "";
+
+    const title = document.createElement("div");
+    title.className = "lovelace-preview-title";
+    title.textContent = view.title || "UrDash Preview";
+    host.appendChild(title);
+
+    if (Array.isArray(view.sections) && view.sections.length) {
+      const sections = document.createElement("div");
+      sections.className = "lovelace-sections-preview";
+      for (const sectionConfig of view.sections) {
+        sections.appendChild(await this._createPreviewSection(sectionConfig));
+      }
+      host.appendChild(sections);
+      return;
+    }
+
+    const cards = Array.isArray(view.cards) ? view.cards : [];
+    if (!cards.length) {
+      const empty = document.createElement("div");
+      empty.className = "lovelace-render-error";
+      empty.textContent = "Generated view has no cards to preview.";
+      host.appendChild(empty);
+      return;
+    }
+
+    const grid = document.createElement("div");
+    grid.className = view.type === "panel" ? "lovelace-panel-preview" : "lovelace-card-grid";
+    for (const cardConfig of cards) {
+      grid.appendChild(await this._createPreviewCard(cardConfig));
+    }
+    host.appendChild(grid);
+  }
+
+  async _createPreviewSection(sectionConfig) {
+    const section = document.createElement("section");
+    section.className = "lovelace-section";
+    if (sectionConfig?.title) {
+      const title = document.createElement("h4");
+      title.textContent = sectionConfig.title;
+      section.appendChild(title);
+    }
+
+    const cards = Array.isArray(sectionConfig?.cards) ? sectionConfig.cards : [];
+    for (const cardConfig of cards) {
+      section.appendChild(await this._createPreviewCard(cardConfig));
+    }
+    return section;
+  }
+
+  async _createPreviewCard(cardConfig) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "lovelace-card-shell";
+    try {
+      const helpers = await this._loadCardHelpers();
+      let element = null;
+      if (helpers?.createCardElement) {
+        element = helpers.createCardElement(cardConfig);
+      } else {
+        element = document.createElement("hui-card");
+        if (element.setConfig) element.setConfig(cardConfig);
+        else element.config = cardConfig;
+      }
+      element.hass = this._hass;
+      wrapper.appendChild(element);
+    } catch (error) {
+      wrapper.appendChild(this._createRenderError(cardConfig, error));
+    }
+    return wrapper;
+  }
+
+  async _loadCardHelpers() {
+    if (window.loadCardHelpers) return window.loadCardHelpers();
+    throw new Error("Home Assistant Lovelace card helpers are not available in this frontend session.");
+  }
+
+  _createRenderError(cardConfig, error) {
+    const errorBox = document.createElement("div");
+    errorBox.className = "lovelace-render-error";
+    errorBox.textContent = `${cardConfig?.type || "card"}: ${error?.message || String(error)}`;
+    return errorBox;
+  }
+
+  _updatePreviewStatus() {
+    const status = this.shadowRoot.querySelector("#previewStatus");
+    if (!status || !this._previewResult) return;
+    status.className = this._previewResult.ok ? "status-box success" : "status-box pending";
+    status.textContent = this._previewResult.message || "Preview rendered.";
+  }
+
+  _refreshPreviewHass() {
+    const host = this.shadowRoot.querySelector("#lovelacePreviewHost");
+    if (!host) return;
+    for (const element of host.querySelectorAll("*")) {
+      if ("hass" in element) element.hass = this._hass;
+    }
+  }
+
+  _nextFrame() {
+    return new Promise((resolve) => window.requestAnimationFrame(resolve));
   }
 
   _render() {
@@ -252,17 +373,19 @@ class UrDashPanel extends HTMLElement {
                 ${this._result?.mode === "new_view" ? '<p class="warning">Output is a new view/tab YAML snippet. Existing dashboard is not modified.</p>' : ""}
               </div>
               <div class="toolbar-actions">
-                <button class="icon-button" id="writePreview" ${this._result?.view ? "" : "disabled"} title="Preview in real Lovelace" type="button">Preview</button>
+                <button class="icon-button" id="writePreview" ${this._previewView() ? "" : "disabled"} title="Preview with Lovelace cards" type="button">Preview</button>
                 <button class="icon-button" id="appendView" ${this._result?.view ? "" : "disabled"} title="Add as new Lovelace tab" type="button">Add tab</button>
                 <button class="icon-button" id="copyYaml" ${this._result?.yaml ? "" : "disabled"} title="Copy YAML" type="button">Copy</button>
               </div>
             </div>
 
             ${this._previewResult ? `
-              <div class="${this._previewResult.ok ? "status-box success" : "status-box error"}">
-                ${this._previewResult.ok
-                  ? `Preview tab updated in ${escapeHtml(this._previewResult.storage || "Lovelace storage")}. <a href="${escapeHtml(this._previewResult.path)}" target="_blank" rel="noopener">Open real Lovelace preview</a>.`
-                  : escapeHtml(this._previewResult.error || "Could not prepare the preview dashboard.")}
+              <div id="previewStatus" class="${this._previewResult.ok === null ? "status-box pending" : this._previewResult.ok ? "status-box success" : "status-box error"}">
+                ${this._previewResult.ok === null
+                  ? escapeHtml(this._previewResult.message || "Preparing preview.")
+                  : this._previewResult.ok
+                    ? escapeHtml(this._previewResult.message || "Preview rendered.")
+                    : escapeHtml(this._previewResult.error || "Could not render the preview.")}
               </div>
             ` : ""}
 
@@ -276,8 +399,8 @@ class UrDashPanel extends HTMLElement {
 
             <section class="real-preview-panel">
               <h3>Real Lovelace Preview</h3>
-              <p>Use Preview to render the generated tab in Home Assistant's actual Lovelace renderer. UrDash writes or replaces a reserved preview tab named <strong>urdash-preview</strong> in an existing UI-managed dashboard.</p>
-              ${this._previewResult?.ok ? `<iframe title="UrDash Lovelace preview" src="${escapeHtml(this._previewResult.path)}"></iframe>` : ""}
+              <p>Use Preview to render the generated tab inside this panel with Home Assistant's Lovelace card helpers and installed custom cards. This does not write to any dashboard storage.</p>
+              <div id="lovelacePreviewHost" class="lovelace-preview-host"></div>
             </section>
 
             <section class="yaml-panel">
@@ -630,6 +753,11 @@ const styles = `
     color: #1d6a4d;
   }
 
+  .status-box.pending {
+    background: #e8eeee;
+    color: #36555a;
+  }
+
   .status-box.error {
     background: #f8e8e6;
     color: #9b2f2f;
@@ -649,12 +777,72 @@ const styles = `
     font-size: 13px;
   }
 
-  .real-preview-panel iframe {
+  .lovelace-preview-host {
     width: 100%;
-    min-height: 680px;
+    min-height: 320px;
     border: 1px solid #cad5d6;
     border-radius: 8px;
     background: #ffffff;
+    padding: 16px;
+    overflow: auto;
+  }
+
+  .lovelace-preview-title {
+    margin-bottom: 14px;
+    color: #172c31;
+    font-size: 20px;
+    font-weight: 800;
+  }
+
+  .lovelace-sections-preview {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+    align-items: start;
+  }
+
+  .lovelace-section {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .lovelace-section h4 {
+    margin: 0;
+    color: #25383c;
+    font-size: 14px;
+  }
+
+  .lovelace-card-grid {
+    columns: 320px;
+    column-gap: 14px;
+  }
+
+  .lovelace-panel-preview {
+    display: grid;
+    gap: 14px;
+  }
+
+  .lovelace-card-shell {
+    display: block;
+    min-width: 0;
+    margin-bottom: 14px;
+    break-inside: avoid;
+  }
+
+  .lovelace-card-shell > * {
+    display: block;
+    width: 100%;
+  }
+
+  .lovelace-render-error {
+    border: 1px solid #efcbc6;
+    border-radius: 8px;
+    padding: 12px;
+    background: #fff4f2;
+    color: #9b2f2f;
+    font-size: 13px;
+    font-weight: 700;
   }
 
   .yaml-panel {
