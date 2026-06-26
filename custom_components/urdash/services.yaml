@@ -45,3 +45,10 @@ generate_dashboard:
       selector:
         text:
           multiline: true
+    entity_ids:
+      name: Entity IDs
+      description: Optional list of entities that UrDash may use. Leave empty to allow all entities.
+      required: false
+      selector:
+        entity:
+          multiple: true

@@ -17,6 +17,8 @@ class UrDashPanel extends HTMLElement {
     this._allowCustomCards = true;
     this._mode = "new_view";
     this._referenceViewId = "";
+    this._selectedEntityIds = new Set();
+    this._entityFilter = "";
     this._appendResult = null;
     this._previewResult = null;
     this._loaded = false;
@@ -42,6 +44,7 @@ class UrDashPanel extends HTMLElement {
         this._hass.connection.sendMessagePromise({ type: "urdash/reference_views" }),
       ]);
       this._entities = entityPayload.entities || [];
+      this._selectedEntityIds = new Set(this._entities.map((entity) => entity.entity_id).filter(Boolean));
       this._resources = resourcePayload.resources || [];
       this._referenceViews = referencePayload.views || [];
       this._referenceViewId = this._referenceViews[0]?.id || "";
@@ -65,6 +68,7 @@ class UrDashPanel extends HTMLElement {
     const requestInput = this.shadowRoot.querySelector("#request");
     const request = requestInput.value.trim();
     if (!request) return;
+    if (!this._selectedEntityCount()) return;
 
     const button = this.shadowRoot.querySelector("#generate");
     button.disabled = true;
@@ -78,6 +82,7 @@ class UrDashPanel extends HTMLElement {
         allow_custom_cards: this._allowCustomCards,
         mode: this._mode,
         reference_view_id: this._mode === "new_view" ? this._referenceViewId : undefined,
+        selected_entity_ids: this._selectedEntityIdsList(),
       });
       this._appendResult = null;
       this._previewResult = null;
@@ -171,6 +176,103 @@ class UrDashPanel extends HTMLElement {
   _setReferenceView(referenceViewId) {
     this._referenceViewId = referenceViewId;
     this._render();
+  }
+
+  _setEntityFilter(value) {
+    this._entityFilter = value;
+    this._refreshEntitySelectionMarkup();
+  }
+
+  _toggleEntity(entityId, checked) {
+    if (checked) this._selectedEntityIds.add(entityId);
+    else this._selectedEntityIds.delete(entityId);
+    this._render();
+  }
+
+  _toggleEntityGroup(groupId, checked) {
+    const group = this._deviceGroups().find((item) => item.id === groupId);
+    if (!group) return;
+    for (const entity of group.entities) {
+      if (checked) this._selectedEntityIds.add(entity.entity_id);
+      else this._selectedEntityIds.delete(entity.entity_id);
+    }
+    this._render();
+  }
+
+  _selectAllEntities() {
+    this._selectedEntityIds = new Set(this._entities.map((entity) => entity.entity_id).filter(Boolean));
+    this._render();
+  }
+
+  _selectNoEntities() {
+    this._selectedEntityIds = new Set();
+    this._render();
+  }
+
+  _selectedEntityIdsList() {
+    return this._entities
+      .map((entity) => entity.entity_id)
+      .filter((entityId) => this._selectedEntityIds.has(entityId));
+  }
+
+  _selectedEntityCount() {
+    return this._selectedEntityIdsList().length;
+  }
+
+  _refreshEntitySelectionMarkup() {
+    const groups = this.shadowRoot.querySelector(".entity-groups");
+    if (groups) {
+      groups.innerHTML = this._entitySelectionMarkup();
+    }
+  }
+
+  _deviceGroups() {
+    const filter = this._entityFilter.trim().toLowerCase();
+    const groups = new Map();
+    for (const entity of this._entities) {
+      const groupId = entity.device_id || `domain:${entity.domain || entity.entity_id?.split(".")[0] || "other"}`;
+      const groupTitle = entity.device_name || this._domainTitle(entity.domain || entity.entity_id?.split(".")[0]);
+      const area = entity.area_name || "No area";
+      if (!groups.has(groupId)) {
+        groups.set(groupId, {
+          id: groupId,
+          title: groupTitle || "Other",
+          area,
+          entities: [],
+        });
+      }
+      groups.get(groupId).entities.push(entity);
+    }
+
+    return [...groups.values()]
+      .map((group) => ({
+        ...group,
+        entities: group.entities
+          .filter((entity) => this._entityMatchesFilter(entity, group, filter))
+          .sort((a, b) => String(this._entityLabel(a)).localeCompare(String(this._entityLabel(b)))),
+      }))
+      .filter((group) => group.entities.length)
+      .sort((a, b) => `${a.area} ${a.title}`.localeCompare(`${b.area} ${b.title}`));
+  }
+
+  _entityMatchesFilter(entity, group, filter) {
+    if (!filter) return true;
+    return [
+      entity.entity_id,
+      this._entityLabel(entity),
+      group.title,
+      group.area,
+      entity.domain,
+    ].some((value) => String(value || "").toLowerCase().includes(filter));
+  }
+
+  _domainTitle(domain) {
+    if (!domain) return "Other";
+    return domain.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  _entityLabel(entity) {
+    return entity.name || entity.attributes?.friendly_name || entity.entity_id;
   }
 
   _domainStats() {
@@ -349,10 +451,29 @@ class UrDashPanel extends HTMLElement {
               <span>Use premium custom cards</span>
             </label>
 
-            <button class="primary-action" id="generate" type="button">
+            <section class="entity-panel">
+              <div class="section-title entity-title">
+                <span>Use</span>
+                <h3>Devices and entities</h3>
+                <strong>${this._selectedEntityCount()} / ${this._entities.length}</strong>
+              </div>
+              <div class="entity-actions">
+                <input id="entityFilter" type="search" value="${escapeHtml(this._entityFilter)}" placeholder="Filter devices or entities" />
+                <div>
+                  <button id="selectAllEntities" type="button">All</button>
+                  <button id="selectNoEntities" type="button">None</button>
+                </div>
+              </div>
+              <div class="entity-groups">
+                ${this._entitySelectionMarkup()}
+              </div>
+            </section>
+
+            <button class="primary-action" id="generate" ${this._selectedEntityCount() ? "" : "disabled"} type="button">
               <span>*</span>
               Generate dashboard
             </button>
+            ${this._selectedEntityCount() ? "" : '<p class="warning">Select at least one entity before generating.</p>'}
 
             <div class="stats-panel">
               <div class="stat">
@@ -437,6 +558,20 @@ class UrDashPanel extends HTMLElement {
     this.shadowRoot.querySelector("#allowCustomCards").addEventListener("change", (event) => {
       this._toggleCustomCards(event.target.checked);
     });
+    this.shadowRoot.querySelector("#entityFilter").addEventListener("input", (event) => {
+      this._setEntityFilter(event.target.value);
+    });
+    this.shadowRoot.querySelector("#selectAllEntities").addEventListener("click", () => this._selectAllEntities());
+    this.shadowRoot.querySelector("#selectNoEntities").addEventListener("click", () => this._selectNoEntities());
+    this.shadowRoot.querySelector(".entity-groups").addEventListener("change", (event) => {
+      const target = event.target;
+      if (target.matches("input[data-entity-id]")) {
+        this._toggleEntity(target.dataset.entityId, target.checked);
+      }
+      if (target.matches("input[data-group-id]")) {
+        this._toggleEntityGroup(target.dataset.groupId, target.checked);
+      }
+    });
     this.shadowRoot.querySelector("#styleButtons").addEventListener("click", (event) => {
       const button = event.target.closest("button[data-style]");
       if (button) this._setStyle(button.dataset.style);
@@ -469,6 +604,44 @@ class UrDashPanel extends HTMLElement {
         </div>
       </div>
     `).join("");
+  }
+
+  _entitySelectionMarkup() {
+    if (!this._entities.length) {
+      return '<p class="muted">No entities found.</p>';
+    }
+    const groups = this._deviceGroups();
+    if (!groups.length) {
+      return '<p class="muted">No entities match the current filter.</p>';
+    }
+    return groups.map((group) => {
+      const selectedCount = group.entities.filter((entity) => this._selectedEntityIds.has(entity.entity_id)).length;
+      const allSelected = selectedCount === group.entities.length;
+      return `
+        <details class="entity-group" open>
+          <summary>
+            <label>
+              <input data-group-id="${escapeHtml(group.id)}" ${allSelected ? "checked" : ""} type="checkbox" />
+              <span>
+                <strong>${escapeHtml(group.title)}</strong>
+                <em>${escapeHtml(group.area)} · ${selectedCount}/${group.entities.length}</em>
+              </span>
+            </label>
+          </summary>
+          <div class="entity-list">
+            ${group.entities.map((entity) => `
+              <label class="entity-row">
+                <input data-entity-id="${escapeHtml(entity.entity_id)}" ${this._selectedEntityIds.has(entity.entity_id) ? "checked" : ""} type="checkbox" />
+                <span>
+                  <strong>${escapeHtml(this._entityLabel(entity))}</strong>
+                  <em>${escapeHtml(entity.entity_id)}</em>
+                </span>
+              </label>
+            `).join("")}
+          </div>
+        </details>
+      `;
+    }).join("");
   }
 
   _referenceOptionsMarkup() {
@@ -596,7 +769,7 @@ const styles = `
   }
 
   * { box-sizing: border-box; }
-  button, textarea, select { font: inherit; }
+  button, input, textarea, select { font: inherit; }
   h1, h2, h3, p { margin: 0; }
 
   .app-shell {
@@ -660,7 +833,7 @@ const styles = `
     font-weight: 700;
   }
 
-  textarea, select {
+  input[type="search"], textarea, select {
     width: 100%;
     border: 1px solid #cad5d6;
     border-radius: 8px;
@@ -671,6 +844,10 @@ const styles = `
   }
 
   textarea { resize: vertical; }
+
+  input[type="checkbox"] {
+    accent-color: #103c38;
+  }
 
   .segmented {
     display: grid;
@@ -728,7 +905,7 @@ const styles = `
     opacity: 0.55;
   }
 
-  .stats-panel, .dependency-panel, .yaml-panel {
+  .stats-panel, .dependency-panel, .entity-panel, .yaml-panel {
     border: 1px solid #d7e0e1;
     border-radius: 8px;
     padding: 14px;
@@ -775,9 +952,107 @@ const styles = `
 
   .dependency-panel { display: grid; gap: 12px; }
   .section-title { gap: 7px; }
+  .entity-title {
+    justify-content: space-between;
+  }
+
+  .entity-title h3 {
+    margin-right: auto;
+  }
+
+  .entity-title strong {
+    color: #31565c;
+    font-size: 12px;
+  }
+
   .section-title h3 { font-size: 15px; }
   .dependency-row { gap: 10px; margin-top: 10px; }
   .dependency-row strong { font-size: 13px; }
+
+  .entity-panel {
+    display: grid;
+    gap: 10px;
+  }
+
+  .entity-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .entity-actions > div {
+    display: flex;
+    gap: 6px;
+  }
+
+  .entity-actions button {
+    min-height: 36px;
+    border: 0;
+    border-radius: 8px;
+    padding: 0 10px;
+    background: #e8eeee;
+    color: #18383a;
+    cursor: pointer;
+    font-weight: 800;
+  }
+
+  .entity-groups {
+    max-height: 330px;
+    display: grid;
+    gap: 8px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .entity-group {
+    border: 1px solid #d8e2e3;
+    border-radius: 8px;
+    background: #ffffff;
+  }
+
+  .entity-group summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 9px 10px;
+  }
+
+  .entity-group summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .entity-group summary label, .entity-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+  }
+
+  .entity-group strong, .entity-row strong {
+    display: block;
+    color: #243b3f;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+
+  .entity-group em, .entity-row em {
+    display: block;
+    color: #637579;
+    font-size: 11px;
+    font-style: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .entity-list {
+    display: grid;
+    gap: 7px;
+    border-top: 1px solid #e4eaeb;
+    padding: 9px 10px 10px;
+  }
+
+  .entity-row {
+    cursor: pointer;
+  }
 
   .dependency-row em {
     color: #5d6f72;

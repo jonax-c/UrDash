@@ -11,7 +11,10 @@ import yaml
 from homeassistant.components import frontend, websocket_api
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 try:
     from homeassistant.components.http import StaticPathConfig
@@ -55,6 +58,7 @@ GENERATE_SERVICE_SCHEMA = vol.Schema(
         ): cv.boolean,
         vol.Optional("mode", default="dashboard"): vol.In(["dashboard", "new_view"]),
         vol.Optional("reference_dashboard", default=""): cv.string,
+        vol.Optional("entity_ids"): vol.All(cv.ensure_list, [cv.entity_id]),
     }
 )
 
@@ -140,6 +144,7 @@ def _register_services(hass: HomeAssistant) -> None:
             call.data["allow_custom_cards"],
             call.data["mode"],
             _parse_reference_dashboard(call.data.get("reference_dashboard")),
+            call.data.get("entity_ids"),
         )
         hass.bus.async_fire(f"{DOMAIN}_dashboard_generated", result)
 
@@ -162,10 +167,60 @@ async def websocket_entities(
     connection.send_result(
         msg["id"],
         {
-            "entities": [serialize_state(state) for state in hass.states.async_all()],
+            "entities": _serialize_states_with_registry(hass),
             "source": "home-assistant",
         },
     )
+
+
+def _serialize_states_with_registry(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """Return states enriched with entity/device/area registry metadata."""
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    area_registry = ar.async_get(hass)
+    serialized = []
+
+    for state in hass.states.async_all():
+        entity = serialize_state(state)
+        entity_entry = entity_registry.async_get(state.entity_id)
+        device = None
+        area = None
+
+        if entity_entry is not None:
+            entity["name"] = (
+                getattr(entity_entry, "name", None)
+                or getattr(entity_entry, "original_name", None)
+                or entity["attributes"].get("friendly_name")
+            )
+            entity["device_id"] = getattr(entity_entry, "device_id", None)
+            entity["area_id"] = getattr(entity_entry, "area_id", None)
+            if entity["device_id"]:
+                device = device_registry.async_get(entity["device_id"])
+        else:
+            entity["name"] = entity["attributes"].get("friendly_name")
+            entity["device_id"] = None
+            entity["area_id"] = None
+
+        if device is not None:
+            entity["device_name"] = (
+                getattr(device, "name_by_user", None)
+                or getattr(device, "name", None)
+                or getattr(device, "original_name", None)
+            )
+            entity["area_id"] = entity["area_id"] or getattr(device, "area_id", None)
+        else:
+            entity["device_name"] = None
+
+        if entity["area_id"]:
+            if hasattr(area_registry, "async_get_area"):
+                area = area_registry.async_get_area(entity["area_id"])
+            elif hasattr(area_registry, "async_get"):
+                area = area_registry.async_get(entity["area_id"])
+        entity["area_name"] = area.name if area is not None else None
+        entity["domain"] = state.entity_id.split(".", 1)[0]
+        serialized.append(entity)
+
+    return serialized
 
 
 @websocket_api.websocket_command({vol.Required("type"): "urdash/resources"})
@@ -240,6 +295,7 @@ async def websocket_settings(
         vol.Optional("mode", default="dashboard"): vol.In(["dashboard", "new_view"]),
         vol.Optional("reference_dashboard"): dict,
         vol.Optional("reference_view_id"): str,
+        vol.Optional("selected_entity_ids"): [cv.entity_id],
     }
 )
 @websocket_api.async_response
@@ -256,6 +312,7 @@ async def websocket_generate(
         msg["allow_custom_cards"],
         msg["mode"],
         await _async_reference_dashboard_from_message(hass, msg),
+        msg.get("selected_entity_ids"),
     )
     connection.send_result(msg["id"], result)
 
@@ -289,8 +346,12 @@ async def _async_generate_from_hass(
     allow_custom_cards: bool,
     mode: str = "dashboard",
     reference_dashboard: dict[str, Any] | None = None,
+    selected_entity_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     entities = [serialize_state(state) for state in hass.states.async_all()]
+    if selected_entity_ids is not None:
+        selected = set(selected_entity_ids)
+        entities = [entity for entity in entities if entity["entity_id"] in selected]
     settings = _settings(hass)
 
     if not settings[CONF_API_KEY]:
@@ -640,4 +701,3 @@ def _slugify(value: str) -> str:
     slug = "".join(char.lower() if char.isalnum() else "-" for char in value)
     slug = "-".join(part for part in slug.split("-") if part)
     return slug or "urdash"
-

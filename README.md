@@ -8,6 +8,7 @@ It adds a native Home Assistant sidebar panel where users can:
 
 - Describe the dashboard they want.
 - Analyze current Home Assistant entities.
+- Select which devices/entities may be used for generation.
 - Generate Lovelace YAML.
 - Preview generated views with Home Assistant's real Lovelace renderer.
 - Copy the dashboard YAML into a manual Lovelace dashboard.
@@ -61,6 +62,16 @@ After generation, the panel can append the generated view directly to the defaul
 - Does not support YAML-mode dashboards or non-default dashboards yet.
 
 Reload the Lovelace dashboard if the new tab is not visible immediately.
+
+## Device And Entity Selection
+
+UrDash defaults to using all available Home Assistant entities. Before generation, users can narrow the scope in the **Devices and entities** panel:
+
+- All entities are selected by default.
+- Entities are grouped by Home Assistant device when registry metadata is available.
+- Entities without a device are grouped by domain.
+- Users can filter, select all, clear all, toggle a whole device group, or toggle individual entities.
+- Unselected entities are not sent to the AI provider and should not appear in generated Lovelace YAML.
 
 ## Real Lovelace Preview
 
@@ -118,6 +129,7 @@ Service fields:
 - `allow_custom_cards`: whether generated YAML may use recommended custom cards.
 - `mode`: `new_view` for a new tab, or `dashboard` for a full dashboard draft.
 - `reference_dashboard`: optional existing dashboard YAML used as context only, mainly for service calls.
+- `entity_ids`: optional list of entities UrDash may use. Leave empty to allow all entities.
 
 ## Development Layout
 
