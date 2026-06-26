@@ -49,6 +49,13 @@ class UrDashPanel extends HTMLElement {
       this._style = this._settings.default_style || this._style;
       this._allowCustomCards = Boolean(this._settings.allow_custom_cards);
       this._render();
+      if (this._isValidationMode()) {
+        this._result = VALIDATION_RESULT;
+        this._appendResult = null;
+        this._previewResult = null;
+        this._render();
+        if (this._isValidationAutoPreview()) await this._writePreview();
+      }
     } catch (error) {
       this._renderError(error);
     }
@@ -286,6 +293,14 @@ class UrDashPanel extends HTMLElement {
     return new Promise((resolve) => window.requestAnimationFrame(resolve));
   }
 
+  _isValidationMode() {
+    return new URLSearchParams(window.location.search).has("urdash_validation");
+  }
+
+  _isValidationAutoPreview() {
+    return new URLSearchParams(window.location.search).get("urdash_validation") === "preview";
+  }
+
   _render() {
     this.shadowRoot.innerHTML = `
       <style>${styles}</style>
@@ -488,6 +503,89 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
+
+const VALIDATION_RESULT = {
+  summary: "Validation fixture loaded from the UrDash frontend. No AI request was made.",
+  engine: "validation",
+  mode: "new_view",
+  view: {
+    title: "UrDash Validation",
+    path: "urdash-validation",
+    type: "sections",
+    sections: [
+      {
+        title: "Home status",
+        cards: [
+          {
+            type: "entities",
+            title: "Overview",
+            entities: [
+              "input_boolean.urdash_demo_living_room",
+              "input_boolean.urdash_demo_security",
+              "sensor.urdash_demo_temperature",
+            ],
+          },
+          {
+            type: "tile",
+            entity: "input_boolean.urdash_demo_living_room",
+            name: "Living room",
+            icon: "mdi:sofa",
+          },
+        ],
+      },
+      {
+        title: "Climate and energy",
+        cards: [
+          {
+            type: "gauge",
+            entity: "sensor.urdash_demo_humidity",
+            name: "Humidity",
+            min: 0,
+            max: 100,
+          },
+          {
+            type: "history-graph",
+            title: "Recent comfort",
+            hours_to_show: 6,
+            entities: [
+              "sensor.urdash_demo_temperature",
+              "sensor.urdash_demo_humidity",
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  yaml: `title: UrDash Validation
+path: urdash-validation
+type: sections
+sections:
+  - title: Home status
+    cards:
+      - type: entities
+        title: Overview
+        entities:
+          - input_boolean.urdash_demo_living_room
+          - input_boolean.urdash_demo_security
+          - sensor.urdash_demo_temperature
+      - type: tile
+        entity: input_boolean.urdash_demo_living_room
+        name: Living room
+        icon: mdi:sofa
+  - title: Climate and energy
+    cards:
+      - type: gauge
+        entity: sensor.urdash_demo_humidity
+        name: Humidity
+        min: 0
+        max: 100
+      - type: history-graph
+        title: Recent comfort
+        hours_to_show: 6
+        entities:
+          - sensor.urdash_demo_temperature
+          - sensor.urdash_demo_humidity`,
+};
 
 const styles = `
   :host {

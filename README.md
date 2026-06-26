@@ -75,6 +75,18 @@ The preview action:
 
 This shows the generated card layout before users decide whether to copy the YAML or use **Add tab**. Some full dashboard chrome and route-level behavior can still differ from an opened Lovelace dashboard, but the cards themselves are rendered by Home Assistant's frontend card system.
 
+## Local Validation
+
+Use `dev/ha-container` to run a disposable Home Assistant container and validate UrDash preview rendering without touching an online Home Assistant instance.
+
+The validation URL is:
+
+```text
+http://localhost:8123/urdash?urdash_validation=preview
+```
+
+This loads a built-in validation fixture and renders it with Home Assistant's real Lovelace card helpers. See `dev/ha-container/README.md` for the full workflow.
+
 ## Recommended Lovelace Cards
 
 UrDash can generate YAML that uses these optional custom cards:

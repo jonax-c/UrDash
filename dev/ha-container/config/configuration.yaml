@@ -1,0 +1,27 @@
+default_config:
+
+frontend:
+
+lovelace:
+  mode: storage
+
+input_boolean:
+  urdash_demo_living_room:
+    name: UrDash Demo Living Room
+    icon: mdi:sofa
+  urdash_demo_security:
+    name: UrDash Demo Security
+    icon: mdi:shield-home
+
+template:
+  - sensor:
+      - name: UrDash Demo Temperature
+        unique_id: urdash_demo_temperature
+        state: "24"
+        unit_of_measurement: "°C"
+        device_class: temperature
+      - name: UrDash Demo Humidity
+        unique_id: urdash_demo_humidity
+        state: "58"
+        unit_of_measurement: "%"
+        device_class: humidity
