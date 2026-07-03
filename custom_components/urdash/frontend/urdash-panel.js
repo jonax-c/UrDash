@@ -99,8 +99,9 @@ class UrDashPanel extends HTMLElement {
   }
 
   async _copyYaml() {
-    if (!this._result?.yaml) return;
-    await navigator.clipboard.writeText(this._result.yaml);
+    const output = this._resultText();
+    if (!output) return;
+    await navigator.clipboard.writeText(output);
     const copyButton = this.shadowRoot.querySelector("#copyYaml");
     copyButton.textContent = "OK";
     window.setTimeout(() => {
@@ -129,6 +130,33 @@ class UrDashPanel extends HTMLElement {
   }
 
   async _writePreview() {
+    if (this._result?.custom_dashboard) {
+      const button = this.shadowRoot.querySelector("#writePreview");
+      button.disabled = true;
+      button.textContent = "Rendering";
+      this._previewResult = { ok: null, message: "Preparing custom dashboard preview." };
+      this._render();
+      try {
+        await this._nextFrame();
+        this._mountCustomDashboard(this._result.custom_dashboard);
+        this._previewResult = {
+          ok: true,
+          message: "Rendered with UrDash custom dashboard renderer.",
+        };
+        this._updatePreviewStatus();
+      } catch (error) {
+        this._previewResult = { ok: false, error: error?.message || String(error) };
+        this._render();
+      } finally {
+        const currentButton = this.shadowRoot.querySelector("#writePreview");
+        if (currentButton) {
+          currentButton.disabled = false;
+          currentButton.textContent = "Preview";
+        }
+      }
+      return;
+    }
+
     const view = this._previewView();
     if (!view) return;
 
@@ -290,6 +318,167 @@ class UrDashPanel extends HTMLElement {
     return Array.isArray(views) ? views[0] : null;
   }
 
+  _canPreview() {
+    return Boolean(this._result?.custom_dashboard || this._previewView());
+  }
+
+  _resultText() {
+    if (this._result?.custom_dashboard) {
+      return JSON.stringify(this._result.custom_dashboard, null, 2);
+    }
+    return this._result?.yaml || "";
+  }
+
+  _resultLabel() {
+    return this._result?.custom_dashboard ? "Custom dashboard JSON" : "Lovelace YAML";
+  }
+
+  _mountCustomDashboard(dashboard) {
+    const host = this.shadowRoot.querySelector("#lovelacePreviewHost");
+    if (!host) throw new Error("Preview host was not found.");
+    host.innerHTML = "";
+
+    const shell = document.createElement("div");
+    shell.className = `custom-dashboard custom-dashboard-${this._safeTheme(dashboard.theme)}`;
+
+    const hero = document.createElement("div");
+    hero.className = "custom-dashboard-hero";
+    const title = document.createElement("h3");
+    title.textContent = dashboard.title || "UrDash";
+    const subtitle = document.createElement("p");
+    subtitle.textContent = dashboard.subtitle || "";
+    hero.append(title, subtitle);
+    shell.appendChild(hero);
+
+    for (const sectionConfig of dashboard.sections || []) {
+      const section = document.createElement("section");
+      section.className = `custom-dashboard-section custom-layout-${this._safeLayout(sectionConfig.layout)}`;
+      const sectionHeader = document.createElement("div");
+      sectionHeader.className = "custom-section-header";
+      const sectionTitle = document.createElement("h4");
+      sectionTitle.textContent = sectionConfig.title || "";
+      const sectionSubtitle = document.createElement("p");
+      sectionSubtitle.textContent = sectionConfig.subtitle || "";
+      sectionHeader.append(sectionTitle, sectionSubtitle);
+      section.appendChild(sectionHeader);
+
+      const cards = document.createElement("div");
+      cards.className = "custom-card-grid";
+      for (const cardConfig of sectionConfig.cards || []) {
+        cards.appendChild(this._createCustomCard(cardConfig));
+      }
+      section.appendChild(cards);
+      shell.appendChild(section);
+    }
+
+    host.appendChild(shell);
+  }
+
+  _createCustomCard(cardConfig) {
+    const card = document.createElement("article");
+    card.className = `custom-card custom-card-${this._safeCardType(cardConfig.type)}`;
+    card.style.setProperty("--accent", this._safeAccent(cardConfig.accent));
+
+    const header = document.createElement("div");
+    header.className = "custom-card-header";
+    header.appendChild(this._createCustomIcon(cardConfig.icon));
+    const headerText = document.createElement("div");
+    const title = document.createElement("h5");
+    title.textContent = cardConfig.title || "Card";
+    const subtitle = document.createElement("p");
+    subtitle.textContent = cardConfig.subtitle || "";
+    headerText.append(title, subtitle);
+    header.appendChild(headerText);
+    card.appendChild(header);
+
+    const entities = (cardConfig.entity_ids || [])
+      .map((entityId) => this._hass?.states?.[entityId])
+      .filter(Boolean);
+
+    if (cardConfig.type === "metric" && entities[0]) {
+      card.appendChild(this._createMetricBody(entities[0]));
+      return card;
+    }
+
+    if (cardConfig.type === "hero" && entities.length) {
+      const heroStates = document.createElement("div");
+      heroStates.className = "custom-hero-states";
+      for (const state of entities.slice(0, 4)) {
+        heroStates.appendChild(this._createStatePill(state));
+      }
+      card.appendChild(heroStates);
+      return card;
+    }
+
+    const list = document.createElement("div");
+    list.className = "custom-entity-list";
+    for (const state of entities.slice(0, 8)) {
+      list.appendChild(this._createEntityLine(state));
+    }
+    if (!entities.length) {
+      const empty = document.createElement("p");
+      empty.className = "custom-empty";
+      empty.textContent = "No matching entities are available.";
+      list.appendChild(empty);
+    }
+    card.appendChild(list);
+    return card;
+  }
+
+  _createMetricBody(state) {
+    const metric = document.createElement("div");
+    metric.className = "custom-metric";
+    const value = document.createElement("strong");
+    value.textContent = `${state.state}${state.attributes?.unit_of_measurement || ""}`;
+    const label = document.createElement("span");
+    label.textContent = state.attributes?.friendly_name || state.entity_id;
+    metric.append(value, label);
+    return metric;
+  }
+
+  _createStatePill(state) {
+    const pill = document.createElement("span");
+    pill.className = "custom-state-pill";
+    pill.textContent = `${state.attributes?.friendly_name || state.entity_id}: ${state.state}`;
+    return pill;
+  }
+
+  _createEntityLine(state) {
+    const row = document.createElement("div");
+    row.className = "custom-entity-line";
+    const name = document.createElement("span");
+    name.textContent = state.attributes?.friendly_name || state.entity_id;
+    const value = document.createElement("strong");
+    value.textContent = `${state.state}${state.attributes?.unit_of_measurement || ""}`;
+    row.append(name, value);
+    return row;
+  }
+
+  _createCustomIcon(icon) {
+    const iconElement = document.createElement("ha-icon");
+    iconElement.setAttribute("icon", icon && icon.startsWith("mdi:") ? icon : "mdi:view-dashboard");
+    return iconElement;
+  }
+
+  _safeTheme(theme) {
+    return ["aurora", "calm", "graphite", "sunrise"].includes(theme) ? theme : "aurora";
+  }
+
+  _safeLayout(layout) {
+    return ["feature", "grid", "dense"].includes(layout) ? layout : "grid";
+  }
+
+  _safeCardType(type) {
+    return ["hero", "status", "metric", "control", "list"].includes(type) ? type : "status";
+  }
+
+  _safeAccent(accent) {
+    const value = String(accent || "").trim();
+    if (/^#[0-9a-fA-F]{3,8}$/.test(value)) return value;
+    if (/^(rgb|hsl)a?\([0-9%.,\s-]+\)$/.test(value)) return value;
+    return "#1f8a70";
+  }
+
   async _mountLovelacePreview(view) {
     const host = this.shadowRoot.querySelector("#lovelacePreviewHost");
     if (!host) throw new Error("Preview host was not found.");
@@ -386,6 +575,10 @@ class UrDashPanel extends HTMLElement {
   _refreshPreviewHass() {
     const host = this.shadowRoot.querySelector("#lovelacePreviewHost");
     if (!host) return;
+    if (this._result?.custom_dashboard && this._previewResult?.ok) {
+      this._mountCustomDashboard(this._result.custom_dashboard);
+      return;
+    }
     for (const element of host.querySelectorAll("*")) {
       if ("hass" in element) element.hass = this._hass;
     }
@@ -433,9 +626,10 @@ class UrDashPanel extends HTMLElement {
 
             <div class="field">
               <span>Generation mode</span>
-              <div class="segmented two" id="modeButtons">
+              <div class="segmented three" id="modeButtons">
                 <button class="${this._mode === "new_view" ? "active" : ""}" data-mode="new_view" type="button">new tab</button>
                 <button class="${this._mode === "dashboard" ? "active" : ""}" data-mode="dashboard" type="button">full dashboard</button>
+                <button class="${this._mode === "custom_dashboard" ? "active" : ""}" data-mode="custom_dashboard" type="button">AI custom</button>
               </div>
             </div>
 
@@ -507,11 +701,12 @@ class UrDashPanel extends HTMLElement {
                 ${this._result?.error ? `<p class="error-text">${escapeHtml(this._result.error)}</p>` : ""}
                 ${this._result?.warning ? `<p class="warning">${escapeHtml(this._result.warning)}</p>` : ""}
                 ${this._result?.mode === "new_view" ? '<p class="warning">Output is a new view/tab YAML snippet. Existing dashboard is not modified.</p>' : ""}
+                ${this._result?.mode === "custom_dashboard" ? '<p class="warning">Output is a UrDash custom dashboard, not Lovelace YAML. It can be previewed in UrDash but cannot be added as a Lovelace tab.</p>' : ""}
               </div>
               <div class="toolbar-actions">
-                <button class="icon-button" id="writePreview" ${this._previewView() ? "" : "disabled"} title="Preview with Lovelace cards" type="button">Preview</button>
+                <button class="icon-button" id="writePreview" ${this._canPreview() ? "" : "disabled"} title="Preview generated dashboard" type="button">Preview</button>
                 <button class="icon-button" id="appendView" ${this._result?.view ? "" : "disabled"} title="Add as new Lovelace tab" type="button">Add tab</button>
-                <button class="icon-button" id="copyYaml" ${this._result?.yaml ? "" : "disabled"} title="Copy YAML" type="button">Copy</button>
+                <button class="icon-button" id="copyYaml" ${this._resultText() ? "" : "disabled"} title="Copy output" type="button">Copy</button>
               </div>
             </div>
 
@@ -534,17 +729,17 @@ class UrDashPanel extends HTMLElement {
             ` : ""}
 
             <section class="real-preview-panel">
-              <h3>Real Lovelace Preview</h3>
-              <p>Use Preview to render the generated tab inside this panel with Home Assistant's Lovelace card helpers and installed custom cards. This does not write to any dashboard storage.</p>
+              <h3>Dashboard Preview</h3>
+              <p>Use Preview to render Lovelace output with Home Assistant card helpers, or AI custom output with UrDash's native renderer. This does not write to any dashboard storage.</p>
               <div id="lovelacePreviewHost" class="lovelace-preview-host"></div>
             </section>
 
             <section class="yaml-panel">
               <div class="section-title">
-                <span>YAML</span>
-                <h3>Lovelace YAML</h3>
+                <span>Out</span>
+                <h3>${escapeHtml(this._resultLabel())}</h3>
               </div>
-              <pre>${escapeHtml(this._result?.yaml || "Generate a dashboard to see YAML output.")}</pre>
+              <pre>${escapeHtml(this._resultText() || "Generate a dashboard to see output.")}</pre>
             </section>
           </section>
         </section>
@@ -861,6 +1056,10 @@ const styles = `
 
   .segmented.two {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .segmented.three {
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .segmented button, .icon-button, .primary-action {
@@ -1216,6 +1415,180 @@ const styles = `
     color: #9b2f2f;
     font-size: 13px;
     font-weight: 700;
+  }
+
+  .custom-dashboard {
+    --custom-bg: #eff7f4;
+    --custom-fg: #112a2d;
+    --custom-muted: #587074;
+    --custom-panel: rgba(255,255,255,0.82);
+    display: grid;
+    gap: 18px;
+    min-height: 520px;
+    border-radius: 8px;
+    padding: 18px;
+    background: var(--custom-bg);
+    color: var(--custom-fg);
+  }
+
+  .custom-dashboard-aurora {
+    --custom-bg: linear-gradient(135deg, #edf8f5, #f7efe6);
+    --custom-fg: #102b2f;
+    --custom-muted: #5a6f73;
+  }
+
+  .custom-dashboard-calm {
+    --custom-bg: linear-gradient(135deg, #f4f7f8, #e8f0ed);
+    --custom-fg: #1d3034;
+    --custom-muted: #65777a;
+  }
+
+  .custom-dashboard-graphite {
+    --custom-bg: linear-gradient(135deg, #172326, #283338);
+    --custom-fg: #eef7f4;
+    --custom-muted: #b6c4c5;
+    --custom-panel: rgba(255,255,255,0.1);
+  }
+
+  .custom-dashboard-sunrise {
+    --custom-bg: linear-gradient(135deg, #fff6e8, #eaf7f2);
+    --custom-fg: #2a2c26;
+    --custom-muted: #766f61;
+  }
+
+  .custom-dashboard-hero {
+    display: grid;
+    gap: 5px;
+  }
+
+  .custom-dashboard-hero h3 {
+    color: var(--custom-fg);
+    font-size: 28px;
+  }
+
+  .custom-dashboard-hero p,
+  .custom-section-header p,
+  .custom-card-header p,
+  .custom-metric span,
+  .custom-empty {
+    color: var(--custom-muted);
+  }
+
+  .custom-dashboard-section {
+    display: grid;
+    gap: 10px;
+  }
+
+  .custom-section-header h4 {
+    margin: 0;
+    color: var(--custom-fg);
+    font-size: 18px;
+  }
+
+  .custom-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+  }
+
+  .custom-layout-feature .custom-card-grid {
+    grid-template-columns: minmax(260px, 1.4fr) repeat(auto-fit, minmax(210px, 1fr));
+  }
+
+  .custom-layout-dense .custom-card-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+
+  .custom-card {
+    display: grid;
+    gap: 14px;
+    min-height: 150px;
+    border: 1px solid rgba(120,140,142,0.22);
+    border-radius: 8px;
+    padding: 14px;
+    background: var(--custom-panel);
+    box-shadow: 0 14px 28px rgba(19,35,38,0.12);
+  }
+
+  .custom-card-hero {
+    min-height: 210px;
+  }
+
+  .custom-card-header {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+  }
+
+  .custom-card-header ha-icon {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #ffffff;
+  }
+
+  .custom-card-header h5 {
+    margin: 0;
+    color: var(--custom-fg);
+    font-size: 15px;
+  }
+
+  .custom-card-header p {
+    margin: 3px 0 0;
+    font-size: 12px;
+  }
+
+  .custom-metric {
+    display: grid;
+    gap: 4px;
+    align-self: end;
+  }
+
+  .custom-metric strong {
+    color: var(--custom-fg);
+    font-size: 34px;
+  }
+
+  .custom-hero-states {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-self: end;
+  }
+
+  .custom-state-pill {
+    border-radius: 999px;
+    padding: 7px 10px;
+    background: rgba(255,255,255,0.58);
+    color: var(--custom-fg);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .custom-entity-list {
+    display: grid;
+    gap: 9px;
+  }
+
+  .custom-entity-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--custom-fg);
+    font-size: 13px;
+  }
+
+  .custom-entity-line span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .custom-entity-line strong {
+    white-space: nowrap;
   }
 
   .yaml-panel {

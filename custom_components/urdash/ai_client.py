@@ -12,12 +12,13 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL
 from .dashboard_context import CUSTOM_CARDS
 
-SYSTEM_PROMPT = """You are UrDash, a Home Assistant Lovelace dashboard designer.
+SYSTEM_PROMPT = """You are UrDash, a Home Assistant dashboard designer.
 Create dashboards that are beautiful, usable, fast to scan, and practical for daily home control.
 Return only structured JSON matching the requested schema.
 Prefer installed or allowed custom cards when useful, but keep the YAML valid Lovelace.
 Do not invent entity IDs. Use only entity IDs from the provided entity list.
 If asked for a new view, generate a single new Lovelace view/tab that can be appended to an existing dashboard.
+If asked for a custom dashboard, do not return Lovelace YAML. Design a native UrDash dashboard spec instead.
 Never modify, remove, or rewrite the reference dashboard.
 """
 
@@ -27,6 +28,74 @@ DASHBOARD_SCHEMA = {
     "required": ["yaml", "summary", "notes"],
     "properties": {
         "yaml": {"type": "string"},
+        "summary": {"type": "string"},
+        "notes": {"type": "array", "items": {"type": "string"}},
+    },
+}
+
+CUSTOM_DASHBOARD_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["dashboard", "summary", "notes"],
+    "properties": {
+        "dashboard": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["title", "subtitle", "theme", "sections"],
+            "properties": {
+                "title": {"type": "string"},
+                "subtitle": {"type": "string"},
+                "theme": {
+                    "type": "string",
+                    "enum": ["aurora", "calm", "graphite", "sunrise"],
+                },
+                "sections": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["title", "subtitle", "layout", "cards"],
+                        "properties": {
+                            "title": {"type": "string"},
+                            "subtitle": {"type": "string"},
+                            "layout": {
+                                "type": "string",
+                                "enum": ["feature", "grid", "dense"],
+                            },
+                            "cards": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "additionalProperties": False,
+                                    "required": [
+                                        "type",
+                                        "title",
+                                        "subtitle",
+                                        "icon",
+                                        "accent",
+                                        "entity_ids",
+                                    ],
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "enum": ["hero", "status", "metric", "control", "list"],
+                                        },
+                                        "title": {"type": "string"},
+                                        "subtitle": {"type": "string"},
+                                        "icon": {"type": "string"},
+                                        "accent": {"type": "string"},
+                                        "entity_ids": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
         "summary": {"type": "string"},
         "notes": {"type": "array", "items": {"type": "string"}},
     },
@@ -75,18 +144,7 @@ async def async_generate_with_openai(
                                 "available_custom_cards": CUSTOM_CARDS if allow_custom_cards else [],
                                 "entities": _compact_entities(entities),
                                 "reference_dashboard": _compact_dashboard(reference_dashboard),
-                                "requirements": [
-                                    "Return Lovelace YAML in the yaml field.",
-                                    "The yaml field must contain valid YAML only, without Markdown fences.",
-                                    "Use sections view when it improves usability.",
-                                    "Group controls by purpose and room.",
-                                    "Make the first view immediately useful on phone and desktop.",
-                                    "Prefer built-in tile/entities/grid cards when custom cards are disabled.",
-                                    "For mode new_view, return exactly one Lovelace view object as YAML.",
-                                    "For mode new_view, use the reference dashboard only for style and context.",
-                                    "For mode new_view, do not include title/views wrapping or existing views.",
-                                    "For mode dashboard, return a complete Lovelace dashboard YAML object with title and views.",
-                                ],
+                                "requirements": _requirements_for_mode(mode),
                             },
                             separators=(",", ":"),
                         ),
@@ -98,7 +156,7 @@ async def async_generate_with_openai(
             "format": {
                 "type": "json_schema",
                 "name": "urdash_dashboard",
-                "schema": DASHBOARD_SCHEMA,
+                "schema": _schema_for_mode(mode),
                 "strict": True,
             }
         },
@@ -130,6 +188,23 @@ async def async_generate_with_openai(
         generated = json.loads(output_text)
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as err:
         raise AiGenerationError("AI provider returned an unexpected response.") from err
+
+    if mode == "custom_dashboard":
+        custom_dashboard = generated.get("dashboard")
+        if not isinstance(custom_dashboard, dict):
+            raise AiGenerationError("AI provider returned an invalid custom dashboard.")
+        if not isinstance(custom_dashboard.get("sections"), list):
+            raise AiGenerationError("AI provider returned a custom dashboard without sections.")
+        return {
+            "custom_dashboard": custom_dashboard,
+            "yaml": json.dumps(custom_dashboard, ensure_ascii=False, indent=2),
+            "dependencies": [],
+            "summary": generated.get("summary", "Generated with AI."),
+            "notes": generated.get("notes", []),
+            "engine": "ai",
+            "mode": mode,
+            "model": model or DEFAULT_OPENAI_MODEL,
+        }
 
     yaml_value = generated["yaml"].strip()
     try:
@@ -186,6 +261,38 @@ def _extract_output_text(response_json: dict[str, Any]) -> str:
                 return content["text"]
 
     raise KeyError("output_text")
+
+
+def _schema_for_mode(mode: str) -> dict[str, Any]:
+    if mode == "custom_dashboard":
+        return CUSTOM_DASHBOARD_SCHEMA
+    return DASHBOARD_SCHEMA
+
+
+def _requirements_for_mode(mode: str) -> list[str]:
+    if mode == "custom_dashboard":
+        return [
+            "Return a native UrDash custom dashboard object in the dashboard field.",
+            "Do not return Lovelace YAML.",
+            "Use only entity IDs from the provided entity list.",
+            "Make the design visually distinctive, polished, and useful on phone and desktop.",
+            "Use sections to create a strong information architecture.",
+            "Use card types hero, status, metric, control, and list according to the dashboard purpose.",
+            "Keep entity_ids arrays focused; do not overload one card with too many unrelated entities.",
+            "Use accent values as CSS color strings such as #1f8a70.",
+        ]
+    return [
+        "Return Lovelace YAML in the yaml field.",
+        "The yaml field must contain valid YAML only, without Markdown fences.",
+        "Use sections view when it improves usability.",
+        "Group controls by purpose and room.",
+        "Make the first view immediately useful on phone and desktop.",
+        "Prefer built-in tile/entities/grid cards when custom cards are disabled.",
+        "For mode new_view, return exactly one Lovelace view object as YAML.",
+        "For mode new_view, use the reference dashboard only for style and context.",
+        "For mode new_view, do not include title/views wrapping or existing views.",
+        "For mode dashboard, return a complete Lovelace dashboard YAML object with title and views.",
+    ]
 
 
 def _compact_entities(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:

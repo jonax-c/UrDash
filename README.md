@@ -11,6 +11,7 @@ It adds a native Home Assistant sidebar panel where users can:
 - Select which devices/entities may be used for generation.
 - Generate Lovelace YAML.
 - Preview generated views with Home Assistant's real Lovelace renderer.
+- Generate a native UrDash AI custom dashboard that is not Lovelace-based.
 - Copy the dashboard YAML into a manual Lovelace dashboard.
 - Generate a new Lovelace tab/view using an existing dashboard as reference.
 - See recommended custom-card packages for richer designs.
@@ -73,6 +74,20 @@ UrDash defaults to using all available Home Assistant entities. Before generatio
 - Users can filter, select all, clear all, toggle a whole device group, or toggle individual entities.
 - Unselected entities are not sent to the AI provider and should not appear in generated Lovelace YAML.
 
+## AI Custom Dashboard Mode
+
+Generation mode **AI custom** gives the AI more layout freedom than Lovelace YAML. Instead of returning Lovelace config, the AI returns a structured UrDash dashboard spec that UrDash renders with its own frontend renderer.
+
+This mode:
+
+- Does not generate Lovelace YAML.
+- Does not use Home Assistant Lovelace cards.
+- Can be previewed directly in the UrDash panel.
+- Cannot be added as a Lovelace tab with **Add tab**.
+- Does not execute AI-generated JavaScript.
+
+Use this mode when the goal is a highly customized visual dashboard inside UrDash rather than a reusable Lovelace dashboard.
+
 ## Real Lovelace Preview
 
 UrDash does not use the old lightweight simulated preview. The panel's **Preview** button renders the generated view directly inside UrDash with Home Assistant's Lovelace card helpers.
@@ -127,7 +142,7 @@ Service fields:
 - `request`: natural-language dashboard request.
 - `style`: `modern`, `minimal`, `glass`, or `compact`.
 - `allow_custom_cards`: whether generated YAML may use recommended custom cards.
-- `mode`: `new_view` for a new tab, or `dashboard` for a full dashboard draft.
+- `mode`: `new_view` for a new tab, `dashboard` for a full Lovelace dashboard draft, or `custom_dashboard` for a native UrDash-rendered AI custom dashboard.
 - `reference_dashboard`: optional existing dashboard YAML used as context only, mainly for service calls.
 - `entity_ids`: optional list of entities UrDash may use. Leave empty to allow all entities.
 

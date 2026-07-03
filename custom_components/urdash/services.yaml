@@ -30,7 +30,7 @@ generate_dashboard:
         boolean:
     mode:
       name: Generation mode
-      description: Generate a full dashboard or a new tab/view that can be appended to an existing dashboard.
+      description: Generate a full Lovelace dashboard, a new Lovelace tab/view, or a native UrDash custom dashboard.
       required: false
       default: dashboard
       selector:
@@ -38,6 +38,7 @@ generate_dashboard:
           options:
             - dashboard
             - new_view
+            - custom_dashboard
     reference_dashboard:
       name: Reference dashboard YAML
       description: Existing dashboard YAML used as style/context only. UrDash does not modify it.
