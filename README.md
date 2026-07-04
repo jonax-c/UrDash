@@ -83,6 +83,7 @@ This mode:
 - Does not generate Lovelace YAML.
 - Does not use Home Assistant Lovelace cards.
 - Supports non-traditional card types such as orbit, scene, metric, control, and timeline.
+- Supports a `quiet` minimalist theme for sparse command-layer dashboards.
 - Can be previewed directly in the UrDash panel.
 - Cannot be added as a Lovelace tab with **Add tab**.
 - Does not execute AI-generated JavaScript.

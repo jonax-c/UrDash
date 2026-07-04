@@ -47,7 +47,7 @@ CUSTOM_DASHBOARD_SCHEMA = {
                 "subtitle": {"type": "string"},
                 "theme": {
                     "type": "string",
-                    "enum": ["aurora", "calm", "graphite", "sunrise"],
+                    "enum": ["aurora", "calm", "graphite", "sunrise", "quiet"],
                 },
                 "sections": {
                     "type": "array",
@@ -288,6 +288,8 @@ def _requirements_for_mode(mode: str) -> list[str]:
             "Design a futuristic home command surface with strong hierarchy, spatial grouping, and glanceable ambient status.",
             "Use sections as zones in the experience, not as plain dashboard rows.",
             "Prefer card types hero, orbit, scene, metric, control, and timeline for a more custom visual experience.",
+            "Use theme quiet when the user asks for minimalist, calm, subtle, or low-distraction UI.",
+            "For theme quiet, design an understated command layer with health-bar status, sparse room strips, a central home pulse, command rows, and a thin timeline.",
             "Use status and list only when they improve scanning.",
             "Keep entity_ids arrays focused; do not overload one card with too many unrelated entities.",
             "Use accent values as CSS color strings such as #1f8a70.",
