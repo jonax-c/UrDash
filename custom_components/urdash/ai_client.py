@@ -78,7 +78,16 @@ CUSTOM_DASHBOARD_SCHEMA = {
                                     "properties": {
                                         "type": {
                                             "type": "string",
-                                            "enum": ["hero", "status", "metric", "control", "list"],
+                                            "enum": [
+                                                "hero",
+                                                "orbit",
+                                                "scene",
+                                                "metric",
+                                                "control",
+                                                "timeline",
+                                                "status",
+                                                "list",
+                                            ],
                                         },
                                         "title": {"type": "string"},
                                         "subtitle": {"type": "string"},
@@ -275,9 +284,11 @@ def _requirements_for_mode(mode: str) -> list[str]:
             "Return a native UrDash custom dashboard object in the dashboard field.",
             "Do not return Lovelace YAML.",
             "Use only entity IDs from the provided entity list.",
-            "Make the design visually distinctive, polished, and useful on phone and desktop.",
-            "Use sections to create a strong information architecture.",
-            "Use card types hero, status, metric, control, and list according to the dashboard purpose.",
+            "Do not design a traditional rectangular Lovelace-style dashboard.",
+            "Design a futuristic home command surface with strong hierarchy, spatial grouping, and glanceable ambient status.",
+            "Use sections as zones in the experience, not as plain dashboard rows.",
+            "Prefer card types hero, orbit, scene, metric, control, and timeline for a more custom visual experience.",
+            "Use status and list only when they improve scanning.",
             "Keep entity_ids arrays focused; do not overload one card with too many unrelated entities.",
             "Use accent values as CSS color strings such as #1f8a70.",
         ]

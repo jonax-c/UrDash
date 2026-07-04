@@ -76,17 +76,18 @@ UrDash defaults to using all available Home Assistant entities. Before generatio
 
 ## AI Custom Dashboard Mode
 
-Generation mode **AI custom** gives the AI more layout freedom than Lovelace YAML. Instead of returning Lovelace config, the AI returns a structured UrDash dashboard spec that UrDash renders with its own frontend renderer.
+Generation mode **AI custom** gives the AI more layout freedom than Lovelace YAML. Instead of returning Lovelace config, the AI returns a structured UrDash dashboard spec that UrDash renders as a native Home Canvas experience.
 
 This mode:
 
 - Does not generate Lovelace YAML.
 - Does not use Home Assistant Lovelace cards.
+- Supports non-traditional card types such as orbit, scene, metric, control, and timeline.
 - Can be previewed directly in the UrDash panel.
 - Cannot be added as a Lovelace tab with **Add tab**.
 - Does not execute AI-generated JavaScript.
 
-Use this mode when the goal is a highly customized visual dashboard inside UrDash rather than a reusable Lovelace dashboard.
+Use this mode when the goal is a highly customized visual command surface inside UrDash rather than a reusable Lovelace dashboard.
 
 ## Real Lovelace Preview
 

@@ -395,8 +395,28 @@ class UrDashPanel extends HTMLElement {
       .map((entityId) => this._hass?.states?.[entityId])
       .filter(Boolean);
 
+    if (cardConfig.type === "orbit") {
+      card.appendChild(this._createOrbitBody(entities));
+      return card;
+    }
+
+    if (cardConfig.type === "scene") {
+      card.appendChild(this._createSceneBody(cardConfig, entities));
+      return card;
+    }
+
     if (cardConfig.type === "metric" && entities[0]) {
       card.appendChild(this._createMetricBody(entities[0]));
+      return card;
+    }
+
+    if (cardConfig.type === "control") {
+      card.appendChild(this._createControlBody(entities));
+      return card;
+    }
+
+    if (cardConfig.type === "timeline") {
+      card.appendChild(this._createTimelineBody(entities));
       return card;
     }
 
@@ -423,6 +443,110 @@ class UrDashPanel extends HTMLElement {
     }
     card.appendChild(list);
     return card;
+  }
+
+  _createOrbitBody(entities) {
+    const orbit = document.createElement("div");
+    orbit.className = "custom-orbit";
+    const core = document.createElement("div");
+    core.className = "custom-orbit-core";
+    const active = entities.filter((state) => !["off", "closed", "idle", "unavailable"].includes(state.state)).length;
+    const count = document.createElement("strong");
+    count.textContent = String(active);
+    const label = document.createElement("span");
+    label.textContent = "active signals";
+    core.append(count, label);
+    orbit.appendChild(core);
+
+    const positions = [
+      ["-38%", "-34%"],
+      ["8%", "-42%"],
+      ["35%", "-14%"],
+      ["28%", "34%"],
+      ["-18%", "42%"],
+      ["-44%", "8%"],
+    ];
+    for (const [index, state] of entities.slice(0, 6).entries()) {
+      const satellite = document.createElement("span");
+      satellite.className = "custom-orbit-satellite";
+      satellite.style.setProperty("--x", positions[index][0]);
+      satellite.style.setProperty("--y", positions[index][1]);
+      satellite.textContent = `${state.attributes?.friendly_name || state.entity_id}: ${state.state}`;
+      orbit.appendChild(satellite);
+    }
+    return orbit;
+  }
+
+  _createSceneBody(cardConfig, entities) {
+    const scene = document.createElement("div");
+    scene.className = "custom-scene";
+    const phrase = document.createElement("p");
+    phrase.textContent = cardConfig.subtitle || "One tap home mode";
+    scene.appendChild(phrase);
+    const actions = document.createElement("div");
+    actions.className = "custom-action-row";
+    for (const state of entities.slice(0, 4)) {
+      actions.appendChild(this._createEntityActionButton(state));
+    }
+    scene.appendChild(actions);
+    return scene;
+  }
+
+  _createControlBody(entities) {
+    const controls = document.createElement("div");
+    controls.className = "custom-control-grid";
+    for (const state of entities.slice(0, 6)) {
+      controls.appendChild(this._createEntityActionButton(state));
+    }
+    if (!entities.length) {
+      const empty = document.createElement("p");
+      empty.className = "custom-empty";
+      empty.textContent = "No matching controls are available.";
+      controls.appendChild(empty);
+    }
+    return controls;
+  }
+
+  _createTimelineBody(entities) {
+    const timeline = document.createElement("div");
+    timeline.className = "custom-timeline";
+    for (const state of entities.slice(0, 6)) {
+      const item = document.createElement("div");
+      item.className = "custom-timeline-item";
+      const dot = document.createElement("span");
+      const text = document.createElement("p");
+      text.textContent = `${state.attributes?.friendly_name || state.entity_id} is ${state.state}`;
+      item.append(dot, text);
+      timeline.appendChild(item);
+    }
+    return timeline;
+  }
+
+  _createEntityActionButton(state) {
+    const button = document.createElement("button");
+    button.className = "custom-action";
+    button.type = "button";
+    button.disabled = !this._canToggleState(state);
+    const name = document.createElement("span");
+    name.textContent = state.attributes?.friendly_name || state.entity_id;
+    const value = document.createElement("strong");
+    value.textContent = state.state;
+    button.append(name, value);
+    button.addEventListener("click", () => this._callToggleService(state));
+    return button;
+  }
+
+  _canToggleState(state) {
+    return ["automation", "fan", "humidifier", "input_boolean", "light", "lock", "media_player", "script", "switch"].includes(
+      state.entity_id.split(".", 1)[0],
+    );
+  }
+
+  _callToggleService(state) {
+    if (!this._canToggleState(state)) return;
+    const domain = state.entity_id.split(".", 1)[0];
+    const service = domain === "lock" && state.state === "locked" ? "unlock" : domain === "lock" ? "lock" : "toggle";
+    this._hass.callService(domain, service, { entity_id: state.entity_id });
   }
 
   _createMetricBody(state) {
@@ -469,7 +593,7 @@ class UrDashPanel extends HTMLElement {
   }
 
   _safeCardType(type) {
-    return ["hero", "status", "metric", "control", "list"].includes(type) ? type : "status";
+    return ["hero", "orbit", "scene", "status", "metric", "control", "timeline", "list"].includes(type) ? type : "status";
   }
 
   _safeAccent(accent) {
@@ -1418,17 +1542,30 @@ const styles = `
   }
 
   .custom-dashboard {
-    --custom-bg: #eff7f4;
+    --custom-bg: radial-gradient(circle at 18% 14%, rgba(31,138,112,0.26), transparent 26%),
+      radial-gradient(circle at 86% 10%, rgba(215,138,63,0.2), transparent 24%),
+      linear-gradient(145deg, #ecf8f4, #f8f3ea 48%, #e8f0f5);
     --custom-fg: #112a2d;
     --custom-muted: #587074;
-    --custom-panel: rgba(255,255,255,0.82);
+    --custom-panel: rgba(255,255,255,0.64);
     display: grid;
-    gap: 18px;
+    gap: 22px;
     min-height: 520px;
     border-radius: 8px;
-    padding: 18px;
+    padding: 22px;
     background: var(--custom-bg);
     color: var(--custom-fg);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .custom-dashboard::before {
+    content: "";
+    position: absolute;
+    inset: 14px;
+    border: 1px solid rgba(255,255,255,0.55);
+    border-radius: 8px;
+    pointer-events: none;
   }
 
   .custom-dashboard-aurora {
@@ -1458,12 +1595,16 @@ const styles = `
 
   .custom-dashboard-hero {
     display: grid;
-    gap: 5px;
+    gap: 8px;
+    position: relative;
+    z-index: 1;
   }
 
   .custom-dashboard-hero h3 {
     color: var(--custom-fg);
-    font-size: 28px;
+    max-width: 720px;
+    font-size: 34px;
+    line-height: 1.04;
   }
 
   .custom-dashboard-hero p,
@@ -1476,7 +1617,9 @@ const styles = `
 
   .custom-dashboard-section {
     display: grid;
-    gap: 10px;
+    gap: 12px;
+    position: relative;
+    z-index: 1;
   }
 
   .custom-section-header h4 {
@@ -1487,8 +1630,8 @@ const styles = `
 
   .custom-card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 14px;
   }
 
   .custom-layout-feature .custom-card-grid {
@@ -1500,17 +1643,31 @@ const styles = `
   }
 
   .custom-card {
+    backdrop-filter: blur(18px);
     display: grid;
     gap: 14px;
     min-height: 150px;
-    border: 1px solid rgba(120,140,142,0.22);
+    border: 1px solid rgba(255,255,255,0.42);
     border-radius: 8px;
-    padding: 14px;
+    padding: 16px;
     background: var(--custom-panel);
-    box-shadow: 0 14px 28px rgba(19,35,38,0.12);
+    box-shadow: 0 20px 48px rgba(19,35,38,0.14);
+    overflow: hidden;
+    position: relative;
   }
 
-  .custom-card-hero {
+  .custom-card::after {
+    content: "";
+    position: absolute;
+    inset: auto 12px 12px auto;
+    width: 54px;
+    height: 54px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 24%, transparent);
+    pointer-events: none;
+  }
+
+  .custom-card-hero, .custom-card-orbit, .custom-card-scene {
     min-height: 210px;
   }
 
@@ -1529,6 +1686,7 @@ const styles = `
     border-radius: 8px;
     background: var(--accent);
     color: #ffffff;
+    box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 36%, transparent);
   }
 
   .custom-card-header h5 {
@@ -1550,7 +1708,8 @@ const styles = `
 
   .custom-metric strong {
     color: var(--custom-fg);
-    font-size: 34px;
+    font-size: 40px;
+    line-height: 1;
   }
 
   .custom-hero-states {
@@ -1567,6 +1726,133 @@ const styles = `
     color: var(--custom-fg);
     font-size: 12px;
     font-weight: 800;
+  }
+
+  .custom-orbit {
+    min-height: 178px;
+    position: relative;
+  }
+
+  .custom-orbit-core {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    display: grid;
+    place-items: center;
+    width: 104px;
+    height: 104px;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, white);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 16%, rgba(255,255,255,0.74));
+    transform: translate(-50%, -50%);
+  }
+
+  .custom-orbit-core strong {
+    color: var(--custom-fg);
+    font-size: 28px;
+    line-height: 1;
+  }
+
+  .custom-orbit-core span {
+    color: var(--custom-muted);
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .custom-orbit-satellite {
+    position: absolute;
+    left: calc(50% + var(--x));
+    top: calc(50% + var(--y));
+    max-width: 118px;
+    border-radius: 999px;
+    padding: 6px 9px;
+    background: rgba(255,255,255,0.72);
+    color: var(--custom-fg);
+    font-size: 10px;
+    font-weight: 800;
+    transform: translate(-50%, -50%);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .custom-scene {
+    display: grid;
+    gap: 14px;
+    align-self: end;
+  }
+
+  .custom-scene > p {
+    max-width: 420px;
+    color: var(--custom-fg);
+    font-size: 22px;
+    font-weight: 900;
+    line-height: 1.1;
+  }
+
+  .custom-action-row, .custom-control-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+  }
+
+  .custom-control-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .custom-action {
+    min-height: 58px;
+    display: grid;
+    gap: 3px;
+    border: 1px solid rgba(255,255,255,0.45);
+    border-radius: 8px;
+    padding: 9px 11px;
+    background: rgba(255,255,255,0.62);
+    color: var(--custom-fg);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .custom-action:disabled {
+    cursor: default;
+    opacity: 0.78;
+  }
+
+  .custom-action span {
+    font-size: 11px;
+    overflow-wrap: anywhere;
+  }
+
+  .custom-action strong {
+    font-size: 13px;
+    text-transform: uppercase;
+  }
+
+  .custom-timeline {
+    display: grid;
+    gap: 10px;
+  }
+
+  .custom-timeline-item {
+    display: grid;
+    grid-template-columns: 12px minmax(0, 1fr);
+    gap: 9px;
+    align-items: start;
+  }
+
+  .custom-timeline-item span {
+    width: 10px;
+    height: 10px;
+    margin-top: 4px;
+    border-radius: 999px;
+    background: var(--accent);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+
+  .custom-timeline-item p {
+    color: var(--custom-fg);
+    font-size: 12px;
   }
 
   .custom-entity-list {
