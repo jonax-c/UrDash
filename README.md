@@ -2,17 +2,18 @@
 
 ![UrDash icon](assets/urdash-icon.png)
 
-UrDash is a HACS-installable Home Assistant custom integration that helps create polished Lovelace dashboards from a natural-language request and the entities already available in Home Assistant.
+UrDash is a HACS-installable Home Assistant custom integration that helps create polished Home Assistant cards and Lovelace dashboards from a natural-language request and the entities already available in Home Assistant.
 
 It adds a native Home Assistant sidebar panel where users can:
 
-- Describe the dashboard they want.
+- Describe the card or dashboard they want.
 - Analyze current Home Assistant entities.
 - Select which devices/entities may be used for generation.
-- Generate Lovelace YAML.
+- Generate UrDash custom-card YAML for Lovelace.
+- Generate Lovelace YAML when a normal Lovelace dashboard/tab is desired.
 - Preview generated views with Home Assistant's real Lovelace renderer.
-- Generate a native UrDash AI custom dashboard that is not Lovelace-based.
-- Copy the dashboard YAML into a manual Lovelace dashboard.
+- Generate native UrDash custom cards for sensors, weather, room controls, energy, security, climate, scenes, and other use cases.
+- Copy the generated YAML into a manual Lovelace dashboard.
 - Generate a new Lovelace tab/view using an existing dashboard as reference.
 - See recommended custom-card packages for richer designs.
 
@@ -74,21 +75,37 @@ UrDash defaults to using all available Home Assistant entities. Before generatio
 - Users can filter, select all, clear all, toggle a whole device group, or toggle individual entities.
 - Unselected entities are not sent to the AI provider and should not appear in generated Lovelace YAML.
 
-## AI Custom Dashboard Mode
+## AI Custom Card Mode
 
-Generation mode **AI custom** gives the AI more layout freedom than Lovelace YAML. Instead of returning Lovelace config, the AI returns a structured UrDash dashboard spec that UrDash renders as a native Home Canvas experience.
+Generation mode **AI card** gives the AI more layout freedom than ordinary Lovelace YAML. Instead of returning built-in Lovelace cards, the AI returns a structured UrDash card spec and wraps it in a Lovelace custom card:
+
+```yaml
+type: custom:urdash-card
+height_mode: auto
+dashboard:
+  title: Quiet Weather
+  theme: quiet
+  sections: []
+```
 
 This mode:
 
-- Does not generate Lovelace YAML.
-- Does not use Home Assistant Lovelace cards.
+- Generates YAML that can be pasted into Lovelace.
+- Uses `custom:urdash-card` as the renderer.
 - Supports non-traditional card types such as orbit, scene, metric, control, and timeline.
 - Supports a `quiet` minimalist theme for sparse command-layer dashboards.
 - Can be previewed directly in the UrDash panel.
-- Cannot be added as a Lovelace tab with **Add tab**.
 - Does not execute AI-generated JavaScript.
 
-Use this mode when the goal is a highly customized visual command surface inside UrDash rather than a reusable Lovelace dashboard.
+Use this mode when the goal is a highly customized sensor card, weather card, room control card, energy card, security card, climate card, scene launcher, or other reusable Lovelace card.
+
+Before using generated `custom:urdash-card` YAML in Lovelace, add this JavaScript resource:
+
+```text
+/urdash/static/urdash-custom-card.js?v=20260706.1
+```
+
+Set the resource type to `JavaScript module`.
 
 ## Real Lovelace Preview
 
@@ -101,7 +118,7 @@ The preview action:
 - Renders generated sections or card grids inline in the UrDash panel.
 - Does not write to `.storage/lovelace` and does not create a temporary preview tab.
 
-This shows the generated card layout before users decide whether to copy the YAML or use **Add tab**. Some full dashboard chrome and route-level behavior can still differ from an opened Lovelace dashboard, but the cards themselves are rendered by Home Assistant's frontend card system.
+This shows the generated card layout before users decide whether to copy the YAML or use **Add tab**. Lovelace output is rendered by Home Assistant's frontend card system. UrDash custom-card output is rendered by the same `urdash-card` renderer used in Lovelace.
 
 ## Local Validation
 
@@ -144,7 +161,7 @@ Service fields:
 - `request`: natural-language dashboard request.
 - `style`: `modern`, `minimal`, `glass`, or `compact`.
 - `allow_custom_cards`: whether generated YAML may use recommended custom cards.
-- `mode`: `new_view` for a new tab, `dashboard` for a full Lovelace dashboard draft, or `custom_dashboard` for a native UrDash-rendered AI custom dashboard.
+- `mode`: `custom_card` for an UrDash Lovelace custom card, `new_view` for a new tab, or `dashboard` for a full Lovelace dashboard draft.
 - `reference_dashboard`: optional existing dashboard YAML used as context only, mainly for service calls.
 - `entity_ids`: optional list of entities UrDash may use. Leave empty to allow all entities.
 
@@ -159,6 +176,7 @@ custom_components/urdash/
   manifest.json
   services.yaml
   frontend/urdash-panel.js
+  frontend/urdash-custom-card.js
   translations/en.json
 ```
 

@@ -15,7 +15,7 @@ class UrDashPanel extends HTMLElement {
     this._result = null;
     this._style = "modern";
     this._allowCustomCards = true;
-    this._mode = "new_view";
+    this._mode = "custom_card";
     this._referenceViewId = "";
     this._selectedEntityIds = new Set();
     this._entityFilter = "";
@@ -93,7 +93,7 @@ class UrDashPanel extends HTMLElement {
       const currentButton = this.shadowRoot.querySelector("#generate");
       if (currentButton) {
         currentButton.disabled = false;
-        currentButton.innerHTML = "<span>*</span> Generate dashboard";
+        currentButton.innerHTML = "<span>*</span> Generate";
       }
     }
   }
@@ -130,18 +130,18 @@ class UrDashPanel extends HTMLElement {
   }
 
   async _writePreview() {
-    if (this._result?.custom_dashboard) {
+    if (this._customCardSpec()) {
       const button = this.shadowRoot.querySelector("#writePreview");
       button.disabled = true;
       button.textContent = "Rendering";
-      this._previewResult = { ok: null, message: "Preparing custom dashboard preview." };
+      this._previewResult = { ok: null, message: "Preparing UrDash custom card preview." };
       this._render();
       try {
         await this._nextFrame();
-        this._mountCustomDashboard(this._result.custom_dashboard);
+        this._mountCustomDashboard(this._customCardSpec());
         this._previewResult = {
           ok: true,
-          message: "Rendered with UrDash custom dashboard renderer.",
+          message: "Rendered with UrDash custom card renderer.",
         };
         this._updatePreviewStatus();
       } catch (error) {
@@ -319,18 +319,19 @@ class UrDashPanel extends HTMLElement {
   }
 
   _canPreview() {
-    return Boolean(this._result?.custom_dashboard || this._previewView());
+    return Boolean(this._customCardSpec() || this._previewView());
   }
 
   _resultText() {
-    if (this._result?.custom_dashboard) {
-      return JSON.stringify(this._result.custom_dashboard, null, 2);
-    }
     return this._result?.yaml || "";
   }
 
   _resultLabel() {
-    return this._result?.custom_dashboard ? "Custom dashboard JSON" : "Lovelace YAML";
+    return this._customCardSpec() ? "UrDash custom card YAML" : "Lovelace YAML";
+  }
+
+  _customCardSpec() {
+    return this._result?.custom_card || this._result?.custom_dashboard || null;
   }
 
   _mountCustomDashboard(dashboard) {
@@ -732,8 +733,8 @@ class UrDashPanel extends HTMLElement {
   _refreshPreviewHass() {
     const host = this.shadowRoot.querySelector("#lovelacePreviewHost");
     if (!host) return;
-    if (this._result?.custom_dashboard && this._previewResult?.ok) {
-      this._mountCustomDashboard(this._result.custom_dashboard);
+    if (this._customCardSpec() && this._previewResult?.ok) {
+      this._mountCustomDashboard(this._customCardSpec());
       return;
     }
     for (const element of host.querySelectorAll("*")) {
@@ -763,7 +764,7 @@ class UrDashPanel extends HTMLElement {
               <div class="brand-mark">UD</div>
               <div>
                 <h1>UrDash</h1>
-                <p>Custom Lovelace dashboard designer</p>
+                <p>AI custom-card designer</p>
               </div>
             </div>
 
@@ -786,7 +787,7 @@ class UrDashPanel extends HTMLElement {
               <div class="segmented three" id="modeButtons">
                 <button class="${this._mode === "new_view" ? "active" : ""}" data-mode="new_view" type="button">new tab</button>
                 <button class="${this._mode === "dashboard" ? "active" : ""}" data-mode="dashboard" type="button">full dashboard</button>
-                <button class="${this._mode === "custom_dashboard" ? "active" : ""}" data-mode="custom_dashboard" type="button">AI custom</button>
+                <button class="${this._mode === "custom_card" ? "active" : ""}" data-mode="custom_card" type="button">AI card</button>
               </div>
             </div>
 
@@ -822,7 +823,7 @@ class UrDashPanel extends HTMLElement {
 
             <button class="primary-action" id="generate" ${this._selectedEntityCount() ? "" : "disabled"} type="button">
               <span>*</span>
-              Generate dashboard
+              Generate
             </button>
             ${this._selectedEntityCount() ? "" : '<p class="warning">Select at least one entity before generating.</p>'}
 
@@ -854,11 +855,11 @@ class UrDashPanel extends HTMLElement {
             <div class="preview-toolbar">
               <div>
                 <h2>Preview</h2>
-                <p>${escapeHtml(this._result?.summary || "Your generated dashboard will appear here.")}</p>
+                <p>${escapeHtml(this._result?.summary || "Your generated card or dashboard will appear here.")}</p>
                 ${this._result?.error ? `<p class="error-text">${escapeHtml(this._result.error)}</p>` : ""}
                 ${this._result?.warning ? `<p class="warning">${escapeHtml(this._result.warning)}</p>` : ""}
                 ${this._result?.mode === "new_view" ? '<p class="warning">Output is a new view/tab YAML snippet. Existing dashboard is not modified.</p>' : ""}
-                ${this._result?.mode === "custom_dashboard" ? '<p class="warning">Output is a UrDash custom dashboard, not Lovelace YAML. It can be previewed in UrDash but cannot be added as a Lovelace tab.</p>' : ""}
+                ${this._result?.mode === "custom_card" || this._result?.mode === "custom_dashboard" ? '<p class="warning">Output is Lovelace custom card YAML using custom:urdash-card. Add /urdash/static/urdash-custom-card.js?v=20260706.1 as a JavaScript module resource before pasting it into Lovelace.</p>' : ""}
               </div>
               <div class="toolbar-actions">
                 <button class="icon-button" id="writePreview" ${this._canPreview() ? "" : "disabled"} title="Preview generated dashboard" type="button">Preview</button>
@@ -887,7 +888,7 @@ class UrDashPanel extends HTMLElement {
 
             <section class="real-preview-panel">
               <h3>Dashboard Preview</h3>
-              <p>Use Preview to render Lovelace output with Home Assistant card helpers, or AI custom output with UrDash's native renderer. This does not write to any dashboard storage.</p>
+              <p>Use Preview to render Lovelace output with Home Assistant card helpers, or UrDash custom card output with UrDash's native renderer. This does not write to any dashboard storage.</p>
               <div id="lovelacePreviewHost" class="lovelace-preview-host"></div>
             </section>
 
@@ -939,7 +940,7 @@ class UrDashPanel extends HTMLElement {
 
   _currentRequest() {
     const existing = this.shadowRoot.querySelector("#request")?.value;
-    return existing || "Create a beautiful family dashboard with quick controls for lights, climate, doors, energy, and room-by-room status.";
+    return existing || "Create a beautiful room control card for lights, climate, doors, and key sensors.";
   }
 
   _dependencyMarkup() {

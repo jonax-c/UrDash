@@ -57,7 +57,7 @@ GENERATE_SERVICE_SCHEMA = vol.Schema(
             "allow_custom_cards", default=DEFAULT_ALLOW_CUSTOM_CARDS
         ): cv.boolean,
         vol.Optional("mode", default="dashboard"): vol.In(
-            ["dashboard", "new_view", "custom_dashboard"]
+            ["dashboard", "new_view", "custom_card", "custom_dashboard"]
         ),
         vol.Optional("reference_dashboard", default=""): cv.string,
         vol.Optional("entity_ids"): vol.All(cv.ensure_list, [cv.entity_id]),
@@ -295,7 +295,7 @@ async def websocket_settings(
         ): cv.boolean,
         vol.Optional("use_ai"): cv.boolean,
         vol.Optional("mode", default="dashboard"): vol.In(
-            ["dashboard", "new_view", "custom_dashboard"]
+            ["dashboard", "new_view", "custom_card", "custom_dashboard"]
         ),
         vol.Optional("reference_dashboard"): dict,
         vol.Optional("reference_view_id"): str,

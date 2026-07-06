@@ -18,7 +18,7 @@ Return only structured JSON matching the requested schema.
 Prefer installed or allowed custom cards when useful, but keep the YAML valid Lovelace.
 Do not invent entity IDs. Use only entity IDs from the provided entity list.
 If asked for a new view, generate a single new Lovelace view/tab that can be appended to an existing dashboard.
-If asked for a custom dashboard, do not return Lovelace YAML. Design a native UrDash dashboard spec instead.
+If asked for a custom card, do not return ordinary Lovelace cards. Design a native UrDash card spec instead.
 Never modify, remove, or rewrite the reference dashboard.
 """
 
@@ -33,71 +33,64 @@ DASHBOARD_SCHEMA = {
     },
 }
 
-CUSTOM_DASHBOARD_SCHEMA = {
+CUSTOM_CARD_SPEC_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["dashboard", "summary", "notes"],
+    "required": ["title", "subtitle", "theme", "sections"],
     "properties": {
-        "dashboard": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["title", "subtitle", "theme", "sections"],
-            "properties": {
-                "title": {"type": "string"},
-                "subtitle": {"type": "string"},
-                "theme": {
-                    "type": "string",
-                    "enum": ["aurora", "calm", "graphite", "sunrise", "quiet"],
-                },
-                "sections": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "required": ["title", "subtitle", "layout", "cards"],
-                        "properties": {
-                            "title": {"type": "string"},
-                            "subtitle": {"type": "string"},
-                            "layout": {
-                                "type": "string",
-                                "enum": ["feature", "grid", "dense"],
-                            },
-                            "cards": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "additionalProperties": False,
-                                    "required": [
-                                        "type",
-                                        "title",
-                                        "subtitle",
-                                        "icon",
-                                        "accent",
-                                        "entity_ids",
+        "title": {"type": "string"},
+        "subtitle": {"type": "string"},
+        "theme": {
+            "type": "string",
+            "enum": ["aurora", "calm", "graphite", "sunrise", "quiet"],
+        },
+        "sections": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["title", "subtitle", "layout", "cards"],
+                "properties": {
+                    "title": {"type": "string"},
+                    "subtitle": {"type": "string"},
+                    "layout": {
+                        "type": "string",
+                        "enum": ["feature", "grid", "dense"],
+                    },
+                    "cards": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": [
+                                "type",
+                                "title",
+                                "subtitle",
+                                "icon",
+                                "accent",
+                                "entity_ids",
+                            ],
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": [
+                                        "hero",
+                                        "orbit",
+                                        "scene",
+                                        "metric",
+                                        "control",
+                                        "timeline",
+                                        "status",
+                                        "list",
                                     ],
-                                    "properties": {
-                                        "type": {
-                                            "type": "string",
-                                            "enum": [
-                                                "hero",
-                                                "orbit",
-                                                "scene",
-                                                "metric",
-                                                "control",
-                                                "timeline",
-                                                "status",
-                                                "list",
-                                            ],
-                                        },
-                                        "title": {"type": "string"},
-                                        "subtitle": {"type": "string"},
-                                        "icon": {"type": "string"},
-                                        "accent": {"type": "string"},
-                                        "entity_ids": {
-                                            "type": "array",
-                                            "items": {"type": "string"},
-                                        },
-                                    },
+                                },
+                                "title": {"type": "string"},
+                                "subtitle": {"type": "string"},
+                                "icon": {"type": "string"},
+                                "accent": {"type": "string"},
+                                "entity_ids": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
                                 },
                             },
                         },
@@ -105,6 +98,15 @@ CUSTOM_DASHBOARD_SCHEMA = {
                 },
             },
         },
+    },
+}
+
+CUSTOM_CARD_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["card", "summary", "notes"],
+    "properties": {
+        "card": CUSTOM_CARD_SPEC_SCHEMA,
         "summary": {"type": "string"},
         "notes": {"type": "array", "items": {"type": "string"}},
     },
@@ -198,15 +200,26 @@ async def async_generate_with_openai(
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as err:
         raise AiGenerationError("AI provider returned an unexpected response.") from err
 
-    if mode == "custom_dashboard":
-        custom_dashboard = generated.get("dashboard")
-        if not isinstance(custom_dashboard, dict):
-            raise AiGenerationError("AI provider returned an invalid custom dashboard.")
-        if not isinstance(custom_dashboard.get("sections"), list):
-            raise AiGenerationError("AI provider returned a custom dashboard without sections.")
+    if mode in {"custom_card", "custom_dashboard"}:
+        custom_card = generated.get("card")
+        if not isinstance(custom_card, dict):
+            raise AiGenerationError("AI provider returned an invalid custom card.")
+        if not isinstance(custom_card.get("sections"), list):
+            raise AiGenerationError("AI provider returned a custom card without sections.")
+        card_yaml = yaml.safe_dump(
+            {
+                "type": "custom:urdash-card",
+                "height_mode": "auto",
+                "dashboard": custom_card,
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ).strip()
         return {
-            "custom_dashboard": custom_dashboard,
-            "yaml": json.dumps(custom_dashboard, ensure_ascii=False, indent=2),
+            "custom_card": custom_card,
+            "custom_dashboard": custom_card,
+            "yaml": card_yaml,
+            "json": json.dumps(custom_card, ensure_ascii=False, indent=2),
             "dependencies": [],
             "summary": generated.get("summary", "Generated with AI."),
             "notes": generated.get("notes", []),
@@ -273,23 +286,24 @@ def _extract_output_text(response_json: dict[str, Any]) -> str:
 
 
 def _schema_for_mode(mode: str) -> dict[str, Any]:
-    if mode == "custom_dashboard":
-        return CUSTOM_DASHBOARD_SCHEMA
+    if mode in {"custom_card", "custom_dashboard"}:
+        return CUSTOM_CARD_SCHEMA
     return DASHBOARD_SCHEMA
 
 
 def _requirements_for_mode(mode: str) -> list[str]:
-    if mode == "custom_dashboard":
+    if mode in {"custom_card", "custom_dashboard"}:
         return [
-            "Return a native UrDash custom dashboard object in the dashboard field.",
-            "Do not return Lovelace YAML.",
+            "Return a native UrDash custom card object in the card field.",
+            "Do not return ordinary Lovelace YAML.",
             "Use only entity IDs from the provided entity list.",
-            "Do not design a traditional rectangular Lovelace-style dashboard.",
-            "Design a futuristic home command surface with strong hierarchy, spatial grouping, and glanceable ambient status.",
-            "Use sections as zones in the experience, not as plain dashboard rows.",
+            "Design one embeddable Lovelace custom card that can solve the user's requested card use case.",
+            "Support many card intents: sensor summaries, weather cards, room control cards, security panels, energy cards, climate cards, and scene launchers.",
+            "Do not design a traditional rectangular Lovelace-style card unless the user explicitly asks for plain utility.",
+            "Use sections as zones inside the card experience, not as full dashboard rows.",
             "Prefer card types hero, orbit, scene, metric, control, and timeline for a more custom visual experience.",
             "Use theme quiet when the user asks for minimalist, calm, subtle, or low-distraction UI.",
-            "For theme quiet, design an understated command layer with health-bar status, sparse room strips, a central home pulse, command rows, and a thin timeline.",
+            "For theme quiet, design an understated card with sparse strips, a focused central signal, command rows, and a thin timeline.",
             "Use status and list only when they improve scanning.",
             "Keep entity_ids arrays focused; do not overload one card with too many unrelated entities.",
             "Use accent values as CSS color strings such as #1f8a70.",
