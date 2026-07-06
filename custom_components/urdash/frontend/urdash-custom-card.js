@@ -146,7 +146,9 @@ class UrDashCard extends HTMLElement {
 
     if (cardConfig.type === "orbit") card.appendChild(this._createOrbitBody(entities));
     else if (cardConfig.type === "scene") card.appendChild(this._createSceneBody(cardConfig, entities));
+    else if (cardConfig.type === "climate" && entities[0]) card.appendChild(this._createClimateBody(entities[0]));
     else if (cardConfig.type === "metric" && entities[0]) card.appendChild(this._createMetricBody(entities[0]));
+    else if (cardConfig.type === "control" && entities[0]?.entity_id?.startsWith("climate.")) card.appendChild(this._createClimateBody(entities[0]));
     else if (cardConfig.type === "control") card.appendChild(this._createControlBody(entities));
     else if (cardConfig.type === "timeline") card.appendChild(this._createTimelineBody(entities));
     else if (cardConfig.type === "hero" && entities.length) card.appendChild(this._createHeroBody(entities));
@@ -199,6 +201,70 @@ class UrDashCard extends HTMLElement {
     for (const state of entities.slice(0, 6)) controls.appendChild(this._createEntityActionButton(state));
     if (!entities.length) controls.appendChild(this._empty("No matching controls are available."));
     return controls;
+  }
+
+  _createClimateBody(state) {
+    const climate = document.createElement("div");
+    climate.className = "custom-climate";
+
+    const current = state.attributes?.current_temperature ?? state.attributes?.temperature ?? state.state;
+    const target = state.attributes?.temperature ?? current;
+    const unit = this._hass?.config?.unit_system?.temperature || state.attributes?.unit_of_measurement || "°";
+
+    const readout = document.createElement("div");
+    readout.className = "custom-climate-readout";
+    const currentValue = document.createElement("strong");
+    currentValue.textContent = `${current}${unit}`;
+    const currentLabel = document.createElement("span");
+    currentLabel.textContent = `Current · ${state.state}`;
+    readout.append(currentValue, currentLabel);
+
+    const targetBox = document.createElement("div");
+    targetBox.className = "custom-climate-target";
+    const targetLabel = document.createElement("span");
+    targetLabel.textContent = "Target";
+    const targetValue = document.createElement("strong");
+    targetValue.textContent = `${target}${unit}`;
+    const steppers = document.createElement("div");
+    steppers.className = "custom-climate-steppers";
+    steppers.append(
+      this._createClimateStepButton(state, target, -1),
+      this._createClimateStepButton(state, target, 1),
+    );
+    targetBox.append(targetLabel, targetValue, steppers);
+
+    const modes = document.createElement("div");
+    modes.className = "custom-climate-modes";
+    for (const mode of (state.attributes?.hvac_modes || []).slice(0, 6)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = mode === state.state ? "active" : "";
+      button.textContent = mode;
+      button.addEventListener("click", () => this._hass.callService("climate", "set_hvac_mode", {
+        entity_id: state.entity_id,
+        hvac_mode: mode,
+      }));
+      modes.appendChild(button);
+    }
+
+    climate.append(readout, targetBox, modes);
+    return climate;
+  }
+
+  _createClimateStepButton(state, target, delta) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = delta > 0 ? "+" : "-";
+    button.addEventListener("click", () => {
+      const next = Number(target) + delta;
+      if (Number.isFinite(next)) {
+        this._hass.callService("climate", "set_temperature", {
+          entity_id: state.entity_id,
+          temperature: next,
+        });
+      }
+    });
+    return button;
   }
 
   _createTimelineBody(entities) {
@@ -309,7 +375,7 @@ class UrDashCard extends HTMLElement {
   }
 
   _safeCardType(type) {
-    return ["hero", "orbit", "scene", "status", "metric", "control", "timeline", "list"].includes(type) ? type : "status";
+    return ["hero", "orbit", "scene", "status", "metric", "climate", "control", "timeline", "list"].includes(type) ? type : "status";
   }
 
   _safeAccent(accent) {
@@ -389,18 +455,34 @@ const styles = `
     position: relative;
   }
   .custom-card-hero, .custom-card-orbit, .custom-card-scene { min-height: 210px; }
+  .custom-layout-feature .custom-card-climate { min-height: 220px; }
   .custom-card-header { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; align-items: start; }
   .custom-card-header ha-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; background: var(--accent); color: #fff; }
   .custom-card-header h5 { color: var(--custom-fg); font-size: 15px; }
   .custom-card-header p { margin-top: 3px; font-size: 12px; }
   .custom-dashboard-quiet .custom-card-grid { gap: 0; border-top: 1px solid rgba(32,39,40,0.1); }
   .custom-dashboard-quiet .custom-card { min-height: 0; border: 0; border-bottom: 1px solid rgba(32,39,40,0.1); border-radius: 0; padding: 14px 0; background: transparent; box-shadow: none; backdrop-filter: none; }
+  .custom-dashboard-quiet .custom-card-climate { min-height: 210px; place-content: center; }
   .custom-dashboard-quiet .custom-card-header { grid-template-columns: 24px minmax(0, 1fr); }
   .custom-dashboard-quiet .custom-card-header ha-icon { width: 24px; height: 24px; background: transparent; color: var(--accent); }
   .custom-metric { display: grid; gap: 4px; align-self: end; }
   .custom-metric strong { color: var(--custom-fg); font-size: 40px; line-height: 1; }
   .custom-dashboard-quiet .custom-metric { place-items: center; }
   .custom-dashboard-quiet .custom-metric strong { font-size: 52px; font-weight: 780; }
+  .custom-climate { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(120px, 0.9fr); gap: 14px; align-items: end; }
+  .custom-climate-readout, .custom-climate-target { display: grid; gap: 5px; }
+  .custom-climate-readout strong { color: var(--custom-fg); font-size: 42px; line-height: 1; }
+  .custom-climate-readout span, .custom-climate-target span { color: var(--custom-muted); font-size: 12px; }
+  .custom-climate-target strong { color: var(--custom-fg); font-size: 24px; }
+  .custom-climate-steppers, .custom-climate-modes { display: flex; flex-wrap: wrap; gap: 7px; }
+  .custom-climate-steppers button, .custom-climate-modes button { min-height: 34px; border: 1px solid rgba(255,255,255,0.48); border-radius: 8px; padding: 0 12px; background: rgba(255,255,255,0.58); color: var(--custom-fg); cursor: pointer; font-weight: 850; }
+  .custom-climate-modes { grid-column: 1 / -1; }
+  .custom-climate-modes button.active { background: var(--accent); color: #fff; }
+  .custom-dashboard-quiet .custom-climate { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .custom-dashboard-quiet .custom-climate-readout strong { font-size: 54px; font-weight: 780; }
+  .custom-dashboard-quiet .custom-climate-target { grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; border-top: 1px solid rgba(32,39,40,0.08); padding-top: 10px; }
+  .custom-dashboard-quiet .custom-climate-target strong { font-size: 18px; }
+  .custom-dashboard-quiet .custom-climate-steppers button, .custom-dashboard-quiet .custom-climate-modes button { border-color: rgba(32,39,40,0.12); background: transparent; }
   .custom-hero-states, .custom-action-row { display: flex; flex-wrap: wrap; gap: 8px; align-self: end; }
   .custom-state-pill { border-radius: 999px; padding: 7px 10px; background: rgba(255,255,255,0.58); color: var(--custom-fg); font-size: 12px; font-weight: 800; }
   .custom-orbit { min-height: 178px; position: relative; }

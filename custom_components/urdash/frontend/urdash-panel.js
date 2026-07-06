@@ -439,8 +439,18 @@ class UrDashPanel extends HTMLElement {
       return card;
     }
 
+    if (cardConfig.type === "climate" && entities[0]) {
+      card.appendChild(this._createClimateBody(entities[0]));
+      return card;
+    }
+
     if (cardConfig.type === "metric" && entities[0]) {
       card.appendChild(this._createMetricBody(entities[0]));
+      return card;
+    }
+
+    if (cardConfig.type === "control" && entities[0]?.entity_id?.startsWith("climate.")) {
+      card.appendChild(this._createClimateBody(entities[0]));
       return card;
     }
 
@@ -541,6 +551,70 @@ class UrDashPanel extends HTMLElement {
     return controls;
   }
 
+  _createClimateBody(state) {
+    const climate = document.createElement("div");
+    climate.className = "custom-climate";
+
+    const current = state.attributes?.current_temperature ?? state.attributes?.temperature ?? state.state;
+    const target = state.attributes?.temperature ?? current;
+    const unit = this._hass?.config?.unit_system?.temperature || state.attributes?.unit_of_measurement || "°";
+
+    const readout = document.createElement("div");
+    readout.className = "custom-climate-readout";
+    const currentValue = document.createElement("strong");
+    currentValue.textContent = `${current}${unit}`;
+    const currentLabel = document.createElement("span");
+    currentLabel.textContent = `Current · ${state.state}`;
+    readout.append(currentValue, currentLabel);
+
+    const targetBox = document.createElement("div");
+    targetBox.className = "custom-climate-target";
+    const targetLabel = document.createElement("span");
+    targetLabel.textContent = "Target";
+    const targetValue = document.createElement("strong");
+    targetValue.textContent = `${target}${unit}`;
+    const steppers = document.createElement("div");
+    steppers.className = "custom-climate-steppers";
+    steppers.append(
+      this._createClimateStepButton(state, target, -1),
+      this._createClimateStepButton(state, target, 1),
+    );
+    targetBox.append(targetLabel, targetValue, steppers);
+
+    const modes = document.createElement("div");
+    modes.className = "custom-climate-modes";
+    for (const mode of (state.attributes?.hvac_modes || []).slice(0, 6)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = mode === state.state ? "active" : "";
+      button.textContent = mode;
+      button.addEventListener("click", () => this._hass.callService("climate", "set_hvac_mode", {
+        entity_id: state.entity_id,
+        hvac_mode: mode,
+      }));
+      modes.appendChild(button);
+    }
+
+    climate.append(readout, targetBox, modes);
+    return climate;
+  }
+
+  _createClimateStepButton(state, target, delta) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = delta > 0 ? "+" : "-";
+    button.addEventListener("click", () => {
+      const next = Number(target) + delta;
+      if (Number.isFinite(next)) {
+        this._hass.callService("climate", "set_temperature", {
+          entity_id: state.entity_id,
+          temperature: next,
+        });
+      }
+    });
+    return button;
+  }
+
   _createTimelineBody(entities) {
     const timeline = document.createElement("div");
     timeline.className = "custom-timeline";
@@ -627,7 +701,7 @@ class UrDashPanel extends HTMLElement {
   }
 
   _safeCardType(type) {
-    return ["hero", "orbit", "scene", "status", "metric", "control", "timeline", "list"].includes(type) ? type : "status";
+    return ["hero", "orbit", "scene", "status", "metric", "climate", "control", "timeline", "list"].includes(type) ? type : "status";
   }
 
   _safeAccent(accent) {
@@ -859,7 +933,7 @@ class UrDashPanel extends HTMLElement {
                 ${this._result?.error ? `<p class="error-text">${escapeHtml(this._result.error)}</p>` : ""}
                 ${this._result?.warning ? `<p class="warning">${escapeHtml(this._result.warning)}</p>` : ""}
                 ${this._result?.mode === "new_view" ? '<p class="warning">Output is a new view/tab YAML snippet. Existing dashboard is not modified.</p>' : ""}
-                ${this._result?.mode === "custom_card" || this._result?.mode === "custom_dashboard" ? '<p class="warning">Output is Lovelace custom card YAML using custom:urdash-card. Add /urdash/static/urdash-custom-card.js?v=20260706.1 as a JavaScript module resource before pasting it into Lovelace.</p>' : ""}
+                ${this._result?.mode === "custom_card" || this._result?.mode === "custom_dashboard" ? '<p class="warning">Output is Lovelace custom card YAML using custom:urdash-card. Add /urdash/static/urdash-custom-card.js?v=20260706.2 as a JavaScript module resource before pasting it into Lovelace.</p>' : ""}
               </div>
               <div class="toolbar-actions">
                 <button class="icon-button" id="writePreview" ${this._canPreview() ? "" : "disabled"} title="Preview generated dashboard" type="button">Preview</button>
@@ -1820,6 +1894,11 @@ const styles = `
     text-align: center;
   }
 
+  .custom-dashboard-quiet .custom-card-climate {
+    min-height: 210px;
+    place-content: center;
+  }
+
   .custom-card::after {
     content: "";
     position: absolute;
@@ -1833,6 +1912,10 @@ const styles = `
 
   .custom-card-hero, .custom-card-orbit, .custom-card-scene {
     min-height: 210px;
+  }
+
+  .custom-layout-feature .custom-card-climate {
+    min-height: 220px;
   }
 
   .custom-card-header {
@@ -1887,6 +1970,87 @@ const styles = `
 
   .custom-dashboard-quiet .custom-metric span {
     font-size: 12px;
+  }
+
+  .custom-climate {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) minmax(120px, 0.9fr);
+    gap: 14px;
+    align-items: end;
+  }
+
+  .custom-climate-readout, .custom-climate-target {
+    display: grid;
+    gap: 5px;
+  }
+
+  .custom-climate-readout strong {
+    color: var(--custom-fg);
+    font-size: 42px;
+    line-height: 1;
+  }
+
+  .custom-climate-readout span, .custom-climate-target span {
+    color: var(--custom-muted);
+    font-size: 12px;
+  }
+
+  .custom-climate-target strong {
+    color: var(--custom-fg);
+    font-size: 24px;
+  }
+
+  .custom-climate-steppers, .custom-climate-modes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .custom-climate-steppers button, .custom-climate-modes button {
+    min-height: 34px;
+    border: 1px solid rgba(255,255,255,0.48);
+    border-radius: 8px;
+    padding: 0 12px;
+    background: rgba(255,255,255,0.58);
+    color: var(--custom-fg);
+    cursor: pointer;
+    font-weight: 850;
+  }
+
+  .custom-climate-modes {
+    grid-column: 1 / -1;
+  }
+
+  .custom-climate-modes button.active {
+    background: var(--accent);
+    color: #ffffff;
+  }
+
+  .custom-dashboard-quiet .custom-climate {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .custom-dashboard-quiet .custom-climate-readout strong {
+    font-size: 54px;
+    font-weight: 780;
+  }
+
+  .custom-dashboard-quiet .custom-climate-target {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    border-top: 1px solid rgba(32,39,40,0.08);
+    padding-top: 10px;
+  }
+
+  .custom-dashboard-quiet .custom-climate-target strong {
+    font-size: 18px;
+  }
+
+  .custom-dashboard-quiet .custom-climate-steppers button,
+  .custom-dashboard-quiet .custom-climate-modes button {
+    border-color: rgba(32,39,40,0.12);
+    background: transparent;
   }
 
   .custom-hero-states {
