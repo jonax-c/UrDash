@@ -102,7 +102,7 @@ Use this mode when the goal is a highly customized sensor card, weather card, ro
 Before using generated `custom:urdash-card` YAML in Lovelace, add this JavaScript resource:
 
 ```text
-/urdash/static/urdash-custom-card.js?v=20260706.2
+/urdash/static/urdash-custom-card.js?v=20260706.3
 ```
 
 Set the resource type to `JavaScript module`.

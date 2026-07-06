@@ -147,6 +147,10 @@ class UrDashCard extends HTMLElement {
     if (cardConfig.type === "orbit") card.appendChild(this._createOrbitBody(entities));
     else if (cardConfig.type === "scene") card.appendChild(this._createSceneBody(cardConfig, entities));
     else if (cardConfig.type === "climate" && entities[0]) card.appendChild(this._createClimateBody(entities[0]));
+    else if (cardConfig.type === "weather") card.appendChild(this._createWeatherBody(entities));
+    else if (cardConfig.type === "security") card.appendChild(this._createSecurityBody(entities));
+    else if (cardConfig.type === "energy") card.appendChild(this._createEnergyBody(entities));
+    else if (cardConfig.type === "room") card.appendChild(this._createRoomBody(entities));
     else if (cardConfig.type === "metric" && entities[0]) card.appendChild(this._createMetricBody(entities[0]));
     else if (cardConfig.type === "control" && entities[0]?.entity_id?.startsWith("climate.")) card.appendChild(this._createClimateBody(entities[0]));
     else if (cardConfig.type === "control") card.appendChild(this._createControlBody(entities));
@@ -267,6 +271,90 @@ class UrDashCard extends HTMLElement {
     return button;
   }
 
+  _createWeatherBody(entities) {
+    const weather = document.createElement("div");
+    weather.className = "custom-weather";
+    const primary = entities.find((state) => state.entity_id.startsWith("weather.")) || entities[0];
+    if (!primary) return this._empty("No weather entities are available.");
+
+    const current = document.createElement("div");
+    current.className = "custom-weather-current";
+    const temp = primary.attributes?.temperature ?? primary.attributes?.current_temperature ?? primary.state;
+    const unit = primary.attributes?.temperature_unit || this._hass?.config?.unit_system?.temperature || "";
+    const value = document.createElement("strong");
+    value.textContent = `${temp}${unit}`;
+    const label = document.createElement("span");
+    label.textContent = `${this._stateName(primary)} · ${primary.state}`;
+    current.append(value, label);
+
+    const details = document.createElement("div");
+    details.className = "custom-signal-grid";
+    for (const state of entities.filter((item) => item !== primary).slice(0, 4)) {
+      details.appendChild(this._createSignalTile(this._stateName(state), `${state.state}${state.attributes?.unit_of_measurement || ""}`));
+    }
+    weather.append(current, details);
+    return weather;
+  }
+
+  _createSecurityBody(entities) {
+    const security = document.createElement("div");
+    security.className = "custom-security";
+    const risky = entities.filter((state) => ["on", "open", "unlocked", "detected", "triggered"].includes(state.state));
+    const summary = document.createElement("div");
+    summary.className = "custom-security-summary";
+    const count = document.createElement("strong");
+    count.textContent = String(risky.length);
+    const label = document.createElement("span");
+    label.textContent = risky.length ? "items need attention" : "all clear";
+    summary.append(count, label);
+    security.appendChild(summary);
+
+    const list = document.createElement("div");
+    list.className = "custom-security-list";
+    for (const state of entities.slice(0, 6)) {
+      if (state.entity_id.startsWith("lock.")) list.appendChild(this._createEntityActionButton(state));
+      else list.appendChild(this._createEntityLineElement(state));
+    }
+    security.appendChild(list);
+    return security;
+  }
+
+  _createEnergyBody(entities) {
+    const energy = document.createElement("div");
+    energy.className = "custom-energy";
+    const primary = entities[0];
+    if (primary) energy.appendChild(this._createMetricBody(primary));
+    const list = document.createElement("div");
+    list.className = "custom-signal-grid";
+    for (const state of entities.slice(1, 5)) {
+      list.appendChild(this._createSignalTile(this._stateName(state), `${state.state}${state.attributes?.unit_of_measurement || ""}`));
+    }
+    energy.appendChild(list);
+    return energy;
+  }
+
+  _createRoomBody(entities) {
+    const room = document.createElement("div");
+    room.className = "custom-room";
+    const controllable = entities.filter((state) => this._canToggleState(state) || state.entity_id.startsWith("climate."));
+    const sensors = entities.filter((state) => !controllable.includes(state));
+    const controls = document.createElement("div");
+    controls.className = "custom-control-grid";
+    for (const state of controllable.slice(0, 6)) {
+      if (state.entity_id.startsWith("climate.")) controls.appendChild(this._createClimateBody(state));
+      else controls.appendChild(this._createEntityActionButton(state));
+    }
+    const signals = document.createElement("div");
+    signals.className = "custom-signal-grid";
+    for (const state of sensors.slice(0, 4)) {
+      signals.appendChild(this._createSignalTile(this._stateName(state), `${state.state}${state.attributes?.unit_of_measurement || ""}`));
+    }
+    if (controllable.length) room.appendChild(controls);
+    if (sensors.length) room.appendChild(signals);
+    if (!controllable.length && !sensors.length) room.appendChild(this._empty("No matching room entities are available."));
+    return room;
+  }
+
   _createTimelineBody(entities) {
     const timeline = document.createElement("div");
     timeline.className = "custom-timeline";
@@ -309,17 +397,32 @@ class UrDashCard extends HTMLElement {
     const list = document.createElement("div");
     list.className = "custom-entity-list";
     for (const state of entities.slice(0, 8)) {
-      const row = document.createElement("div");
-      row.className = "custom-entity-line";
-      const name = document.createElement("span");
-      name.textContent = this._stateName(state);
-      const value = document.createElement("strong");
-      value.textContent = `${state.state}${state.attributes?.unit_of_measurement || ""}`;
-      row.append(name, value);
-      list.appendChild(row);
+      list.appendChild(this._createEntityLineElement(state));
     }
     if (!entities.length) list.appendChild(this._empty("No matching entities are available."));
     return list;
+  }
+
+  _createEntityLineElement(state) {
+    const row = document.createElement("div");
+    row.className = "custom-entity-line";
+    const name = document.createElement("span");
+    name.textContent = this._stateName(state);
+    const value = document.createElement("strong");
+    value.textContent = `${state.state}${state.attributes?.unit_of_measurement || ""}`;
+    row.append(name, value);
+    return row;
+  }
+
+  _createSignalTile(label, value) {
+    const tile = document.createElement("div");
+    tile.className = "custom-signal-tile";
+    const title = document.createElement("span");
+    title.textContent = label;
+    const strong = document.createElement("strong");
+    strong.textContent = value;
+    tile.append(title, strong);
+    return tile;
   }
 
   _createEntityActionButton(state) {
@@ -354,7 +457,7 @@ class UrDashCard extends HTMLElement {
   }
 
   _canToggleState(state) {
-    return ["automation", "fan", "humidifier", "input_boolean", "light", "lock", "media_player", "script", "switch"].includes(
+    return ["automation", "cover", "fan", "humidifier", "input_boolean", "light", "lock", "media_player", "script", "switch"].includes(
       state.entity_id.split(".", 1)[0],
     );
   }
@@ -362,7 +465,15 @@ class UrDashCard extends HTMLElement {
   _callToggleService(state) {
     if (!this._canToggleState(state)) return;
     const domain = state.entity_id.split(".", 1)[0];
-    const service = domain === "lock" && state.state === "locked" ? "unlock" : domain === "lock" ? "lock" : "toggle";
+    const service = domain === "lock" && state.state === "locked"
+      ? "unlock"
+      : domain === "lock"
+        ? "lock"
+        : domain === "cover" && state.state === "closed"
+          ? "open_cover"
+          : domain === "cover"
+            ? "close_cover"
+            : "toggle";
     this._hass.callService(domain, service, { entity_id: state.entity_id });
   }
 
@@ -375,7 +486,7 @@ class UrDashCard extends HTMLElement {
   }
 
   _safeCardType(type) {
-    return ["hero", "orbit", "scene", "status", "metric", "climate", "control", "timeline", "list"].includes(type) ? type : "status";
+    return ["hero", "orbit", "scene", "status", "metric", "climate", "weather", "security", "energy", "room", "control", "timeline", "list"].includes(type) ? type : "status";
   }
 
   _safeAccent(accent) {
@@ -483,6 +594,20 @@ const styles = `
   .custom-dashboard-quiet .custom-climate-target { grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; border-top: 1px solid rgba(32,39,40,0.08); padding-top: 10px; }
   .custom-dashboard-quiet .custom-climate-target strong { font-size: 18px; }
   .custom-dashboard-quiet .custom-climate-steppers button, .custom-dashboard-quiet .custom-climate-modes button { border-color: rgba(32,39,40,0.12); background: transparent; }
+  .custom-weather, .custom-energy, .custom-room, .custom-security { display: grid; gap: 13px; }
+  .custom-weather-current, .custom-security-summary { display: grid; gap: 4px; }
+  .custom-weather-current strong, .custom-security-summary strong { color: var(--custom-fg); font-size: 40px; line-height: 1; }
+  .custom-weather-current span, .custom-security-summary span { color: var(--custom-muted); font-size: 12px; }
+  .custom-signal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+  .custom-signal-tile { display: grid; gap: 3px; border: 1px solid rgba(255,255,255,0.42); border-radius: 8px; padding: 9px 10px; background: rgba(255,255,255,0.44); }
+  .custom-signal-tile span { color: var(--custom-muted); font-size: 11px; overflow-wrap: anywhere; }
+  .custom-signal-tile strong { color: var(--custom-fg); font-size: 14px; }
+  .custom-security-list { display: grid; gap: 8px; }
+  .custom-dashboard-quiet .custom-weather-current strong,
+  .custom-dashboard-quiet .custom-security-summary strong { font-size: 52px; font-weight: 780; }
+  .custom-dashboard-quiet .custom-signal-grid { gap: 0; border-top: 1px solid rgba(32,39,40,0.08); }
+  .custom-dashboard-quiet .custom-signal-tile { border: 0; border-bottom: 1px solid rgba(32,39,40,0.08); border-radius: 0; padding: 9px 0; background: transparent; }
+  .custom-dashboard-quiet .custom-security-list { gap: 0; border-top: 1px solid rgba(32,39,40,0.08); }
   .custom-hero-states, .custom-action-row { display: flex; flex-wrap: wrap; gap: 8px; align-self: end; }
   .custom-state-pill { border-radius: 999px; padding: 7px 10px; background: rgba(255,255,255,0.58); color: var(--custom-fg); font-size: 12px; font-weight: 800; }
   .custom-orbit { min-height: 178px; position: relative; }
