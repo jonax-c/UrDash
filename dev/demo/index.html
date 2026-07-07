@@ -111,6 +111,11 @@
           return ["icon"];
         }
 
+        constructor() {
+          super();
+          this.attachShadow({ mode: "open" });
+        }
+
         connectedCallback() {
           this.render();
         }
@@ -121,9 +126,26 @@
 
         render() {
           const icon = this.getAttribute("icon") || "mdi:circle";
-          const label = icon.replace("mdi:", "").split("-").map((part) => part[0] || "").join("").slice(0, 2).toUpperCase();
-          this.textContent = label || "IC";
           this.title = icon;
+          this.shadowRoot.innerHTML = `
+            <style>
+              :host {
+                display: inline-grid;
+                place-items: center;
+                width: 1em;
+                height: 1em;
+              }
+              span {
+                display: block;
+                width: 0.72em;
+                height: 0.72em;
+                border: 2px solid currentColor;
+                border-radius: 999px;
+                opacity: 0.86;
+              }
+            </style>
+            <span></span>
+          `;
         }
       }
 
@@ -131,7 +153,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260707.5");
 
       const hass = {
         config: {
@@ -152,11 +174,11 @@
           }),
           "cover.living_room_curtain": state("cover.living_room_curtain", "closed", "Curtain"),
           "binary_sensor.front_door": state("binary_sensor.front_door", "off", "Front Door"),
-          "binary_sensor.hall_motion": state("binary_sensor.hall_motion", "off", "Hall Motion"),
-          "binary_sensor.kitchen_window": state("binary_sensor.kitchen_window", "off", "Kitchen Window"),
+          "binary_sensor.hall_motion": state("binary_sensor.hall_motion", "off", "Hall"),
+          "binary_sensor.kitchen_window": state("binary_sensor.kitchen_window", "off", "Kitchen"),
           "binary_sensor.garage_motion": state("binary_sensor.garage_motion", "on", "Garage Motion"),
-          "lock.front_door": state("lock.front_door", "locked", "Front Door Lock"),
-          "lock.garage_entry": state("lock.garage_entry", "locked", "Garage Entry Lock"),
+          "lock.front_door": state("lock.front_door", "locked", "Front Lock"),
+          "lock.garage_entry": state("lock.garage_entry", "locked", "Garage Lock"),
           "weather.home": state("weather.home", "partlycloudy", "Home Weather", { temperature: 27, temperature_unit: "°C", humidity: 63 }),
           "sensor.outdoor_humidity": state("sensor.outdoor_humidity", "63", "Outdoor Humidity", { unit_of_measurement: "%" }),
           "sensor.wind_speed": state("sensor.wind_speed", "12", "Wind Speed", { unit_of_measurement: "km/h" }),
@@ -316,8 +338,8 @@
               {
                 id: "aura",
                 kind: "ambient",
-                title: "Living Room",
-                subtitle: "spatial control layer",
+                title: "",
+                subtitle: "",
                 icon: "mdi:creation",
                 frame: { x: 8, y: 6, w: 52, h: 74 },
                 style: { accent: "#7f6df2" },
@@ -348,7 +370,7 @@
                   "cover.living_room_curtain",
                   "media_player.living_room",
                 ],
-                frame: { x: 38, y: 8, w: 34, h: 62 },
+                frame: { x: 37, y: 8, w: 30, h: 62 },
                 style: { accent: "#d79a3f" },
                 presentation: { surface: "ghost", layer: "raised", align: "center", scale: "normal" },
               },
@@ -362,7 +384,7 @@
                   { label: "Movie", entity_id: "scene.living_room_movie", icon: "mdi:movie-open" },
                   { label: "Night", entity_id: "scene.home_goodnight", icon: "mdi:weather-night" },
                 ],
-                frame: { x: 70, y: 14, w: 24, h: 50 },
+                frame: { x: 75, y: 14, w: 20, h: 50 },
                 style: { accent: "#b76e79" },
                 presentation: { surface: "glass", layer: "overlay", align: "center", scale: "normal" },
               },
@@ -506,8 +528,8 @@
               {
                 id: "weather_aura",
                 kind: "ambient",
-                title: "Outside",
-                subtitle: "partly cloudy",
+                title: "",
+                subtitle: "",
                 icon: "mdi:weather-partly-cloudy",
                 frame: { x: 5, y: 4, w: 90, h: 62 },
                 style: { accent: "#5c94b8" },
@@ -519,10 +541,10 @@
                 kind: "hero_value",
                 entity: "weather.home",
                 bind: { value: "attributes.temperature" },
-                label: "Outdoor",
-                subtitle: "partly cloudy",
+                label: "Outside",
+                subtitle: "",
                 icon: "mdi:weather-partly-cloudy",
-                frame: { x: 12, y: 18, w: 76, h: 34 },
+                frame: { x: 14, y: 17, w: 72, h: 42 },
                 style: { accent: "#5c94b8" },
                 presentation: { surface: "naked", layer: "raised", align: "center", scale: "xl" },
               },
@@ -559,11 +581,91 @@
             theme: "graphite",
             blocks: [
               {
-                id: "power_core",
-                kind: "entity_orbit",
-                entity: "sensor.home_power",
-                entities: ["sensor.solar_power", "sensor.grid_import", "sensor.energy_today", "sensor.home_battery"],
-                frame: { x: 4, y: 6, w: 92, h: 58 },
+                id: "power_flow",
+                kind: "visual_map",
+                nodes: [
+                  {
+                    id: "solar",
+                    label: "Solar",
+                    entity: "sensor.solar_power",
+                    icon: "mdi:solar-power",
+                    size: "large",
+                    position: { x: 20, y: 22 },
+                    style: { accent: "#d9a441", shape: "orb" },
+                    action: { type: "more_info", entity_id: "sensor.solar_power" },
+                  },
+                  {
+                    id: "grid",
+                    label: "Grid",
+                    entity: "sensor.grid_import",
+                    icon: "mdi:transmission-tower",
+                    size: "normal",
+                    position: { x: 78, y: 28 },
+                    style: { accent: "#c06c5a", shape: "pill" },
+                    action: { type: "more_info", entity_id: "sensor.grid_import" },
+                  },
+                  {
+                    id: "home",
+                    label: "Home Load",
+                    entity: "sensor.home_power",
+                    icon: "mdi:home-lightning-bolt",
+                    size: "hero",
+                    position: { x: 50, y: 52 },
+                    style: { accent: "#62b488", shape: "core" },
+                    action: { type: "more_info", entity_id: "sensor.home_power" },
+                  },
+                  {
+                    id: "battery",
+                    label: "Reserve",
+                    entity: "sensor.home_battery",
+                    icon: "mdi:battery-high",
+                    size: "large",
+                    position: { x: 34, y: 82 },
+                    style: { accent: "#4f8fba", shape: "circle" },
+                    action: { type: "more_info", entity_id: "sensor.home_battery" },
+                  },
+                  {
+                    id: "today",
+                    label: "Today",
+                    entity: "sensor.energy_today",
+                    icon: "mdi:chart-line",
+                    size: "small",
+                    position: { x: 75, y: 78 },
+                    style: { accent: "#7f6df2", shape: "soft" },
+                    action: { type: "more_info", entity_id: "sensor.energy_today" },
+                  },
+                ],
+                links: [
+                  {
+                    from: "solar",
+                    to: "home",
+                    label: "solar",
+                    entity: "sensor.solar_power",
+                    style: { accent: "#d9a441", width: "dynamic", curve: "arc", animated: true, direction: "forward" },
+                  },
+                  {
+                    from: "grid",
+                    to: "home",
+                    label: "grid",
+                    entity: "sensor.grid_import",
+                    style: { accent: "#c06c5a", width: "dynamic", curve: "soft", animated: true, direction: "forward" },
+                  },
+                  {
+                    from: "home",
+                    to: "battery",
+                    show_label: false,
+                    entity: "sensor.home_battery",
+                    style: { accent: "#4f8fba", width: 3, curve: "soft", animated: false, direction: "none" },
+                  },
+                  {
+                    from: "home",
+                    to: "today",
+                    show_label: false,
+                    entity: "sensor.energy_today",
+                    style: { accent: "#7f6df2", width: 2, curve: "straight", animated: false, direction: "none" },
+                  },
+                ],
+                frame: { x: 4, y: 6, w: 92, h: 61 },
                 style: { accent: "#62b488" },
                 presentation: { surface: "ghost", layer: "raised", align: "center", scale: "large" },
                 animation: { preset: "glow", trigger: "always", speed: "slow", intensity: "subtle" },
@@ -575,7 +677,7 @@
                 entity: "sensor.home_battery",
                 bind: { value: "state" },
                 range: { min: 0, max: 100 },
-                frame: { x: 10, y: 68, w: 36, h: 18 },
+                frame: { x: 10, y: 72, w: 36, h: 16 },
                 style: { accent: "#62b488" },
                 presentation: { surface: "rail", layer: "overlay", scale: "normal" },
               },
@@ -585,7 +687,7 @@
                 label: "Grid import",
                 entity: "sensor.grid_import",
                 bind: { value: "state", unit: "attributes.unit_of_measurement" },
-                frame: { x: 52, y: 68, w: 38, h: 18 },
+                frame: { x: 52, y: 72, w: 38, h: 16 },
                 style: { accent: "#d9a441" },
                 presentation: { surface: "rail", layer: "overlay", scale: "normal" },
               },
@@ -613,8 +715,8 @@
               {
                 id: "music_aura",
                 kind: "ambient",
-                title: "Now playing",
-                subtitle: "Midnight City",
+                title: "",
+                subtitle: "",
                 icon: "mdi:music-circle",
                 frame: { x: 8, y: 4, w: 84, h: 64 },
                 style: { accent: "#b76e79" },
@@ -676,8 +778,8 @@
               {
                 id: "security_field",
                 kind: "ambient",
-                title: "Perimeter",
-                subtitle: "garage motion needs attention",
+                title: "",
+                subtitle: "",
                 icon: "mdi:shield-home",
                 frame: { x: 7, y: 4, w: 86, h: 58 },
                 style: { accent: "#c06c5a" },
@@ -702,9 +804,13 @@
               },
               {
                 id: "summary",
-                kind: "security_cluster",
-                entities: ["lock.front_door", "lock.garage_entry", "binary_sensor.garage_motion"],
-                frame: { x: 9, y: 66, w: 82, h: 18 },
+                kind: "chip_group",
+                chips: [
+                  { label: "Front locked", entity: "lock.front_door", icon: "mdi:lock" },
+                  { label: "Garage locked", entity: "lock.garage_entry", icon: "mdi:garage-lock" },
+                  { label: "Garage motion", entity: "binary_sensor.garage_motion", icon: "mdi:motion-sensor" },
+                ],
+                frame: { x: 12, y: 68, w: 76, h: 14 },
                 style: { accent: "#62b488" },
                 presentation: { surface: "floating", layer: "overlay", align: "center" },
               },
@@ -732,8 +838,8 @@
               {
                 id: "halo",
                 kind: "ambient",
-                title: "Home body",
-                subtitle: "air and recovery",
+                title: "",
+                subtitle: "",
                 icon: "mdi:meditation",
                 frame: { x: 8, y: 5, w: 84, h: 58 },
                 style: { accent: "#7aa67a" },
@@ -748,7 +854,7 @@
                 label: "Sleep recovery",
                 subtitle: "good baseline for the day",
                 icon: "mdi:sleep",
-                frame: { x: 17, y: 18, w: 66, h: 30 },
+                frame: { x: 15, y: 17, w: 70, h: 38 },
                 style: { accent: "#7aa67a" },
                 presentation: { surface: "naked", layer: "raised", align: "center", scale: "xl" },
               },
@@ -796,6 +902,17 @@
             theme: "quiet",
             blocks: [
               {
+                id: "laundry_aura",
+                kind: "ambient",
+                title: "",
+                subtitle: "",
+                icon: "mdi:washing-machine",
+                frame: { x: 8, y: 7, w: 84, h: 46 },
+                style: { accent: "#4f8fba" },
+                presentation: { surface: "naked", layer: "backdrop", align: "center", scale: "xl" },
+                animation: { preset: "wave", trigger: "always", speed: "slow", intensity: "subtle" },
+              },
+              {
                 id: "washer_time",
                 kind: "hero_value",
                 entity: "sensor.washer_remaining",
@@ -803,9 +920,9 @@
                 label: "remaining",
                 subtitle: "washer is running",
                 icon: "mdi:washing-machine",
-                frame: { x: 8, y: 10, w: 84, h: 34 },
+                frame: { x: 10, y: 13, w: 80, h: 34 },
                 style: { accent: "#4f8fba" },
-                presentation: { surface: "hero", layer: "raised", align: "center", scale: "xl" },
+                presentation: { surface: "naked", layer: "raised", align: "center", scale: "xl" },
               },
               {
                 id: "washer_orbit",
@@ -850,8 +967,8 @@
               {
                 id: "garden_aura",
                 kind: "ambient",
-                title: "Garden",
-                subtitle: "back zone is watering",
+                title: "",
+                subtitle: "",
                 icon: "mdi:sprinkler-variant",
                 frame: { x: 7, y: 4, w: 86, h: 52 },
                 style: { accent: "#4f9b6e" },
@@ -904,8 +1021,8 @@
               {
                 id: "sky",
                 kind: "ambient",
-                title: "Partly cloudy",
-                subtitle: "soft wind from the west",
+                title: "",
+                subtitle: "",
                 icon: "mdi:weather-partly-cloudy",
                 frame: { x: 2, y: 4, w: 58, h: 82 },
                 style: { accent: "#5c94b8" },

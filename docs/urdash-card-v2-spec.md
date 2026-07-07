@@ -212,6 +212,8 @@ Common fields:
 - `animation`: safe animation declaration.
 - `visibility`: optional conditional display.
 
+For relationship, topology, and flow-based cards, AI should use `visual_map` instead of requesting a predefined layout. The AI owns node placement and link design; the renderer only safely draws the declared map.
+
 ## Presentation
 
 `presentation` tells the renderer how a block should feel visually. It is not raw CSS.
@@ -606,6 +608,58 @@ actions:
     entity_id: scene.home_night
 ```
 
+### Visual Map
+
+AI-designed node/link composition for flows, relationships, topology, spatial control, energy movement, irrigation paths, security perimeters, HVAC air movement, and similar cards.
+
+`visual_map` has no predefined layout. AI chooses node positions, sizes, icons, labels, link curves, link labels, animation, and actions based on the user request and available entities.
+
+```yaml
+kind: visual_map
+nodes:
+  - id: solar
+    label: Solar
+    entity: sensor.solar_power
+    icon: mdi:solar-power
+    size: large
+    position: { x: 18, y: 24 }
+    style:
+      accent: "#d9a441"
+      shape: orb
+    action:
+      type: more_info
+      entity_id: sensor.solar_power
+  - id: home
+    label: Home Load
+    entity: sensor.home_power
+    icon: mdi:home-lightning-bolt
+    size: hero
+    position: { x: 54, y: 52 }
+    style:
+      accent: "#62b488"
+      shape: core
+links:
+  - from: solar
+    to: home
+    label: solar
+    show_label: true
+    entity: sensor.solar_power
+    style:
+      accent: "#d9a441"
+      width: dynamic
+      curve: arc
+      animated: true
+      direction: forward
+```
+
+Safety constraints:
+
+- Node positions are clamped to the card bounds.
+- Links can only connect declared node IDs.
+- Icons remain declarative `mdi:*` references.
+- Actions use the normal UrDash action allowlist.
+- Styles and animations are tokens, not raw CSS or JavaScript.
+
 ## Multi-Function Cards
 
 Cards can combine multiple device functions in one card. This is expected and encouraged.
@@ -959,6 +1013,8 @@ Recommended limits:
 - Max sections/containers: `12`
 - Max text length per label: `80`
 - Max title length: `48`
+- Max visual map nodes per block: `16`
+- Max visual map links per block: `24`
 
 Validation must reject or sanitize:
 
@@ -1001,6 +1057,7 @@ The AI owns:
 - Hierarchy.
 - Safe style tokens.
 - Safe animation declarations.
+- Visual map node/link positions and styling.
 
 ## Example: Minimal Climate Card
 

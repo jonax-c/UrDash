@@ -81,7 +81,7 @@ class UrDashCard extends HTMLElement {
     if (layoutType === "grid") this._applyGrid(block, config.grid);
     else this._applyFrame(block, config.frame);
 
-    if (config.title || config.subtitle || config.icon) {
+    if (this._shouldRenderHeader(config)) {
       block.appendChild(this._createBlockHeader(config));
     }
 
@@ -109,6 +109,13 @@ class UrDashCard extends HTMLElement {
     }
     header.appendChild(text);
     return header;
+  }
+
+  _shouldRenderHeader(config) {
+    if (!(config.title || config.subtitle || config.icon)) return false;
+    if (["ambient", "hero_value", "entity_orbit", "constellation", "radial_scene"].includes(config.kind)) return false;
+    if (["naked", "orb"].includes(config.presentation?.surface)) return false;
+    return true;
   }
 
   _createBlockBody(config) {
@@ -162,6 +169,8 @@ class UrDashCard extends HTMLElement {
         return this._constellation(config);
       case "radial_scene":
         return this._radialScene(config);
+      case "visual_map":
+        return this._visualMap(config);
       default:
         return this._empty(`Unsupported block: ${config.kind || "unknown"}`);
     }
@@ -190,7 +199,7 @@ class UrDashCard extends HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = "value-readout";
     const strong = document.createElement("strong");
-    strong.textContent = `${value ?? "--"}${unit || ""}`;
+    strong.textContent = this._formatValue(value, unit);
     const label = document.createElement("span");
     label.textContent = config.label || this._stateName(state) || config.entity || "Value";
     wrap.append(strong, label);
@@ -202,7 +211,7 @@ class UrDashCard extends HTMLElement {
     grid.className = "value-cluster";
     for (const item of (config.items || []).slice(0, 12)) {
       const state = this._state(item.entity);
-      grid.appendChild(this._signalTile(item.label, `${this._boundValue(state, item.value || "state") ?? "--"}${item.unit || state?.attributes?.unit_of_measurement || ""}`));
+      grid.appendChild(this._signalTile(item.label, this._formatValue(this._boundValue(state, item.value || "state"), item.unit || state?.attributes?.unit_of_measurement)));
     }
     if (!grid.children.length) grid.appendChild(this._empty("No values configured."));
     return grid;
@@ -278,7 +287,7 @@ class UrDashCard extends HTMLElement {
     wrap.className = "climate-control";
     const readout = document.createElement("div");
     readout.className = "climate-readout";
-    readout.innerHTML = `<strong>${escapeHtml(current)}${escapeHtml(unit)}</strong><span>${escapeHtml(state.state)} mode</span>`;
+    readout.innerHTML = `<strong>${escapeHtml(current)}${escapeHtml(unit)}</strong><span>${escapeHtml(this._humanize(state.state))} mode</span>`;
     const targetBox = document.createElement("div");
     targetBox.className = "climate-target";
     targetBox.append(
@@ -292,7 +301,7 @@ class UrDashCard extends HTMLElement {
       const button = document.createElement("button");
       button.type = "button";
       button.className = mode === state.state ? "active" : "";
-      button.textContent = mode;
+      button.textContent = this._humanize(mode);
       button.addEventListener("click", () => this._callService("climate", "set_hvac_mode", { entity_id: entityId, hvac_mode: mode }));
       modes.appendChild(button);
     }
@@ -359,7 +368,7 @@ class UrDashCard extends HTMLElement {
       const state = this._state(entityId);
       const row = document.createElement("div");
       row.className = "timeline-row";
-      row.innerHTML = `<span></span><p>${escapeHtml(this._stateName(state) || entityId)} is ${escapeHtml(state?.state || "missing")}</p>`;
+      row.innerHTML = `<span></span><p>${escapeHtml(this._stateName(state) || entityId)} is ${escapeHtml(this._humanize(state?.state || "missing"))}</p>`;
       list.appendChild(row);
     }
     if (!list.children.length) list.appendChild(this._empty("No timeline entities configured."));
@@ -383,7 +392,7 @@ class UrDashCard extends HTMLElement {
       const state = this._state(chip.entity);
       const span = document.createElement("span");
       if (chip.icon) span.appendChild(this._icon(chip.icon));
-      span.append(document.createTextNode(`${chip.label}${state ? ` · ${state.state}` : ""}`));
+      span.append(document.createTextNode(`${chip.label}${state ? ` · ${this._humanize(state.state)}` : ""}`));
       group.appendChild(span);
     }
     if (!group.children.length) group.appendChild(this._empty("No chips configured."));
@@ -396,13 +405,15 @@ class UrDashCard extends HTMLElement {
     const unit = this._boundValue(state, config.bind?.unit || "attributes.unit_of_measurement");
     const wrap = document.createElement("div");
     wrap.className = "hero-value";
+    if (String(value ?? "").length > 5) wrap.classList.add("hero-value-long");
+    else wrap.classList.add("hero-value-short");
     if (config.icon) wrap.appendChild(this._icon(config.icon));
     const valueEl = document.createElement("strong");
-    valueEl.textContent = `${value ?? "--"}${unit || ""}`;
+    valueEl.textContent = this._formatValue(value, unit);
     const label = document.createElement("span");
     label.textContent = config.label || config.title || this._stateName(state) || config.entity || "Status";
     const subtitle = document.createElement("p");
-    subtitle.textContent = config.subtitle || state?.state || "";
+    subtitle.textContent = config.subtitle || this._humanize(state?.state || "");
     wrap.append(valueEl, label, subtitle);
     return wrap;
   }
@@ -432,7 +443,7 @@ class UrDashCard extends HTMLElement {
     const core = document.createElement("div");
     core.className = "orbit-core";
     const coreValue = document.createElement("strong");
-    coreValue.textContent = center ? `${center.state}${center.attributes?.unit_of_measurement || ""}` : config.title || "Home";
+    coreValue.textContent = center ? this._formatValue(center.state, center.attributes?.unit_of_measurement) : config.title || "Home";
     const coreLabel = document.createElement("span");
     coreLabel.textContent = this._stateName(center) || config.label || "Signals";
     core.append(coreValue, coreLabel);
@@ -454,7 +465,7 @@ class UrDashCard extends HTMLElement {
       satellite.className = "orbit-satellite";
       satellite.style.left = `${positions[index][0]}%`;
       satellite.style.top = `${positions[index][1]}%`;
-      satellite.textContent = `${this._stateName(state)} ${state.state}`;
+      satellite.textContent = `${this._shortName(state)} ${this._formatValue(state.state, state.attributes?.unit_of_measurement)}`;
       satellite.addEventListener("click", () => this._runAction({ type: "more_info", entity_id: state.entity_id }));
       orbit.appendChild(satellite);
     }
@@ -473,7 +484,7 @@ class UrDashCard extends HTMLElement {
       item.type = "button";
       item.className = "constellation-node";
       item.style.setProperty("--i", index);
-      item.append(this._icon(this._domainIcon(state.entity_id)), document.createTextNode(`${this._stateName(state)} · ${state.state}`));
+      item.append(this._icon(this._domainIcon(state.entity_id)), document.createTextNode(`${this._shortName(state)} · ${this._humanize(state.state)}`));
       item.addEventListener("click", () => this._runAction({ type: "more_info", entity_id: state.entity_id }));
       wrap.appendChild(item);
     }
@@ -516,6 +527,130 @@ class UrDashCard extends HTMLElement {
       wrap.appendChild(button);
     }
     return wrap;
+  }
+
+  _visualMap(config) {
+    const wrap = document.createElement("div");
+    wrap.className = "visual-map";
+    const nodes = (config.nodes || []).slice(0, 16).map((node) => ({
+      ...node,
+      x: this._clampNumber(node.position?.x, 0, 100, 50),
+      y: this._clampNumber(node.position?.y, 0, 100, 50),
+    }));
+    const nodeById = new Map(nodes.map((node) => [node.id, node]));
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "visual-map-links");
+    svg.setAttribute("viewBox", "0 0 100 100");
+    svg.setAttribute("preserveAspectRatio", "none");
+    const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    svg.appendChild(defs);
+
+    for (const [index, link] of (config.links || []).slice(0, 24).entries()) {
+      const from = nodeById.get(link.from);
+      const to = nodeById.get(link.to);
+      if (!from || !to) continue;
+      const state = this._state(link.entity);
+      const value = Number(this._boundValue(state, link.bind?.value || "state"));
+      const active = Number.isFinite(value) ? Math.abs(value) > 0 : Boolean(state);
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("class", `visual-link ${link.style?.animated && active ? "visual-link-animated" : ""}`);
+      path.setAttribute("d", this._visualMapPath(from, to, link.style?.curve));
+      path.setAttribute("pathLength", "100");
+      path.style.setProperty("--link-accent", this._safeAccent(link.style?.accent || config.style?.accent));
+      path.style.setProperty("--link-width", `${this._visualLinkWidth(link, value)}px`);
+      const markerId = this._visualMarker(defs, config.id, index, link.style?.accent || config.style?.accent);
+      if (link.style?.direction === "reverse") path.setAttribute("marker-start", `url(#${markerId})`);
+      else if (link.style?.direction !== "none") path.setAttribute("marker-end", `url(#${markerId})`);
+      svg.appendChild(path);
+
+      const label = document.createElement("span");
+      label.className = "visual-link-label";
+      label.style.left = `${(from.x + to.x) / 2}%`;
+      label.style.top = `${(from.y + to.y) / 2}%`;
+      label.style.setProperty("--link-accent", this._safeAccent(link.style?.accent || config.style?.accent));
+      label.textContent = this._visualLinkLabel(link, state);
+      label.dataset.linkIndex = String(index);
+      if (link.show_label !== false && label.textContent) wrap.appendChild(label);
+    }
+
+    wrap.appendChild(svg);
+
+    for (const node of nodes) {
+      const state = this._state(node.entity);
+      const element = document.createElement(this._actionAllowed(node.action) || node.entity ? "button" : "div");
+      element.className = [
+        "visual-node",
+        `visual-node-${this._safeEnum(node.size, ["micro", "small", "normal", "large", "hero"], "normal")}`,
+        `visual-node-${this._safeEnum(node.style?.shape, ["none", "soft", "pill", "circle", "orb", "core"], "soft")}`,
+      ].join(" ");
+      element.style.left = `${node.x}%`;
+      element.style.top = `${node.y}%`;
+      element.style.setProperty("--node-accent", this._safeAccent(node.style?.accent || config.style?.accent));
+      if (element.tagName === "BUTTON") {
+        element.type = "button";
+        element.addEventListener("click", () => this._runAction(node.action || { type: "more_info", entity_id: node.entity }));
+      }
+      if (node.icon) element.appendChild(this._icon(node.icon));
+      const value = document.createElement("strong");
+      value.textContent = this._formatValue(
+        this._boundValue(state, node.bind?.value || "state"),
+        this._boundValue(state, node.bind?.unit || "attributes.unit_of_measurement"),
+      );
+      const label = document.createElement("span");
+      label.textContent = node.label || this._shortName(state) || node.id;
+      element.append(value, label);
+      wrap.appendChild(element);
+    }
+
+    if (!nodes.length) wrap.appendChild(this._empty("No visual map nodes configured."));
+    return wrap;
+  }
+
+  _visualMapPath(from, to, curve = "soft") {
+    if (curve === "straight") return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const bend = curve === "arc" ? 0.34 : 0.2;
+    const c1x = from.x + dx * bend;
+    const c1y = from.y + dy * 0.04;
+    const c2x = to.x - dx * bend;
+    const c2y = to.y - dy * 0.04;
+    return `M ${from.x} ${from.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${to.x} ${to.y}`;
+  }
+
+  _visualMarker(defs, blockId, index, accent) {
+    const markerId = `urdash-arrow-${this._safeKind(blockId || "map")}-${index}`;
+    const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+    marker.setAttribute("id", markerId);
+    marker.setAttribute("viewBox", "0 0 10 10");
+    marker.setAttribute("markerWidth", "5");
+    marker.setAttribute("markerHeight", "5");
+    marker.setAttribute("refX", "8");
+    marker.setAttribute("refY", "5");
+    marker.setAttribute("orient", "auto-start-reverse");
+    const arrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    arrow.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+    arrow.setAttribute("fill", this._safeAccent(accent));
+    marker.appendChild(arrow);
+    defs.appendChild(marker);
+    return markerId;
+  }
+
+  _visualLinkWidth(link, value) {
+    if (typeof link.style?.width === "number") return this._clampNumber(link.style.width, 1, 10, 3);
+    if (link.style?.width !== "dynamic" || !Number.isFinite(value)) return 3;
+    return Math.max(2, Math.min(9, 2 + Math.sqrt(Math.abs(value)) / 8));
+  }
+
+  _visualLinkLabel(link, state) {
+    if (link.label && !state) return link.label;
+    if (!state) return link.label || "";
+    const value = this._formatValue(
+      this._boundValue(state, link.bind?.value || "state"),
+      this._boundValue(state, link.bind?.unit || "attributes.unit_of_measurement"),
+    );
+    return link.label ? `${link.label} ${value}` : value;
   }
 
   _actionButton(label, icon, action) {
@@ -634,13 +769,44 @@ class UrDashCard extends HTMLElement {
     return state?.attributes?.friendly_name || state?.entity_id || "";
   }
 
+  _shortName(state) {
+    const name = this._stateName(state);
+    return name
+      .replace(/\bLiving Room\b/gi, "")
+      .replace(/\bHome\b/gi, "")
+      .replace(/\bSensor\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim() || state?.entity_id || "Entity";
+  }
+
+  _formatValue(value, unit = "") {
+    if (value === null || value === undefined || value === "") return "--";
+    return `${this._humanize(value)}${unit || ""}`;
+  }
+
+  _humanize(value) {
+    const text = String(value ?? "");
+    const special = {
+      partlycloudy: "Partly cloudy",
+      clearnight: "Clear night",
+      fan_only: "Fan only",
+    };
+    if (special[text]) return special[text];
+    if (/^-?\d+(\.\d+)?$/.test(text)) return text;
+    return text
+      .replaceAll("_", " ")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   _entityLine(state, fallback) {
     const row = document.createElement("div");
     row.className = "entity-line";
     const name = document.createElement("span");
     name.textContent = this._stateName(state) || fallback || "Missing entity";
     const value = document.createElement("strong");
-    value.textContent = state ? `${state.state}${state.attributes?.unit_of_measurement || ""}` : "missing";
+    value.textContent = state ? this._formatValue(state.state, state.attributes?.unit_of_measurement) : "missing";
     row.append(name, value);
     return row;
   }
@@ -651,7 +817,7 @@ class UrDashCard extends HTMLElement {
     const title = document.createElement("span");
     title.textContent = label || "Signal";
     const strong = document.createElement("strong");
-    strong.textContent = value || "--";
+    strong.textContent = this._humanize(value || "--");
     tile.append(title, strong);
     return tile;
   }
@@ -895,6 +1061,7 @@ const styles = `
   .layout-canvas .block-stage {
     aspect-ratio: var(--urdash-aspect, 16/9);
     min-height: 360px;
+    overflow: hidden;
   }
 
   .layout-canvas .block { position: absolute; }
@@ -1031,7 +1198,10 @@ const styles = `
 
   .hero-value {
     display: grid;
-    gap: 6px;
+    align-content: center;
+    gap: 10px;
+    max-width: 100%;
+    min-width: 0;
     place-items: start;
   }
 
@@ -1048,19 +1218,35 @@ const styles = `
 
   .hero-value strong {
     color: var(--urdash-fg);
-    font-size: clamp(44px, 8vw, 92px);
-    line-height: 0.88;
+    max-width: 100%;
+    display: block;
+    margin-bottom: 8px;
+    font-size: clamp(38px, 6vw, 74px);
+    line-height: 1.05;
+    overflow-wrap: anywhere;
+    text-align: inherit;
+  }
+
+  .scale-xl .hero-value-short strong {
+    font-size: clamp(46px, 7vw, 84px);
+  }
+
+  .hero-value-long strong {
+    font-size: clamp(28px, 4.2vw, 48px);
+    line-height: 1.02;
   }
 
   .hero-value span {
     color: var(--urdash-fg);
     font-size: 14px;
+    line-height: 1.1;
     font-weight: 900;
   }
 
   .hero-value p {
     color: var(--urdash-muted);
     font-size: 12px;
+    line-height: 1.25;
   }
 
   .ambient-layer {
@@ -1373,7 +1559,7 @@ const styles = `
 
   .orbit-satellite {
     position: absolute;
-    max-width: 120px;
+    max-width: min(150px, 44%);
     border: 1px solid var(--urdash-line);
     border-radius: 999px;
     padding: 7px 10px;
@@ -1418,6 +1604,13 @@ const styles = `
     font-size: 11px;
     font-weight: 850;
     overflow: hidden;
+    min-width: 0;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .constellation-node ha-icon {
+    flex: 0 0 auto;
   }
 
   .constellation-node:nth-child(3n) { grid-column: span 3; }
@@ -1465,6 +1658,116 @@ const styles = `
     transform: translate(-50%, -50%);
   }
 
+  .visual-map {
+    position: relative;
+    min-height: 280px;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .visual-map-links {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+  }
+
+  .visual-link {
+    fill: none;
+    stroke: var(--link-accent, var(--accent));
+    stroke-width: var(--link-width, 3px);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.72;
+    filter: drop-shadow(0 0 10px color-mix(in srgb, var(--link-accent, var(--accent)) 36%, transparent));
+  }
+
+  .visual-link-animated {
+    stroke-dasharray: 9 11;
+    animation: urdash-flow 1.6s linear infinite;
+  }
+
+  .visual-link-label {
+    position: absolute;
+    z-index: 2;
+    max-width: 160px;
+    transform: translate(-50%, -50%);
+    border: 1px solid color-mix(in srgb, var(--link-accent, var(--accent)) 26%, var(--urdash-line));
+    border-radius: 999px;
+    padding: 5px 8px;
+    background: color-mix(in srgb, var(--urdash-panel) 82%, rgba(255,255,255,0.76));
+    color: var(--urdash-fg);
+    font-size: 10px;
+    font-weight: 900;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .visual-node {
+    position: absolute;
+    z-index: 3;
+    display: grid;
+    place-items: center;
+    gap: 4px;
+    min-width: 84px;
+    min-height: 72px;
+    border: 1px solid color-mix(in srgb, var(--node-accent, var(--accent)) 36%, var(--urdash-line));
+    border-radius: 8px;
+    padding: 10px;
+    background:
+      radial-gradient(circle at 34% 24%, rgba(255,255,255,0.74), transparent 26%),
+      color-mix(in srgb, var(--node-accent, var(--accent)) 14%, var(--urdash-panel));
+    color: var(--urdash-fg);
+    box-shadow: 0 18px 44px color-mix(in srgb, var(--node-accent, var(--accent)) 20%, transparent);
+    text-align: center;
+    transform: translate(-50%, -50%);
+  }
+
+  button.visual-node {
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .visual-node ha-icon {
+    width: 22px;
+    height: 22px;
+    color: var(--node-accent, var(--accent));
+  }
+
+  .visual-node strong {
+    max-width: 150px;
+    color: var(--urdash-fg);
+    font-size: 20px;
+    line-height: 1;
+    overflow-wrap: anywhere;
+  }
+
+  .visual-node span {
+    max-width: 150px;
+    color: var(--urdash-muted);
+    font-size: 11px;
+    font-weight: 900;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .visual-node-micro { min-width: 58px; min-height: 50px; padding: 7px; }
+  .visual-node-small { min-width: 72px; min-height: 62px; }
+  .visual-node-large { min-width: 112px; min-height: 96px; }
+  .visual-node-hero { min-width: 148px; min-height: 128px; }
+  .visual-node-hero strong { font-size: 34px; }
+  .visual-node-circle, .visual-node-orb, .visual-node-core { border-radius: 999px; aspect-ratio: 1; }
+  .visual-node-pill { border-radius: 999px; min-height: 54px; grid-template-columns: auto minmax(0, 1fr); text-align: left; }
+  .visual-node-core {
+    background:
+      radial-gradient(circle, color-mix(in srgb, var(--node-accent, var(--accent)) 24%, rgba(255,255,255,0.84)), rgba(255,255,255,0.22));
+  }
+
   hr {
     width: 100%;
     border: 0;
@@ -1500,6 +1803,11 @@ const styles = `
   @keyframes urdash-fade {
     from { opacity: 0; }
     to { opacity: 1; }
+  }
+
+  @keyframes urdash-flow {
+    from { stroke-dashoffset: 40; }
+    to { stroke-dashoffset: 0; }
   }
 
   @media (max-width: 680px) {

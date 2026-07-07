@@ -18,7 +18,8 @@ Do not generate JavaScript, HTML, CSS, markdown, or ordinary Lovelace cards.
 Use only entity IDs from the provided entity list.
 Design the card before composing blocks: choose the user's task, visible state, one-tap actions, secondary context, risky actions, and a layout that makes the card useful.
 Cards may combine multiple device functions when it helps the user's goal.
-Design expressive card experiences, not just block grids. Use canvas layout, floating primitives, hero values, ambient layers, orbit/constellation compositions, strips, and unframed surfaces when they improve the card.
+Design expressive card experiences, not just block grids. Use canvas layout, floating primitives, hero values, ambient layers, orbit/constellation compositions, visual maps, strips, and unframed surfaces when they improve the card.
+Use visual_map when the user asks for flows, relationships, topology, spatial control, power movement, irrigation paths, security perimeters, HVAC air movement, or any card that benefits from AI-designed nodes and links. Do not use predefined layouts; choose node positions and link paths based on the user's goal and the available entities.
 Prefer direct, usable controls over decorative blocks, but make the interface visually distinctive.
 Use declarative animation presets only when they improve clarity.
 """
@@ -85,6 +86,83 @@ STYLE_SCHEMA: dict[str, Any] = {
         "shape": {"type": "string", "enum": ["none", "soft", "pill", "circle"]},
         "density": {"type": "string", "enum": ["compact", "comfortable", "spacious"]},
         "accent": {"type": "string"},
+    },
+}
+
+VISUAL_NODE_STYLE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "accent": {"type": "string"},
+        "shape": {"type": "string", "enum": ["none", "soft", "pill", "circle", "orb", "core"]},
+        "tone": {"type": "string", "enum": ["neutral", "calm", "warm", "cool", "alert", "success"]},
+        "emphasis": {"type": "string", "enum": ["low", "normal", "high", "hero"]},
+    },
+}
+
+VISUAL_LINK_STYLE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "accent": {"type": "string"},
+        "width": {"anyOf": [{"type": "number"}, {"type": "string", "enum": ["dynamic"]}]},
+        "curve": {"type": "string", "enum": ["straight", "soft", "arc"]},
+        "animated": {"type": "boolean"},
+        "direction": {"type": "string", "enum": ["forward", "reverse", "none"]},
+    },
+}
+
+VISUAL_MAP_NODE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "label", "position"],
+    "properties": {
+        "id": {"type": "string"},
+        "label": {"type": "string"},
+        "show_label": {"type": "boolean"},
+        "entity": {"type": "string"},
+        "icon": {"type": "string"},
+        "size": {"type": "string", "enum": ["micro", "small", "normal", "large", "hero"]},
+        "position": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["x", "y"],
+            "properties": {
+                "x": {"type": "number"},
+                "y": {"type": "number"},
+            },
+        },
+        "bind": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "value": {"type": "string"},
+                "unit": {"type": "string"},
+            },
+        },
+        "style": VISUAL_NODE_STYLE_SCHEMA,
+        "action": ACTION_SCHEMA,
+    },
+}
+
+VISUAL_MAP_LINK_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["from", "to"],
+    "properties": {
+        "from": {"type": "string"},
+        "to": {"type": "string"},
+        "label": {"type": "string"},
+        "entity": {"type": "string"},
+        "bind": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "value": {"type": "string"},
+                "unit": {"type": "string"},
+            },
+        },
+        "style": VISUAL_LINK_STYLE_SCHEMA,
     },
 }
 
@@ -167,6 +245,7 @@ BLOCK_SCHEMA: dict[str, Any] = {
                 "entity_orbit",
                 "constellation",
                 "radial_scene",
+                "visual_map",
             ],
         },
         "title": {"type": "string"},
@@ -285,6 +364,8 @@ BLOCK_SCHEMA: dict[str, Any] = {
                 },
             },
         },
+        "nodes": {"type": "array", "items": VISUAL_MAP_NODE_SCHEMA},
+        "links": {"type": "array", "items": VISUAL_MAP_LINK_SCHEMA},
         "style": STYLE_SCHEMA,
         "presentation": PRESENTATION_SCHEMA,
         "animation": ANIMATION_SCHEMA,
@@ -491,13 +572,14 @@ def _requirements() -> list[str]:
         "Do not default to simple block-style UI. Prefer a designed composition with one strong focal area and supporting controls.",
         "Use canvas layout for fancy, spatial, or futuristic cards. Use grid layout only when utility and scanning are more important.",
         "Use presentation.surface to vary the visual treatment: naked, ghost, hero, floating, orb, strip, rail, panel, or glass.",
-        "Use hero_value, ambient, entity_orbit, constellation, and radial_scene for expressive visual structure when appropriate.",
+        "Use hero_value, ambient, entity_orbit, constellation, radial_scene, and visual_map for expressive visual structure when appropriate.",
+        "Use visual_map for relationship or flow cards. AI owns node positions, node sizes, labels, icons, link routing style, and animation choices; UrDash only renders the safe declarative map.",
         "Use ambient as non-interactive visual depth behind useful controls; do not make decoration the only content.",
         "For climate requests, include climate_control and useful mode/temperature controls.",
         "For room requests, combine controllable devices and key sensors in one card when helpful.",
         "For security requests, make attention states visible and require confirmation for risky actions.",
         "For sensor requests, make the primary value readable and include supporting context.",
-        "Use button, button_group, segmented_control, slider, climate_control, cover_control, scene_strip, toggle_group, value, value_cluster, timeline, chip_group, hero_value, entity_orbit, constellation, radial_scene, or ambient as needed.",
+        "Use button, button_group, segmented_control, slider, climate_control, cover_control, scene_strip, toggle_group, value, value_cluster, timeline, chip_group, hero_value, entity_orbit, constellation, radial_scene, visual_map, or ambient as needed.",
         "Keep blocks focused. Prefer 4 to 12 blocks unless the user requests a dense card.",
         "Do not invent entity IDs.",
         "Use declarative animation presets only; no CSS, HTML, or JavaScript.",
