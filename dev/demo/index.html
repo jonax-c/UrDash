@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UrDash v2 Renderer Demo</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #e9eeee;
+        color: #162529;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          linear-gradient(135deg, rgba(255,255,255,0.78), rgba(231,238,236,0.82)),
+          #e9eeee;
+      }
+
+      header {
+        max-width: 1440px;
+        margin: 0 auto;
+        padding: 28px 20px 18px;
+      }
+
+      header span {
+        color: #177063;
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 6px 0 8px;
+        color: #132a2e;
+        font-size: clamp(30px, 4vw, 52px);
+        line-height: 1;
+      }
+
+      p {
+        margin: 0;
+        color: #5b6f72;
+      }
+
+      main {
+        max-width: 1440px;
+        display: grid;
+        gap: 22px;
+        margin: 0 auto;
+        padding: 0 20px 32px;
+      }
+
+      .demo-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 22px;
+      }
+
+      .demo-grid > section {
+        min-width: 0;
+        display: grid;
+        gap: 10px;
+      }
+
+      .demo-grid h2 {
+        margin: 0;
+        color: #20383c;
+        font-size: 15px;
+      }
+
+      .wide {
+        grid-column: 1 / -1;
+      }
+
+      ha-icon {
+        display: inline-grid;
+        place-items: center;
+        width: 1.2em;
+        height: 1.2em;
+      }
+
+      @media (max-width: 900px) {
+        .demo-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span>UrDash v2 local demo</span>
+      <h1>Renderer sample cards</h1>
+      <p>Static page with mocked Home Assistant state. No Home Assistant instance is required.</p>
+    </header>
+
+    <main>
+      <div class="demo-grid" id="cards"></div>
+    </main>
+
+    <script type="module">
+      class DemoHaIcon extends HTMLElement {
+        static get observedAttributes() {
+          return ["icon"];
+        }
+
+        connectedCallback() {
+          this.render();
+        }
+
+        attributeChangedCallback() {
+          this.render();
+        }
+
+        render() {
+          const icon = this.getAttribute("icon") || "mdi:circle";
+          const label = icon.replace("mdi:", "").split("-").map((part) => part[0] || "").join("").slice(0, 2).toUpperCase();
+          this.textContent = label || "IC";
+          this.title = icon;
+        }
+      }
+
+      if (!customElements.get("ha-icon")) {
+        customElements.define("ha-icon", DemoHaIcon);
+      }
+
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js");
+
+      const hass = {
+        config: {
+          unit_system: {
+            temperature: "°C",
+          },
+        },
+        states: {
+          "sensor.living_room_temperature": state("sensor.living_room_temperature", "24", "Living Room Temperature", { unit_of_measurement: "°C", device_class: "temperature" }),
+          "sensor.living_room_humidity": state("sensor.living_room_humidity", "57", "Living Room Humidity", { unit_of_measurement: "%", device_class: "humidity" }),
+          "sensor.living_room_air_quality": state("sensor.living_room_air_quality", "Good", "Air Quality"),
+          "light.living_room_main": state("light.living_room_main", "on", "Main Lights"),
+          "light.living_room_lamp": state("light.living_room_lamp", "off", "Reading Lamp"),
+          "climate.living_room_ac": state("climate.living_room_ac", "cool", "Living Room AC", {
+            current_temperature: 24,
+            temperature: 25,
+            hvac_modes: ["cool", "dry", "fan_only", "off"],
+          }),
+          "cover.living_room_curtain": state("cover.living_room_curtain", "closed", "Curtain"),
+          "binary_sensor.front_door": state("binary_sensor.front_door", "off", "Front Door"),
+          "binary_sensor.hall_motion": state("binary_sensor.hall_motion", "off", "Hall Motion"),
+          "lock.front_door": state("lock.front_door", "locked", "Front Door Lock"),
+          "weather.home": state("weather.home", "partlycloudy", "Home Weather", { temperature: 27, temperature_unit: "°C", humidity: 63 }),
+          "sensor.outdoor_humidity": state("sensor.outdoor_humidity", "63", "Outdoor Humidity", { unit_of_measurement: "%" }),
+          "sensor.wind_speed": state("sensor.wind_speed", "12", "Wind Speed", { unit_of_measurement: "km/h" }),
+          "sensor.home_power": state("sensor.home_power", "812", "Home Power", { unit_of_measurement: "W" }),
+          "sensor.energy_today": state("sensor.energy_today", "9.4", "Energy Today", { unit_of_measurement: "kWh" }),
+          "sensor.solar_power": state("sensor.solar_power", "426", "Solar Power", { unit_of_measurement: "W" }),
+          "scene.living_room_movie": state("scene.living_room_movie", "scening", "Movie Mode"),
+          "scene.home_goodnight": state("scene.home_goodnight", "scening", "Good Night"),
+          "media_player.living_room": state("media_player.living_room", "playing", "Living Room Speaker"),
+        },
+        callService(domain, service, data) {
+          console.log("mock callService", { domain, service, data });
+        },
+      };
+
+      const samples = [
+        {
+          title: "Room Control",
+          className: "wide",
+          config: roomControlCard(),
+        },
+        {
+          title: "Quiet Climate",
+          config: climateCard(),
+        },
+        {
+          title: "Security Snapshot",
+          config: securityCard(),
+        },
+        {
+          title: "Weather And Energy",
+          className: "wide",
+          config: weatherEnergyCard(),
+        },
+      ];
+
+      const host = document.querySelector("#cards");
+      for (const sample of samples) {
+        const section = document.createElement("section");
+        if (sample.className) section.className = sample.className;
+        const title = document.createElement("h2");
+        title.textContent = sample.title;
+        const card = document.createElement("urdash-card");
+        card.setConfig(sample.config);
+        card.hass = hass;
+        section.append(title, card);
+        host.appendChild(section);
+      }
+
+      function state(entityId, value, friendlyName, attributes = {}) {
+        return {
+          entity_id: entityId,
+          state: value,
+          attributes: {
+            friendly_name: friendlyName,
+            ...attributes,
+          },
+          last_changed: new Date(Date.now() - 1000 * 60 * 8).toISOString(),
+          last_updated: new Date().toISOString(),
+        };
+      }
+
+      function baseCard({ heightMode = "auto", intent, layout }) {
+        return {
+          type: "custom:urdash-card",
+          urdash_schema: 2,
+          height_mode: heightMode,
+          card: { intent, layout },
+        };
+      }
+
+      function roomControlCard() {
+        return baseCard({
+          intent: {
+            goal: "room_control",
+            title: "Living Room Command",
+            summary: "Comfort, lights, covers, scenes, and key signals in one card.",
+            risk_level: "medium",
+            primary_entities: ["climate.living_room_ac", "light.living_room_main", "cover.living_room_curtain"],
+            primary_actions: ["light.toggle", "climate.set_temperature", "cover.open_cover"],
+          },
+          layout: {
+            type: "grid",
+            columns: 12,
+            density: "comfortable",
+            theme: "aurora",
+            blocks: [
+              {
+                id: "headline",
+                kind: "text",
+                text: "Living room is ready",
+                subtitle: "Focused command surface",
+                variant: "headline",
+                grid: { col: 1, row: 1, w: 5, h: 2 },
+                style: { emphasis: "hero", tone: "cool", accent: "#1f8a70" },
+                animation: { preset: "fade_in", trigger: "on_load", speed: "normal", intensity: "subtle" },
+              },
+              {
+                id: "comfort",
+                kind: "value_cluster",
+                title: "Comfort",
+                icon: "mdi:thermometer",
+                grid: { col: 6, row: 1, w: 4, h: 2 },
+                items: [
+                  { entity: "sensor.living_room_temperature", label: "Temp", value: "state" },
+                  { entity: "sensor.living_room_humidity", label: "Humidity", value: "state" },
+                  { entity: "sensor.living_room_air_quality", label: "Air", value: "state" },
+                ],
+                style: { accent: "#3f7cac" },
+              },
+              {
+                id: "modes",
+                kind: "scene_strip",
+                title: "Scenes",
+                icon: "mdi:palette",
+                grid: { col: 10, row: 1, w: 3, h: 2 },
+                actions: [
+                  { label: "Movie", entity_id: "scene.living_room_movie" },
+                  { label: "Night", entity_id: "scene.home_goodnight" },
+                ],
+                style: { accent: "#b76e79" },
+              },
+              {
+                id: "climate",
+                kind: "climate_control",
+                title: "Climate",
+                entity: "climate.living_room_ac",
+                icon: "mdi:air-conditioner",
+                grid: { col: 1, row: 3, w: 5, h: 3 },
+                style: { accent: "#4f8fba", emphasis: "high" },
+              },
+              {
+                id: "lights",
+                kind: "toggle_group",
+                title: "Lights",
+                icon: "mdi:lightbulb-group",
+                entities: ["light.living_room_main", "light.living_room_lamp"],
+                grid: { col: 6, row: 3, w: 3, h: 2 },
+                style: { accent: "#d79a3f" },
+              },
+              {
+                id: "cover",
+                kind: "cover_control",
+                title: "Curtain",
+                entity: "cover.living_room_curtain",
+                icon: "mdi:window-shutter",
+                grid: { col: 9, row: 3, w: 4, h: 2 },
+                style: { accent: "#6f7d8c" },
+              },
+              {
+                id: "timeline",
+                kind: "timeline",
+                title: "Recent signals",
+                entities: ["light.living_room_main", "climate.living_room_ac", "cover.living_room_curtain", "media_player.living_room"],
+                grid: { col: 6, row: 5, w: 7, h: 2 },
+                style: { accent: "#1f8a70" },
+              },
+            ],
+          },
+        });
+      }
+
+      function climateCard() {
+        return baseCard({
+          intent: {
+            goal: "climate_control",
+            title: "Quiet Climate",
+            summary: "Minimal AC control with just enough context.",
+            risk_level: "low",
+            primary_entities: ["climate.living_room_ac"],
+            primary_actions: ["climate.set_temperature", "climate.set_hvac_mode"],
+          },
+          layout: {
+            type: "grid",
+            columns: 8,
+            density: "spacious",
+            theme: "quiet",
+            blocks: [
+              {
+                id: "climate",
+                kind: "climate_control",
+                entity: "climate.living_room_ac",
+                grid: { col: 1, row: 1, w: 8, h: 3 },
+                style: { accent: "#1f8a70", emphasis: "hero" },
+              },
+              {
+                id: "chips",
+                kind: "chip_group",
+                chips: [
+                  { label: "Air good", entity: "sensor.living_room_air_quality", icon: "mdi:leaf" },
+                  { label: "Humidity", entity: "sensor.living_room_humidity", icon: "mdi:water-percent" },
+                ],
+                grid: { col: 1, row: 4, w: 8, h: 1 },
+                style: { accent: "#1f8a70" },
+              },
+            ],
+          },
+        });
+      }
+
+      function securityCard() {
+        return baseCard({
+          intent: {
+            goal: "security",
+            title: "Entry Watch",
+            summary: "Locks, doors, and motion in one calm check.",
+            risk_level: "high",
+            primary_entities: ["lock.front_door", "binary_sensor.front_door", "binary_sensor.hall_motion"],
+            primary_actions: ["lock.lock", "lock.unlock"],
+          },
+          layout: {
+            type: "grid",
+            columns: 8,
+            density: "comfortable",
+            theme: "graphite",
+            blocks: [
+              {
+                id: "status",
+                kind: "security_cluster",
+                title: "All clear",
+                icon: "mdi:shield-check",
+                entities: ["lock.front_door", "binary_sensor.front_door", "binary_sensor.hall_motion"],
+                grid: { col: 1, row: 1, w: 8, h: 3 },
+                style: { accent: "#62b488" },
+                animation: { preset: "glow", trigger: "state_alert", speed: "slow", intensity: "subtle" },
+              },
+              {
+                id: "lock",
+                kind: "button_group",
+                title: "Door control",
+                grid: { col: 1, row: 4, w: 8, h: 1 },
+                buttons: [
+                  {
+                    label: "Lock",
+                    icon: "mdi:lock",
+                    action: { type: "service", domain: "lock", service: "lock", entity_id: "lock.front_door" },
+                  },
+                  {
+                    label: "Unlock",
+                    icon: "mdi:lock-open",
+                    action: {
+                      type: "service",
+                      domain: "lock",
+                      service: "unlock",
+                      entity_id: "lock.front_door",
+                      confirmation: { required: true, text: "Unlock front door?" },
+                    },
+                  },
+                ],
+                style: { accent: "#c06c5a" },
+              },
+            ],
+          },
+        });
+      }
+
+      function weatherEnergyCard() {
+        return baseCard({
+          intent: {
+            goal: "multi_device_control",
+            title: "Outside And Power",
+            summary: "Weather, solar, and energy load for quick home awareness.",
+            risk_level: "low",
+            primary_entities: ["weather.home", "sensor.home_power", "sensor.solar_power"],
+            primary_actions: [],
+          },
+          layout: {
+            type: "grid",
+            columns: 12,
+            density: "comfortable",
+            theme: "sunrise",
+            blocks: [
+              {
+                id: "weather",
+                kind: "value_cluster",
+                title: "Weather",
+                icon: "mdi:weather-partly-cloudy",
+                grid: { col: 1, row: 1, w: 5, h: 2 },
+                items: [
+                  { entity: "weather.home", label: "State", value: "state" },
+                  { entity: "weather.home", label: "Temp", value: "attributes.temperature", unit: "°C" },
+                  { entity: "sensor.wind_speed", label: "Wind", value: "state" },
+                ],
+                style: { accent: "#d58a3a" },
+              },
+              {
+                id: "power",
+                kind: "radial_meter",
+                title: "Power now",
+                entity: "sensor.home_power",
+                bind: { value: "state" },
+                range: { min: 0, max: 3000 },
+                grid: { col: 6, row: 1, w: 3, h: 3 },
+                style: { accent: "#1f8a70", emphasis: "high" },
+                animation: { preset: "breathe", trigger: "always", speed: "slow", intensity: "subtle" },
+              },
+              {
+                id: "energy",
+                kind: "gauge",
+                title: "Energy today",
+                entity: "sensor.energy_today",
+                bind: { value: "state" },
+                range: { min: 0, max: 30 },
+                grid: { col: 9, row: 1, w: 4, h: 2 },
+                style: { accent: "#597fba" },
+              },
+              {
+                id: "solar",
+                kind: "sparkline",
+                title: "Solar",
+                entity: "sensor.solar_power",
+                bind: { value: "state" },
+                grid: { col: 1, row: 3, w: 5, h: 2 },
+                style: { accent: "#d9a441" },
+              },
+              {
+                id: "signals",
+                kind: "entity_list",
+                title: "Signals",
+                entities: ["sensor.home_power", "sensor.solar_power", "sensor.energy_today", "sensor.outdoor_humidity"],
+                grid: { col: 9, row: 3, w: 4, h: 2 },
+                style: { accent: "#1f8a70" },
+              },
+            ],
+          },
+        });
+      }
+    </script>
+  </body>
+</html>

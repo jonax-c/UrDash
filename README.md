@@ -115,6 +115,20 @@ Actions are interpreted by UrDash with a service allowlist and confirmation for 
 
 ## Local Validation
 
+For renderer-only work, use the static demo page. It does not require Home Assistant:
+
+```sh
+python3 -m http.server 8765
+```
+
+Open:
+
+```text
+http://localhost:8765/dev/demo/
+```
+
+The static demo mocks `hass`, renders several v2 sample cards, and directly loads the real `urdash-custom-card.js` renderer.
+
 Use `dev/ha-container` to run a disposable Home Assistant container and validate UrDash preview rendering without touching an online Home Assistant instance.
 
 The validation URL is:
