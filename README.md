@@ -51,7 +51,7 @@ The base URL can be changed for OpenAI-compatible providers. If the AI request f
 Before using generated YAML in Lovelace, add the UrDash card resource:
 
 ```text
-/urdash/static/urdash-custom-card.js?v=20260707.1
+/urdash/static/urdash-custom-card.js?v=20260707.2
 ```
 
 Set the resource type to `JavaScript module`.
@@ -110,6 +110,11 @@ The renderer accepts only `urdash_schema: 2` cards. It renders safe primitives s
 - `radial_meter`
 - `timeline`
 - `chip_group`
+- `hero_value`
+- `ambient`
+- `entity_orbit`
+- `constellation`
+- `radial_scene`
 
 Actions are interpreted by UrDash with a service allowlist and confirmation for risky operations. The AI cannot inject arbitrary frontend code.
 

@@ -171,6 +171,11 @@
 
       const samples = [
         {
+          title: "Fancy Scene Composition",
+          className: "wide",
+          config: fancySceneCard(),
+        },
+        {
           title: "Room Control",
           className: "wide",
           config: roomControlCard(),
@@ -223,6 +228,106 @@
           height_mode: heightMode,
           card: { intent, layout },
         };
+      }
+
+      function fancySceneCard() {
+        return baseCard({
+          heightMode: "viewport",
+          intent: {
+            goal: "multi_device_control",
+            title: "Evening Atmosphere",
+            summary: "A spatial command surface with live comfort, room signals, and one-touch scenes.",
+            risk_level: "medium",
+            primary_entities: ["sensor.living_room_temperature", "light.living_room_main", "climate.living_room_ac"],
+            primary_actions: ["scene.turn_on", "light.toggle", "climate.set_temperature"],
+          },
+          layout: {
+            type: "canvas",
+            aspect_ratio: "16/9",
+            density: "spacious",
+            theme: "aurora",
+            blocks: [
+              {
+                id: "aura",
+                kind: "ambient",
+                title: "Living Room",
+                subtitle: "spatial control layer",
+                icon: "mdi:creation",
+                frame: { x: 8, y: 6, w: 52, h: 74 },
+                style: { accent: "#7f6df2" },
+                presentation: { surface: "naked", layer: "backdrop", align: "center", scale: "xl" },
+                animation: { preset: "breathe", trigger: "always", speed: "slow", intensity: "subtle" },
+              },
+              {
+                id: "temperature_hero",
+                kind: "hero_value",
+                entity: "sensor.living_room_temperature",
+                bind: { value: "state", unit: "attributes.unit_of_measurement" },
+                label: "Current comfort",
+                subtitle: "AC is holding a calm evening temperature",
+                icon: "mdi:thermometer",
+                frame: { x: 9, y: 18, w: 28, h: 32 },
+                style: { accent: "#1f8a70", emphasis: "hero" },
+                presentation: { surface: "naked", layer: "raised", align: "center", scale: "xl" },
+              },
+              {
+                id: "orbit",
+                kind: "entity_orbit",
+                entity: "sensor.living_room_temperature",
+                entities: [
+                  "sensor.living_room_humidity",
+                  "sensor.living_room_air_quality",
+                  "light.living_room_main",
+                  "light.living_room_lamp",
+                  "cover.living_room_curtain",
+                  "media_player.living_room",
+                ],
+                frame: { x: 38, y: 8, w: 34, h: 62 },
+                style: { accent: "#d79a3f" },
+                presentation: { surface: "ghost", layer: "raised", align: "center", scale: "normal" },
+              },
+              {
+                id: "scenes",
+                kind: "radial_scene",
+                title: "Modes",
+                subtitle: "tap a scene",
+                icon: "mdi:palette",
+                actions: [
+                  { label: "Movie", entity_id: "scene.living_room_movie", icon: "mdi:movie-open" },
+                  { label: "Night", entity_id: "scene.home_goodnight", icon: "mdi:weather-night" },
+                ],
+                frame: { x: 70, y: 14, w: 24, h: 50 },
+                style: { accent: "#b76e79" },
+                presentation: { surface: "glass", layer: "overlay", align: "center", scale: "normal" },
+              },
+              {
+                id: "command_rail",
+                kind: "button_group",
+                title: "Quick actions",
+                buttons: [
+                  {
+                    label: "Main lights",
+                    icon: "mdi:lightbulb",
+                    action: { type: "service", domain: "light", service: "toggle", entity_id: "light.living_room_main" },
+                  },
+                  {
+                    label: "Lamp",
+                    icon: "mdi:lamp",
+                    action: { type: "service", domain: "light", service: "toggle", entity_id: "light.living_room_lamp" },
+                  },
+                  {
+                    label: "Curtain",
+                    icon: "mdi:window-shutter",
+                    action: { type: "service", domain: "cover", service: "open_cover", entity_id: "cover.living_room_curtain" },
+                  },
+                ],
+                frame: { x: 8, y: 72, w: 84, h: 18 },
+                style: { accent: "#1f8a70" },
+                presentation: { surface: "floating", layer: "overlay", align: "center", scale: "normal" },
+              },
+            ],
+          },
+        });
       }
 
       function roomControlCard() {

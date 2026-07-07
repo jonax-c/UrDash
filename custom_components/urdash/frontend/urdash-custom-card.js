@@ -68,7 +68,13 @@ class UrDashCard extends HTMLElement {
 
   _createBlock(config, layoutType) {
     const block = document.createElement("section");
-    block.className = `block block-${this._safeKind(config.kind)} ${this._styleClasses(config.style)} ${this._animationClasses(config.animation)}`;
+    block.className = [
+      "block",
+      `block-${this._safeKind(config.kind)}`,
+      this._styleClasses(config.style),
+      this._presentationClasses(config.presentation),
+      this._animationClasses(config.animation),
+    ].join(" ");
     block.dataset.blockId = config.id || "";
     block.style.setProperty("--accent", this._safeAccent(config.style?.accent));
 
@@ -146,6 +152,16 @@ class UrDashCard extends HTMLElement {
         return document.createElement("hr");
       case "chip_group":
         return this._chipGroup(config.chips || []);
+      case "hero_value":
+        return this._heroValue(config);
+      case "ambient":
+        return this._ambient(config);
+      case "entity_orbit":
+        return this._entityOrbit(config);
+      case "constellation":
+        return this._constellation(config);
+      case "radial_scene":
+        return this._radialScene(config);
       default:
         return this._empty(`Unsupported block: ${config.kind || "unknown"}`);
     }
@@ -374,6 +390,134 @@ class UrDashCard extends HTMLElement {
     return group;
   }
 
+  _heroValue(config) {
+    const state = this._state(config.entity);
+    const value = this._boundValue(state, config.bind?.value || "state");
+    const unit = this._boundValue(state, config.bind?.unit || "attributes.unit_of_measurement");
+    const wrap = document.createElement("div");
+    wrap.className = "hero-value";
+    if (config.icon) wrap.appendChild(this._icon(config.icon));
+    const valueEl = document.createElement("strong");
+    valueEl.textContent = `${value ?? "--"}${unit || ""}`;
+    const label = document.createElement("span");
+    label.textContent = config.label || config.title || this._stateName(state) || config.entity || "Status";
+    const subtitle = document.createElement("p");
+    subtitle.textContent = config.subtitle || state?.state || "";
+    wrap.append(valueEl, label, subtitle);
+    return wrap;
+  }
+
+  _ambient(config) {
+    const wrap = document.createElement("div");
+    wrap.className = "ambient-layer";
+    const icon = document.createElement("div");
+    icon.className = "ambient-icon";
+    icon.appendChild(this._icon(config.icon || "mdi:creation"));
+    const text = document.createElement("div");
+    text.className = "ambient-text";
+    const title = document.createElement("strong");
+    title.textContent = config.title || config.text || "";
+    const subtitle = document.createElement("span");
+    subtitle.textContent = config.subtitle || "";
+    text.append(title, subtitle);
+    wrap.append(icon, text);
+    return wrap;
+  }
+
+  _entityOrbit(config) {
+    const states = (config.entities || []).map((entityId) => this._state(entityId)).filter(Boolean);
+    const center = this._state(config.entity) || states[0];
+    const orbit = document.createElement("div");
+    orbit.className = "entity-orbit";
+    const core = document.createElement("div");
+    core.className = "orbit-core";
+    const coreValue = document.createElement("strong");
+    coreValue.textContent = center ? `${center.state}${center.attributes?.unit_of_measurement || ""}` : config.title || "Home";
+    const coreLabel = document.createElement("span");
+    coreLabel.textContent = this._stateName(center) || config.label || "Signals";
+    core.append(coreValue, coreLabel);
+    orbit.appendChild(core);
+
+    const positions = [
+      [50, 5],
+      [84, 22],
+      [88, 65],
+      [50, 90],
+      [12, 65],
+      [16, 22],
+      [68, 48],
+      [32, 48],
+    ];
+    for (const [index, state] of states.slice(0, 8).entries()) {
+      const satellite = document.createElement("button");
+      satellite.type = "button";
+      satellite.className = "orbit-satellite";
+      satellite.style.left = `${positions[index][0]}%`;
+      satellite.style.top = `${positions[index][1]}%`;
+      satellite.textContent = `${this._stateName(state)} ${state.state}`;
+      satellite.addEventListener("click", () => this._runAction({ type: "more_info", entity_id: state.entity_id }));
+      orbit.appendChild(satellite);
+    }
+    return orbit;
+  }
+
+  _constellation(config) {
+    const states = (config.entities || []).map((entityId) => this._state(entityId)).filter(Boolean);
+    const wrap = document.createElement("div");
+    wrap.className = "constellation";
+    const title = document.createElement("strong");
+    title.textContent = config.title || "Constellation";
+    wrap.appendChild(title);
+    for (const [index, state] of states.slice(0, 9).entries()) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "constellation-node";
+      item.style.setProperty("--i", index);
+      item.append(this._icon(this._domainIcon(state.entity_id)), document.createTextNode(`${this._stateName(state)} · ${state.state}`));
+      item.addEventListener("click", () => this._runAction({ type: "more_info", entity_id: state.entity_id }));
+      wrap.appendChild(item);
+    }
+    if (!states.length) wrap.appendChild(this._empty("No constellation entities configured."));
+    return wrap;
+  }
+
+  _radialScene(config) {
+    const wrap = document.createElement("div");
+    wrap.className = "radial-scene";
+    const center = document.createElement("div");
+    center.className = "radial-scene-center";
+    if (config.icon) center.appendChild(this._icon(config.icon));
+    const title = document.createElement("strong");
+    title.textContent = config.title || "Scene";
+    const subtitle = document.createElement("span");
+    subtitle.textContent = config.subtitle || "One tap modes";
+    center.append(title, subtitle);
+    wrap.appendChild(center);
+
+    const actions = (config.actions || []).slice(0, 6);
+    const positions = [
+      [50, 8],
+      [86, 28],
+      [80, 72],
+      [50, 92],
+      [20, 72],
+      [14, 28],
+    ];
+    for (const [index, action] of actions.entries()) {
+      const button = this._actionButton(action.label, action.icon || "mdi:palette", {
+        type: "service",
+        domain: "scene",
+        service: "turn_on",
+        entity_id: action.entity_id,
+      });
+      button.classList.add("radial-scene-action");
+      button.style.left = `${positions[index][0]}%`;
+      button.style.top = `${positions[index][1]}%`;
+      wrap.appendChild(button);
+    }
+    return wrap;
+  }
+
   _actionButton(label, icon, action) {
     const button = document.createElement("button");
     button.className = "action-button";
@@ -574,6 +718,15 @@ class UrDashCard extends HTMLElement {
     ].join(" ");
   }
 
+  _presentationClasses(presentation = {}) {
+    return [
+      `surface-${this._safeEnum(presentation.surface, ["panel", "glass", "ghost", "naked", "hero", "floating", "orb", "strip", "rail"], "panel")}`,
+      `scale-${this._safeEnum(presentation.scale, ["micro", "small", "normal", "large", "xl"], "normal")}`,
+      `align-${this._safeEnum(presentation.align, ["start", "center", "end", "stretch"], "stretch")}`,
+      `layer-${this._safeEnum(presentation.layer, ["backdrop", "base", "raised", "overlay"], "base")}`,
+    ].join(" ");
+  }
+
   _animationClasses(animation = {}) {
     const preset = this._safeEnum(animation.preset, ["none", "pulse", "breathe", "glow", "float", "shimmer", "progress", "orbit", "wave", "count_up", "state_flash", "slide_in", "fade_in"], "none");
     const trigger = this._safeEnum(animation.trigger, ["always", "on_load", "on_state_change", "state_on", "state_alert", "on_hover"], "always");
@@ -761,6 +914,74 @@ const styles = `
     overflow: hidden;
   }
 
+  .layer-backdrop { z-index: 0; pointer-events: none; }
+  .layer-base { z-index: 1; }
+  .layer-raised { z-index: 2; }
+  .layer-overlay { z-index: 3; }
+  .align-start { place-self: start stretch; }
+  .align-center { place-self: center; }
+  .align-end { place-self: end stretch; }
+  .align-stretch { place-self: stretch; }
+
+  .surface-glass {
+    background: linear-gradient(135deg, rgba(255,255,255,0.56), rgba(255,255,255,0.22));
+    border-color: rgba(255,255,255,0.46);
+    backdrop-filter: blur(24px) saturate(1.18);
+  }
+
+  .surface-ghost, .surface-naked {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .surface-naked {
+    padding: 0;
+  }
+
+  .surface-hero {
+    min-height: 210px;
+    align-content: center;
+    background:
+      radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--accent) 34%, transparent), transparent 32%),
+      linear-gradient(135deg, color-mix(in srgb, var(--accent) 18%, rgba(255,255,255,0.7)), rgba(255,255,255,0.32));
+  }
+
+  .surface-floating {
+    border-radius: 999px;
+    place-self: center;
+    padding: 12px 16px;
+    box-shadow: 0 20px 50px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+
+  .surface-orb {
+    aspect-ratio: 1;
+    border-radius: 999px;
+    place-items: center;
+    align-content: center;
+    background:
+      radial-gradient(circle at 38% 32%, rgba(255,255,255,0.82), transparent 21%),
+      radial-gradient(circle, color-mix(in srgb, var(--accent) 26%, transparent), rgba(255,255,255,0.2));
+  }
+
+  .surface-strip, .surface-rail {
+    min-height: 0;
+    border-radius: 999px;
+    padding: 10px 12px;
+    align-content: center;
+  }
+
+  .surface-rail {
+    border-radius: 8px;
+    border-left: 4px solid var(--accent);
+  }
+
+  .scale-micro { font-size: 0.78em; }
+  .scale-small { font-size: 0.88em; }
+  .scale-large { font-size: 1.14em; }
+  .scale-xl { font-size: 1.32em; }
+
   .theme-quiet .block {
     border-left: 0;
     border-right: 0;
@@ -807,6 +1028,94 @@ const styles = `
   .text-title p { font-size: 22px; }
   .text-body p { font-size: 15px; }
   .text-caption p, .text-label p { color: var(--urdash-muted); font-size: 12px; }
+
+  .hero-value {
+    display: grid;
+    gap: 6px;
+    place-items: start;
+  }
+
+  .align-center .hero-value {
+    place-items: center;
+    text-align: center;
+  }
+
+  .hero-value ha-icon {
+    width: 30px;
+    height: 30px;
+    color: var(--accent);
+  }
+
+  .hero-value strong {
+    color: var(--urdash-fg);
+    font-size: clamp(44px, 8vw, 92px);
+    line-height: 0.88;
+  }
+
+  .hero-value span {
+    color: var(--urdash-fg);
+    font-size: 14px;
+    font-weight: 900;
+  }
+
+  .hero-value p {
+    color: var(--urdash-muted);
+    font-size: 12px;
+  }
+
+  .ambient-layer {
+    min-height: 100%;
+    display: grid;
+    place-items: center;
+    position: relative;
+    opacity: 0.9;
+  }
+
+  .ambient-layer::before {
+    content: "";
+    position: absolute;
+    inset: 8%;
+    border-radius: 999px;
+    background:
+      radial-gradient(circle, color-mix(in srgb, var(--accent) 34%, transparent), transparent 62%),
+      conic-gradient(from 180deg, transparent, color-mix(in srgb, var(--accent) 24%, transparent), transparent);
+    filter: blur(2px);
+  }
+
+  .ambient-icon {
+    display: grid;
+    place-items: center;
+    width: min(38vw, 220px);
+    aspect-ratio: 1;
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+    border-radius: 999px;
+    color: var(--accent);
+    position: relative;
+  }
+
+  .ambient-icon ha-icon {
+    width: 54px;
+    height: 54px;
+    opacity: 0.72;
+  }
+
+  .ambient-text {
+    display: grid;
+    gap: 3px;
+    place-items: center;
+    margin-top: -22px;
+    position: relative;
+  }
+
+  .ambient-text strong {
+    color: var(--urdash-fg);
+    font-size: 15px;
+  }
+
+  .ambient-text span {
+    color: var(--urdash-muted);
+    font-size: 12px;
+  }
 
   .icon-orb {
     display: grid;
@@ -1028,6 +1337,132 @@ const styles = `
     width: 16px;
     height: 16px;
     color: var(--accent);
+  }
+
+  .entity-orbit {
+    min-height: 240px;
+    position: relative;
+  }
+
+  .orbit-core {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    display: grid;
+    place-items: center;
+    width: min(46%, 170px);
+    aspect-ratio: 1;
+    border: 1px solid color-mix(in srgb, var(--accent) 38%, white);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 16%, rgba(255,255,255,0.68));
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+
+  .orbit-core strong {
+    color: var(--urdash-fg);
+    font-size: 28px;
+    line-height: 1;
+  }
+
+  .orbit-core span {
+    max-width: 120px;
+    color: var(--urdash-muted);
+    font-size: 11px;
+    font-weight: 850;
+  }
+
+  .orbit-satellite {
+    position: absolute;
+    max-width: 120px;
+    border: 1px solid var(--urdash-line);
+    border-radius: 999px;
+    padding: 7px 10px;
+    background: rgba(255,255,255,0.62);
+    color: var(--urdash-fg);
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 850;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+  }
+
+  .constellation {
+    min-height: 220px;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-auto-rows: 42px;
+    gap: 8px;
+    align-content: center;
+    position: relative;
+  }
+
+  .constellation > strong {
+    grid-column: 1 / -1;
+    color: var(--urdash-fg);
+    font-size: 15px;
+  }
+
+  .constellation-node {
+    grid-column: span 2;
+    display: inline-flex;
+    gap: 7px;
+    align-items: center;
+    border: 1px solid var(--urdash-line);
+    border-radius: 999px;
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.38);
+    color: var(--urdash-fg);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 850;
+    overflow: hidden;
+  }
+
+  .constellation-node:nth-child(3n) { grid-column: span 3; }
+  .constellation-node:nth-child(4n) { transform: translateY(12px); }
+  .constellation-node ha-icon { color: var(--accent); }
+
+  .radial-scene {
+    min-height: 260px;
+    position: relative;
+  }
+
+  .radial-scene-center {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    display: grid;
+    place-items: center;
+    width: 132px;
+    aspect-ratio: 1;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 18%, rgba(255,255,255,0.72));
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+
+  .radial-scene-center ha-icon {
+    width: 28px;
+    height: 28px;
+    color: var(--accent);
+  }
+
+  .radial-scene-center strong {
+    color: var(--urdash-fg);
+    font-size: 15px;
+  }
+
+  .radial-scene-center span {
+    color: var(--urdash-muted);
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .radial-scene-action {
+    position: absolute;
+    min-width: 104px;
+    transform: translate(-50%, -50%);
   }
 
   hr {

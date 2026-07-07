@@ -18,7 +18,8 @@ Do not generate JavaScript, HTML, CSS, markdown, or ordinary Lovelace cards.
 Use only entity IDs from the provided entity list.
 Design the card before composing blocks: choose the user's task, visible state, one-tap actions, secondary context, risky actions, and a layout that makes the card useful.
 Cards may combine multiple device functions when it helps the user's goal.
-Prefer direct, usable controls over decorative blocks.
+Design expressive card experiences, not just block grids. Use canvas layout, floating primitives, hero values, ambient layers, orbit/constellation compositions, strips, and unframed surfaces when they improve the card.
+Prefer direct, usable controls over decorative blocks, but make the interface visually distinctive.
 Use declarative animation presets only when they improve clarity.
 """
 
@@ -118,6 +119,20 @@ ANIMATION_SCHEMA: dict[str, Any] = {
     },
 }
 
+PRESENTATION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "surface": {
+            "type": "string",
+            "enum": ["panel", "glass", "ghost", "naked", "hero", "floating", "orb", "strip", "rail"],
+        },
+        "scale": {"type": "string", "enum": ["micro", "small", "normal", "large", "xl"]},
+        "align": {"type": "string", "enum": ["start", "center", "end", "stretch"]},
+        "layer": {"type": "string", "enum": ["backdrop", "base", "raised", "overlay"]},
+    },
+}
+
 BLOCK_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
@@ -147,6 +162,11 @@ BLOCK_SCHEMA: dict[str, Any] = {
                 "sparkline",
                 "divider",
                 "chip_group",
+                "hero_value",
+                "ambient",
+                "entity_orbit",
+                "constellation",
+                "radial_scene",
             ],
         },
         "title": {"type": "string"},
@@ -266,6 +286,7 @@ BLOCK_SCHEMA: dict[str, Any] = {
             },
         },
         "style": STYLE_SCHEMA,
+        "presentation": PRESENTATION_SCHEMA,
         "animation": ANIMATION_SCHEMA,
         "visibility": {
             "type": "object",
@@ -467,11 +488,16 @@ def _requirements() -> list[str]:
         "Use only card.layout.blocks for the visual composition.",
         "Use card.intent to state the task, risk, primary entities, and primary actions.",
         "Use card.layout.blocks to compose the UI with safe primitives.",
+        "Do not default to simple block-style UI. Prefer a designed composition with one strong focal area and supporting controls.",
+        "Use canvas layout for fancy, spatial, or futuristic cards. Use grid layout only when utility and scanning are more important.",
+        "Use presentation.surface to vary the visual treatment: naked, ghost, hero, floating, orb, strip, rail, panel, or glass.",
+        "Use hero_value, ambient, entity_orbit, constellation, and radial_scene for expressive visual structure when appropriate.",
+        "Use ambient as non-interactive visual depth behind useful controls; do not make decoration the only content.",
         "For climate requests, include climate_control and useful mode/temperature controls.",
         "For room requests, combine controllable devices and key sensors in one card when helpful.",
         "For security requests, make attention states visible and require confirmation for risky actions.",
         "For sensor requests, make the primary value readable and include supporting context.",
-        "Use button, button_group, segmented_control, slider, climate_control, cover_control, scene_strip, toggle_group, value, value_cluster, timeline, or chip_group as needed.",
+        "Use button, button_group, segmented_control, slider, climate_control, cover_control, scene_strip, toggle_group, value, value_cluster, timeline, chip_group, hero_value, entity_orbit, constellation, radial_scene, or ambient as needed.",
         "Keep blocks focused. Prefer 4 to 12 blocks unless the user requests a dense card.",
         "Do not invent entity IDs.",
         "Use declarative animation presets only; no CSS, HTML, or JavaScript.",

@@ -208,8 +208,57 @@ Common fields:
 - `bind`: optional entity binding.
 - `grid` or `frame`: layout placement.
 - `style`: safe style tokens.
+- `presentation`: safe surface and composition tokens.
 - `animation`: safe animation declaration.
 - `visibility`: optional conditional display.
+
+## Presentation
+
+`presentation` tells the renderer how a block should feel visually. It is not raw CSS.
+
+```yaml
+presentation:
+  surface: floating
+  scale: large
+  align: center
+  layer: raised
+```
+
+Allowed `surface` values:
+
+- `panel`: normal contained surface.
+- `glass`: translucent elevated surface.
+- `ghost`: lightly framed or transparent surface.
+- `naked`: no panel frame; content sits directly in the composition.
+- `hero`: large focal surface.
+- `floating`: compact floating command surface.
+- `orb`: circular surface.
+- `strip`: pill-shaped horizontal strip.
+- `rail`: framed command rail.
+
+Allowed `scale` values:
+
+- `micro`
+- `small`
+- `normal`
+- `large`
+- `xl`
+
+Allowed `align` values:
+
+- `start`
+- `center`
+- `end`
+- `stretch`
+
+Allowed `layer` values:
+
+- `backdrop`
+- `base`
+- `raised`
+- `overlay`
+
+AI should use `presentation` to avoid defaulting every block to a card-like panel. Fancy cards should usually combine one or two focal blocks, ambient or spatial background blocks, and compact controls.
 
 ## Primitive Types
 
@@ -481,6 +530,80 @@ chips:
     entity: lock.front_door
   - label: Motion
     entity: binary_sensor.living_room_motion
+```
+
+### Hero Value
+
+Large focal state readout.
+
+```yaml
+kind: hero_value
+entity: sensor.living_room_temperature
+bind:
+  value: state
+  unit: attributes.unit_of_measurement
+label: Current comfort
+presentation:
+  surface: naked
+  scale: xl
+  align: center
+```
+
+### Ambient
+
+Non-interactive visual depth layer. It should support useful content, not replace it.
+
+```yaml
+kind: ambient
+title: Living Room
+subtitle: spatial control layer
+icon: mdi:creation
+presentation:
+  surface: naked
+  layer: backdrop
+```
+
+### Entity Orbit
+
+Spatial entity summary around a center signal.
+
+```yaml
+kind: entity_orbit
+entity: sensor.living_room_temperature
+entities:
+  - sensor.living_room_humidity
+  - light.living_room_main
+  - cover.living_room_curtain
+presentation:
+  surface: ghost
+```
+
+### Constellation
+
+Free-form compact entity cluster.
+
+```yaml
+kind: constellation
+title: Room signals
+entities:
+  - light.living_room_main
+  - binary_sensor.hall_motion
+  - sensor.living_room_air_quality
+```
+
+### Radial Scene
+
+Scene launcher arranged around a central mode label.
+
+```yaml
+kind: radial_scene
+title: Modes
+icon: mdi:palette
+actions:
+  - label: Movie
+    entity_id: scene.living_room_movie
+  - label: Night
+    entity_id: scene.home_night
 ```
 
 ## Multi-Function Cards
@@ -1057,4 +1180,3 @@ card:
 - Make AI generate v2 by default.
 - Remove old v1 typed-card generation path.
 - Add validation diagnostics in the UrDash panel.
-
