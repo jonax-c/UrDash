@@ -153,18 +153,35 @@
           "cover.living_room_curtain": state("cover.living_room_curtain", "closed", "Curtain"),
           "binary_sensor.front_door": state("binary_sensor.front_door", "off", "Front Door"),
           "binary_sensor.hall_motion": state("binary_sensor.hall_motion", "off", "Hall Motion"),
+          "binary_sensor.kitchen_window": state("binary_sensor.kitchen_window", "off", "Kitchen Window"),
+          "binary_sensor.garage_motion": state("binary_sensor.garage_motion", "on", "Garage Motion"),
           "lock.front_door": state("lock.front_door", "locked", "Front Door Lock"),
+          "lock.garage_entry": state("lock.garage_entry", "locked", "Garage Entry Lock"),
           "weather.home": state("weather.home", "partlycloudy", "Home Weather", { temperature: 27, temperature_unit: "°C", humidity: 63 }),
           "sensor.outdoor_humidity": state("sensor.outdoor_humidity", "63", "Outdoor Humidity", { unit_of_measurement: "%" }),
           "sensor.wind_speed": state("sensor.wind_speed", "12", "Wind Speed", { unit_of_measurement: "km/h" }),
+          "sensor.uv_index": state("sensor.uv_index", "6", "UV Index"),
+          "sensor.rain_probability": state("sensor.rain_probability", "18", "Rain Probability", { unit_of_measurement: "%" }),
           "sensor.home_power": state("sensor.home_power", "812", "Home Power", { unit_of_measurement: "W" }),
           "sensor.energy_today": state("sensor.energy_today", "9.4", "Energy Today", { unit_of_measurement: "kWh" }),
           "sensor.solar_power": state("sensor.solar_power", "426", "Solar Power", { unit_of_measurement: "W" }),
           "sensor.grid_import": state("sensor.grid_import", "386", "Grid Import", { unit_of_measurement: "W" }),
           "sensor.home_battery": state("sensor.home_battery", "78", "Home Battery", { unit_of_measurement: "%" }),
           "sensor.co2_living_room": state("sensor.co2_living_room", "612", "Living Room CO2", { unit_of_measurement: "ppm" }),
+          "sensor.sleep_score": state("sensor.sleep_score", "86", "Sleep Score", { unit_of_measurement: "%" }),
+          "sensor.air_purifier_filter": state("sensor.air_purifier_filter", "64", "Air Purifier Filter", { unit_of_measurement: "%" }),
+          "fan.air_purifier": state("fan.air_purifier", "on", "Air Purifier"),
+          "switch.washer": state("switch.washer", "on", "Washer"),
+          "sensor.washer_remaining": state("sensor.washer_remaining", "24", "Washer Remaining", { unit_of_measurement: "min" }),
+          "sensor.washer_power": state("sensor.washer_power", "342", "Washer Power", { unit_of_measurement: "W" }),
+          "switch.irrigation_front": state("switch.irrigation_front", "off", "Front Irrigation"),
+          "switch.irrigation_back": state("switch.irrigation_back", "on", "Back Irrigation"),
+          "sensor.soil_moisture_front": state("sensor.soil_moisture_front", "42", "Front Soil Moisture", { unit_of_measurement: "%" }),
+          "sensor.soil_moisture_back": state("sensor.soil_moisture_back", "68", "Back Soil Moisture", { unit_of_measurement: "%" }),
           "scene.living_room_movie": state("scene.living_room_movie", "scening", "Movie Mode"),
           "scene.home_goodnight": state("scene.home_goodnight", "scening", "Good Night"),
+          "scene.home_focus": state("scene.home_focus", "scening", "Focus Mode"),
+          "scene.home_morning": state("scene.home_morning", "scening", "Morning Mode"),
           "media_player.living_room": state("media_player.living_room", "playing", "Living Room Speaker", {
             media_title: "Midnight City",
             media_artist: "M83",
@@ -198,6 +215,32 @@
         {
           title: "Media Mood",
           config: mediaMoodCard(),
+        },
+        {
+          title: "Spatial Security Map",
+          config: spatialSecurityCard(),
+        },
+        {
+          title: "Wellness Halo",
+          config: wellnessHaloCard(),
+        },
+        {
+          title: "Laundry Cockpit",
+          config: laundryCockpitCard(),
+        },
+        {
+          title: "Garden Flow",
+          config: gardenFlowCard(),
+        },
+        {
+          title: "Cinematic Weather",
+          className: "wide",
+          config: cinematicWeatherCard(),
+        },
+        {
+          title: "Whole Home Command",
+          className: "wide",
+          config: wholeHomeCommandCard(),
         },
         {
           title: "Minimal Sensor Strip",
@@ -607,6 +650,392 @@
                 ],
                 frame: { x: 10, y: 68, w: 80, h: 18 },
                 style: { accent: "#b76e79" },
+                presentation: { surface: "floating", layer: "overlay", align: "center" },
+              },
+            ],
+          },
+        });
+      }
+
+      function spatialSecurityCard() {
+        return baseCard({
+          intent: {
+            goal: "security",
+            title: "Perimeter Map",
+            summary: "A spatial security surface that makes attention states visible without feeling like a table.",
+            risk_level: "high",
+            primary_entities: ["lock.front_door", "lock.garage_entry", "binary_sensor.garage_motion"],
+            primary_actions: ["lock.lock", "lock.unlock"],
+          },
+          layout: {
+            type: "canvas",
+            aspect_ratio: "4/5",
+            density: "comfortable",
+            theme: "graphite",
+            blocks: [
+              {
+                id: "security_field",
+                kind: "ambient",
+                title: "Perimeter",
+                subtitle: "garage motion needs attention",
+                icon: "mdi:shield-home",
+                frame: { x: 7, y: 4, w: 86, h: 58 },
+                style: { accent: "#c06c5a" },
+                presentation: { surface: "naked", layer: "backdrop", align: "center", scale: "xl" },
+                animation: { preset: "glow", trigger: "always", speed: "slow", intensity: "subtle" },
+              },
+              {
+                id: "nodes",
+                kind: "constellation",
+                title: "Entry points",
+                entities: [
+                  "lock.front_door",
+                  "lock.garage_entry",
+                  "binary_sensor.front_door",
+                  "binary_sensor.kitchen_window",
+                  "binary_sensor.hall_motion",
+                  "binary_sensor.garage_motion",
+                ],
+                frame: { x: 8, y: 18, w: 84, h: 42 },
+                style: { accent: "#c06c5a" },
+                presentation: { surface: "ghost", layer: "raised", align: "center" },
+              },
+              {
+                id: "summary",
+                kind: "security_cluster",
+                entities: ["lock.front_door", "lock.garage_entry", "binary_sensor.garage_motion"],
+                frame: { x: 9, y: 66, w: 82, h: 18 },
+                style: { accent: "#62b488" },
+                presentation: { surface: "floating", layer: "overlay", align: "center" },
+              },
+            ],
+          },
+        });
+      }
+
+      function wellnessHaloCard() {
+        return baseCard({
+          intent: {
+            goal: "sensor_summary",
+            title: "Wellness Halo",
+            summary: "Indoor health signals arranged as a quiet living halo.",
+            risk_level: "low",
+            primary_entities: ["sensor.co2_living_room", "sensor.sleep_score", "fan.air_purifier"],
+            primary_actions: ["fan.toggle"],
+          },
+          layout: {
+            type: "canvas",
+            aspect_ratio: "4/5",
+            density: "spacious",
+            theme: "calm",
+            blocks: [
+              {
+                id: "halo",
+                kind: "ambient",
+                title: "Home body",
+                subtitle: "air and recovery",
+                icon: "mdi:meditation",
+                frame: { x: 8, y: 5, w: 84, h: 58 },
+                style: { accent: "#7aa67a" },
+                presentation: { surface: "naked", layer: "backdrop", align: "center", scale: "xl" },
+                animation: { preset: "breathe", trigger: "always", speed: "slow", intensity: "subtle" },
+              },
+              {
+                id: "sleep",
+                kind: "hero_value",
+                entity: "sensor.sleep_score",
+                bind: { value: "state", unit: "attributes.unit_of_measurement" },
+                label: "Sleep recovery",
+                subtitle: "good baseline for the day",
+                icon: "mdi:sleep",
+                frame: { x: 17, y: 18, w: 66, h: 30 },
+                style: { accent: "#7aa67a" },
+                presentation: { surface: "naked", layer: "raised", align: "center", scale: "xl" },
+              },
+              {
+                id: "wellness_metrics",
+                kind: "value_cluster",
+                items: [
+                  { entity: "sensor.co2_living_room", label: "CO2", value: "state" },
+                  { entity: "sensor.air_purifier_filter", label: "Filter", value: "state" },
+                  { entity: "sensor.living_room_humidity", label: "Humidity", value: "state" },
+                ],
+                frame: { x: 10, y: 64, w: 80, h: 16 },
+                style: { accent: "#7aa67a" },
+                presentation: { surface: "floating", layer: "overlay", align: "center" },
+              },
+              {
+                id: "purifier",
+                kind: "button",
+                label: "Air purifier",
+                icon: "mdi:air-purifier",
+                action: { type: "service", domain: "fan", service: "toggle", entity_id: "fan.air_purifier" },
+                frame: { x: 27, y: 83, w: 46, h: 10 },
+                style: { accent: "#7aa67a" },
+                presentation: { surface: "strip", layer: "overlay", align: "center" },
+              },
+            ],
+          },
+        });
+      }
+
+      function laundryCockpitCard() {
+        return baseCard({
+          intent: {
+            goal: "multi_device_control",
+            title: "Laundry Cockpit",
+            summary: "Appliance state with remaining time, power draw, and direct control.",
+            risk_level: "low",
+            primary_entities: ["switch.washer", "sensor.washer_remaining", "sensor.washer_power"],
+            primary_actions: ["switch.toggle"],
+          },
+          layout: {
+            type: "canvas",
+            aspect_ratio: "4/5",
+            density: "comfortable",
+            theme: "quiet",
+            blocks: [
+              {
+                id: "washer_time",
+                kind: "hero_value",
+                entity: "sensor.washer_remaining",
+                bind: { value: "state", unit: "attributes.unit_of_measurement" },
+                label: "remaining",
+                subtitle: "washer is running",
+                icon: "mdi:washing-machine",
+                frame: { x: 8, y: 10, w: 84, h: 34 },
+                style: { accent: "#4f8fba" },
+                presentation: { surface: "hero", layer: "raised", align: "center", scale: "xl" },
+              },
+              {
+                id: "washer_orbit",
+                kind: "entity_orbit",
+                entity: "sensor.washer_remaining",
+                entities: ["switch.washer", "sensor.washer_power", "sensor.energy_today"],
+                frame: { x: 10, y: 43, w: 80, h: 34 },
+                style: { accent: "#4f8fba" },
+                presentation: { surface: "ghost", layer: "base", align: "center" },
+              },
+              {
+                id: "washer_toggle",
+                kind: "button",
+                label: "Toggle washer",
+                icon: "mdi:power",
+                action: { type: "service", domain: "switch", service: "toggle", entity_id: "switch.washer" },
+                frame: { x: 26, y: 82, w: 48, h: 10 },
+                style: { accent: "#4f8fba" },
+                presentation: { surface: "floating", layer: "overlay", align: "center" },
+              },
+            ],
+          },
+        });
+      }
+
+      function gardenFlowCard() {
+        return baseCard({
+          intent: {
+            goal: "multi_device_control",
+            title: "Garden Flow",
+            summary: "Irrigation and soil moisture as an outdoor control surface.",
+            risk_level: "medium",
+            primary_entities: ["switch.irrigation_front", "switch.irrigation_back", "sensor.soil_moisture_front"],
+            primary_actions: ["switch.toggle"],
+          },
+          layout: {
+            type: "canvas",
+            aspect_ratio: "4/5",
+            density: "comfortable",
+            theme: "sunrise",
+            blocks: [
+              {
+                id: "garden_aura",
+                kind: "ambient",
+                title: "Garden",
+                subtitle: "back zone is watering",
+                icon: "mdi:sprinkler-variant",
+                frame: { x: 7, y: 4, w: 86, h: 52 },
+                style: { accent: "#4f9b6e" },
+                presentation: { surface: "naked", layer: "backdrop", align: "center", scale: "xl" },
+                animation: { preset: "wave", trigger: "always", speed: "slow", intensity: "subtle" },
+              },
+              {
+                id: "soil",
+                kind: "value_cluster",
+                title: "Soil moisture",
+                items: [
+                  { entity: "sensor.soil_moisture_front", label: "Front", value: "state" },
+                  { entity: "sensor.soil_moisture_back", label: "Back", value: "state" },
+                ],
+                frame: { x: 10, y: 45, w: 80, h: 18 },
+                style: { accent: "#4f9b6e" },
+                presentation: { surface: "glass", layer: "raised", align: "center" },
+              },
+              {
+                id: "zones",
+                kind: "toggle_group",
+                title: "Zones",
+                entities: ["switch.irrigation_front", "switch.irrigation_back"],
+                frame: { x: 10, y: 70, w: 80, h: 16 },
+                style: { accent: "#4f9b6e" },
+                presentation: { surface: "floating", layer: "overlay", align: "center" },
+              },
+            ],
+          },
+        });
+      }
+
+      function cinematicWeatherCard() {
+        return baseCard({
+          heightMode: "viewport",
+          intent: {
+            goal: "weather",
+            title: "Sky Cinema",
+            summary: "A wide cinematic weather surface with forecast-adjacent environmental signals.",
+            risk_level: "low",
+            primary_entities: ["weather.home", "sensor.uv_index", "sensor.rain_probability"],
+            primary_actions: [],
+          },
+          layout: {
+            type: "canvas",
+            aspect_ratio: "21/9",
+            density: "spacious",
+            theme: "calm",
+            blocks: [
+              {
+                id: "sky",
+                kind: "ambient",
+                title: "Partly cloudy",
+                subtitle: "soft wind from the west",
+                icon: "mdi:weather-partly-cloudy",
+                frame: { x: 2, y: 4, w: 58, h: 82 },
+                style: { accent: "#5c94b8" },
+                presentation: { surface: "naked", layer: "backdrop", align: "center", scale: "xl" },
+                animation: { preset: "float", trigger: "always", speed: "slow", intensity: "subtle" },
+              },
+              {
+                id: "temperature",
+                kind: "hero_value",
+                entity: "weather.home",
+                bind: { value: "attributes.temperature" },
+                label: "outside",
+                subtitle: "partly cloudy",
+                icon: "mdi:weather-partly-cloudy",
+                frame: { x: 8, y: 24, w: 28, h: 34 },
+                style: { accent: "#5c94b8" },
+                presentation: { surface: "naked", layer: "raised", align: "center", scale: "xl" },
+              },
+              {
+                id: "sky_signals",
+                kind: "constellation",
+                title: "Sky signals",
+                entities: ["sensor.wind_speed", "sensor.outdoor_humidity", "sensor.uv_index", "sensor.rain_probability"],
+                frame: { x: 46, y: 17, w: 46, h: 48 },
+                style: { accent: "#5c94b8" },
+                presentation: { surface: "ghost", layer: "raised", align: "center" },
+              },
+              {
+                id: "weather_strip",
+                kind: "chip_group",
+                chips: [
+                  { label: "UV", entity: "sensor.uv_index", icon: "mdi:white-balance-sunny" },
+                  { label: "Rain", entity: "sensor.rain_probability", icon: "mdi:weather-rainy" },
+                  { label: "Wind", entity: "sensor.wind_speed", icon: "mdi:weather-windy" },
+                ],
+                frame: { x: 12, y: 72, w: 76, h: 14 },
+                style: { accent: "#5c94b8" },
+                presentation: { surface: "floating", layer: "overlay", align: "center" },
+              },
+            ],
+          },
+        });
+      }
+
+      function wholeHomeCommandCard() {
+        return baseCard({
+          heightMode: "viewport",
+          intent: {
+            goal: "multi_device_control",
+            title: "Whole Home Command",
+            summary: "A command center combining scenes, security, comfort, media, and energy.",
+            risk_level: "medium",
+            primary_entities: ["light.living_room_main", "lock.front_door", "climate.living_room_ac", "sensor.home_power"],
+            primary_actions: ["scene.turn_on", "light.toggle", "lock.lock"],
+          },
+          layout: {
+            type: "canvas",
+            aspect_ratio: "16/9",
+            density: "spacious",
+            theme: "aurora",
+            blocks: [
+              {
+                id: "home_core",
+                kind: "entity_orbit",
+                entity: "sensor.home_power",
+                entities: [
+                  "light.living_room_main",
+                  "climate.living_room_ac",
+                  "lock.front_door",
+                  "media_player.living_room",
+                  "sensor.living_room_temperature",
+                  "sensor.home_battery",
+                  "binary_sensor.garage_motion",
+                  "cover.living_room_curtain",
+                ],
+                frame: { x: 27, y: 7, w: 42, h: 68 },
+                style: { accent: "#7f6df2" },
+                presentation: { surface: "ghost", layer: "raised", align: "center", scale: "large" },
+              },
+              {
+                id: "scene_ring",
+                kind: "radial_scene",
+                title: "Modes",
+                subtitle: "home scenes",
+                icon: "mdi:home-variant",
+                actions: [
+                  { label: "Morning", entity_id: "scene.home_morning", icon: "mdi:weather-sunset-up" },
+                  { label: "Focus", entity_id: "scene.home_focus", icon: "mdi:desk" },
+                  { label: "Movie", entity_id: "scene.living_room_movie", icon: "mdi:movie-open" },
+                  { label: "Night", entity_id: "scene.home_goodnight", icon: "mdi:weather-night" },
+                ],
+                frame: { x: 2, y: 14, w: 26, h: 58 },
+                style: { accent: "#b76e79" },
+                presentation: { surface: "glass", layer: "overlay", align: "center" },
+              },
+              {
+                id: "home_status",
+                kind: "value_cluster",
+                title: "Status",
+                items: [
+                  { entity: "sensor.home_power", label: "Power", value: "state" },
+                  { entity: "sensor.home_battery", label: "Battery", value: "state" },
+                  { entity: "sensor.living_room_temperature", label: "Temp", value: "state" },
+                ],
+                frame: { x: 70, y: 18, w: 26, h: 25 },
+                style: { accent: "#1f8a70" },
+                presentation: { surface: "glass", layer: "overlay", align: "center" },
+              },
+              {
+                id: "command_bar",
+                kind: "button_group",
+                buttons: [
+                  {
+                    label: "Lights",
+                    icon: "mdi:lightbulb",
+                    action: { type: "service", domain: "light", service: "toggle", entity_id: "light.living_room_main" },
+                  },
+                  {
+                    label: "Lock",
+                    icon: "mdi:lock",
+                    action: { type: "service", domain: "lock", service: "lock", entity_id: "lock.front_door" },
+                  },
+                  {
+                    label: "Pause media",
+                    icon: "mdi:play-pause",
+                    action: { type: "service", domain: "media_player", service: "media_play_pause", entity_id: "media_player.living_room" },
+                  },
+                ],
+                frame: { x: 12, y: 78, w: 76, h: 15 },
+                style: { accent: "#1f8a70" },
                 presentation: { surface: "floating", layer: "overlay", align: "center" },
               },
             ],
