@@ -107,6 +107,8 @@ Before using generated `custom:urdash-card` YAML in Lovelace, add this JavaScrip
 
 Set the resource type to `JavaScript module`.
 
+The next-generation primitive/composition architecture is documented in [UrDash Card Spec v2](docs/urdash-card-v2-spec.md). v2 is the planned direction for AI-generated cards and is intentionally not backward compatible with the current typed-card format.
+
 ## Real Lovelace Preview
 
 UrDash does not use the old lightweight simulated preview. The panel's **Preview** button renders the generated view directly inside UrDash with Home Assistant's Lovelace card helpers.
