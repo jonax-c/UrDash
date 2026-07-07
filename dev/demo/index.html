@@ -160,9 +160,16 @@
           "sensor.home_power": state("sensor.home_power", "812", "Home Power", { unit_of_measurement: "W" }),
           "sensor.energy_today": state("sensor.energy_today", "9.4", "Energy Today", { unit_of_measurement: "kWh" }),
           "sensor.solar_power": state("sensor.solar_power", "426", "Solar Power", { unit_of_measurement: "W" }),
+          "sensor.grid_import": state("sensor.grid_import", "386", "Grid Import", { unit_of_measurement: "W" }),
+          "sensor.home_battery": state("sensor.home_battery", "78", "Home Battery", { unit_of_measurement: "%" }),
+          "sensor.co2_living_room": state("sensor.co2_living_room", "612", "Living Room CO2", { unit_of_measurement: "ppm" }),
           "scene.living_room_movie": state("scene.living_room_movie", "scening", "Movie Mode"),
           "scene.home_goodnight": state("scene.home_goodnight", "scening", "Good Night"),
-          "media_player.living_room": state("media_player.living_room", "playing", "Living Room Speaker"),
+          "media_player.living_room": state("media_player.living_room", "playing", "Living Room Speaker", {
+            media_title: "Midnight City",
+            media_artist: "M83",
+            volume_level: 0.34,
+          }),
         },
         callService(domain, service, data) {
           console.log("mock callService", { domain, service, data });
@@ -179,6 +186,22 @@
           title: "Room Control",
           className: "wide",
           config: roomControlCard(),
+        },
+        {
+          title: "Weather Lens",
+          config: weatherLensCard(),
+        },
+        {
+          title: "Energy Cockpit",
+          config: energyCockpitCard(),
+        },
+        {
+          title: "Media Mood",
+          config: mediaMoodCard(),
+        },
+        {
+          title: "Minimal Sensor Strip",
+          config: minimalSensorStripCard(),
         },
         {
           title: "Quiet Climate",
@@ -415,6 +438,226 @@
                 entities: ["light.living_room_main", "climate.living_room_ac", "cover.living_room_curtain", "media_player.living_room"],
                 grid: { col: 6, row: 5, w: 7, h: 2 },
                 style: { accent: "#1f8a70" },
+              },
+            ],
+          },
+        });
+      }
+
+      function weatherLensCard() {
+        return baseCard({
+          intent: {
+            goal: "weather",
+            title: "Weather Lens",
+            summary: "Outdoor condition as a compact visual lens with supporting atmosphere signals.",
+            risk_level: "low",
+            primary_entities: ["weather.home", "sensor.wind_speed", "sensor.outdoor_humidity"],
+            primary_actions: [],
+          },
+          layout: {
+            type: "canvas",
+            aspect_ratio: "4/5",
+            density: "spacious",
+            theme: "calm",
+            blocks: [
+              {
+                id: "weather_aura",
+                kind: "ambient",
+                title: "Outside",
+                subtitle: "partly cloudy",
+                icon: "mdi:weather-partly-cloudy",
+                frame: { x: 5, y: 4, w: 90, h: 62 },
+                style: { accent: "#5c94b8" },
+                presentation: { surface: "naked", layer: "backdrop", align: "center", scale: "xl" },
+                animation: { preset: "float", trigger: "always", speed: "slow", intensity: "subtle" },
+              },
+              {
+                id: "temp",
+                kind: "hero_value",
+                entity: "weather.home",
+                bind: { value: "attributes.temperature" },
+                label: "Outdoor",
+                subtitle: "partly cloudy",
+                icon: "mdi:weather-partly-cloudy",
+                frame: { x: 12, y: 18, w: 76, h: 34 },
+                style: { accent: "#5c94b8" },
+                presentation: { surface: "naked", layer: "raised", align: "center", scale: "xl" },
+              },
+              {
+                id: "weather_chips",
+                kind: "chip_group",
+                chips: [
+                  { label: "Humidity", entity: "sensor.outdoor_humidity", icon: "mdi:water-percent" },
+                  { label: "Wind", entity: "sensor.wind_speed", icon: "mdi:weather-windy" },
+                ],
+                frame: { x: 12, y: 66, w: 76, h: 16 },
+                style: { accent: "#5c94b8" },
+                presentation: { surface: "floating", layer: "overlay", align: "center", scale: "normal" },
+              },
+            ],
+          },
+        });
+      }
+
+      function energyCockpitCard() {
+        return baseCard({
+          intent: {
+            goal: "energy",
+            title: "Energy Cockpit",
+            summary: "Power flow overview with load, solar, grid import, and battery reserve.",
+            risk_level: "low",
+            primary_entities: ["sensor.home_power", "sensor.solar_power", "sensor.home_battery"],
+            primary_actions: [],
+          },
+          layout: {
+            type: "canvas",
+            aspect_ratio: "4/5",
+            density: "comfortable",
+            theme: "graphite",
+            blocks: [
+              {
+                id: "power_core",
+                kind: "entity_orbit",
+                entity: "sensor.home_power",
+                entities: ["sensor.solar_power", "sensor.grid_import", "sensor.energy_today", "sensor.home_battery"],
+                frame: { x: 4, y: 6, w: 92, h: 58 },
+                style: { accent: "#62b488" },
+                presentation: { surface: "ghost", layer: "raised", align: "center", scale: "large" },
+                animation: { preset: "glow", trigger: "always", speed: "slow", intensity: "subtle" },
+              },
+              {
+                id: "battery",
+                kind: "gauge",
+                title: "Battery",
+                entity: "sensor.home_battery",
+                bind: { value: "state" },
+                range: { min: 0, max: 100 },
+                frame: { x: 10, y: 68, w: 36, h: 18 },
+                style: { accent: "#62b488" },
+                presentation: { surface: "rail", layer: "overlay", scale: "normal" },
+              },
+              {
+                id: "import",
+                kind: "value",
+                label: "Grid import",
+                entity: "sensor.grid_import",
+                bind: { value: "state", unit: "attributes.unit_of_measurement" },
+                frame: { x: 52, y: 68, w: 38, h: 18 },
+                style: { accent: "#d9a441" },
+                presentation: { surface: "rail", layer: "overlay", scale: "normal" },
+              },
+            ],
+          },
+        });
+      }
+
+      function mediaMoodCard() {
+        return baseCard({
+          intent: {
+            goal: "media_control",
+            title: "Media Mood",
+            summary: "A living-room music card with scene shortcuts and playback control.",
+            risk_level: "low",
+            primary_entities: ["media_player.living_room", "scene.living_room_movie", "scene.home_goodnight"],
+            primary_actions: ["media_player.media_play_pause", "scene.turn_on"],
+          },
+          layout: {
+            type: "canvas",
+            aspect_ratio: "4/5",
+            density: "spacious",
+            theme: "aurora",
+            blocks: [
+              {
+                id: "music_aura",
+                kind: "ambient",
+                title: "Now playing",
+                subtitle: "Midnight City",
+                icon: "mdi:music-circle",
+                frame: { x: 8, y: 4, w: 84, h: 64 },
+                style: { accent: "#b76e79" },
+                presentation: { surface: "naked", layer: "backdrop", align: "center", scale: "xl" },
+                animation: { preset: "orbit", trigger: "always", speed: "slow", intensity: "subtle" },
+              },
+              {
+                id: "track",
+                kind: "hero_value",
+                entity: "media_player.living_room",
+                bind: { value: "attributes.media_title" },
+                label: "M83",
+                subtitle: "Living Room Speaker",
+                icon: "mdi:music",
+                frame: { x: 10, y: 18, w: 80, h: 28 },
+                style: { accent: "#b76e79" },
+                presentation: { surface: "naked", layer: "raised", align: "center", scale: "large" },
+              },
+              {
+                id: "media_actions",
+                kind: "button_group",
+                buttons: [
+                  {
+                    label: "Play / Pause",
+                    icon: "mdi:play-pause",
+                    action: { type: "service", domain: "media_player", service: "media_play_pause", entity_id: "media_player.living_room" },
+                  },
+                  {
+                    label: "Movie",
+                    icon: "mdi:movie-open",
+                    action: { type: "service", domain: "scene", service: "turn_on", entity_id: "scene.living_room_movie" },
+                  },
+                ],
+                frame: { x: 10, y: 68, w: 80, h: 18 },
+                style: { accent: "#b76e79" },
+                presentation: { surface: "floating", layer: "overlay", align: "center" },
+              },
+            ],
+          },
+        });
+      }
+
+      function minimalSensorStripCard() {
+        return baseCard({
+          intent: {
+            goal: "sensor_summary",
+            title: "Air Strip",
+            summary: "A restrained quick-read strip for indoor comfort.",
+            risk_level: "low",
+            primary_entities: ["sensor.living_room_temperature", "sensor.living_room_humidity", "sensor.co2_living_room"],
+            primary_actions: [],
+          },
+          layout: {
+            type: "grid",
+            columns: 12,
+            density: "compact",
+            theme: "quiet",
+            blocks: [
+              {
+                id: "label",
+                kind: "text",
+                text: "Living air",
+                variant: "title",
+                grid: { col: 1, row: 1, w: 3, h: 1 },
+                style: { accent: "#1f8a70" },
+                presentation: { surface: "naked", align: "center" },
+              },
+              {
+                id: "metrics",
+                kind: "value_cluster",
+                grid: { col: 4, row: 1, w: 7, h: 1 },
+                items: [
+                  { entity: "sensor.living_room_temperature", label: "Temp", value: "state" },
+                  { entity: "sensor.living_room_humidity", label: "Humidity", value: "state" },
+                  { entity: "sensor.co2_living_room", label: "CO2", value: "state" },
+                ],
+                style: { accent: "#1f8a70" },
+                presentation: { surface: "strip", align: "center" },
+              },
+              {
+                id: "quality",
+                kind: "chip_group",
+                chips: [{ label: "Air good", entity: "sensor.living_room_air_quality", icon: "mdi:leaf" }],
+                grid: { col: 11, row: 1, w: 2, h: 1 },
+                style: { accent: "#1f8a70" },
+                presentation: { surface: "naked", align: "center" },
               },
             ],
           },
