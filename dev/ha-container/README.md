@@ -42,12 +42,12 @@ http://localhost:8123/urdash?urdash_validation=preview
 Expected result:
 
 - The UrDash panel loads.
-- A validation Lovelace view is inserted into the panel.
-- Preview renders automatically.
-- The preview area shows real Home Assistant Lovelace cards, including `entities`, `tile`, `gauge`, and `history-graph`.
-- Browser console has no red errors from `urdash-panel.js`.
+- A built-in `urdash_schema: 2` validation card is loaded.
+- The preview area renders the card with the real `urdash-card` custom element.
+- The card shows a composed v2 layout with text, value cluster, action buttons, and timeline primitives.
+- Browser console has no red errors from `urdash-panel.js` or `urdash-custom-card.js`.
 
-This validates the UrDash inline preview renderer inside a real Home Assistant frontend session. It does not validate OpenAI generation.
+This validates the UrDash v2 renderer inside a real Home Assistant frontend session. It does not validate OpenAI generation.
 
 ## Stop And Reset
 

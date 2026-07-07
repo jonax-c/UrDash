@@ -1,51 +1,38 @@
-generate_dashboard:
-  name: Generate card or dashboard
-  description: Generate an UrDash custom card or Lovelace dashboard draft from the current Home Assistant entities.
+generate_card:
+  name: Generate UrDash v2 card
+  description: Generate one AI-designed UrDash v2 Lovelace custom card from selected Home Assistant entities.
   fields:
     request:
       name: Request
-      description: Natural-language description of the dashboard to create.
+      description: Natural-language description of the card to create.
       required: true
       selector:
         text:
           multiline: true
-    style:
-      name: Style
-      description: Visual style for the generated dashboard.
+    theme:
+      name: Theme
+      description: Preferred UrDash v2 visual theme.
       required: false
-      default: modern
+      default: aurora
       selector:
         select:
           options:
-            - modern
-            - minimal
-            - glass
-            - compact
-    allow_custom_cards:
-      name: Allow custom cards
-      description: Use recommended HACS/Lovelace custom cards when generating YAML.
+            - aurora
+            - quiet
+            - graphite
+            - calm
+            - sunrise
+    height_mode:
+      name: Height mode
+      description: How the card should size inside Lovelace.
       required: false
-      default: true
-      selector:
-        boolean:
-    mode:
-      name: Generation mode
-      description: Generate a full Lovelace dashboard, a new Lovelace tab/view, or a native UrDash custom dashboard.
-      required: false
-      default: dashboard
+      default: auto
       selector:
         select:
           options:
-            - dashboard
-            - new_view
-            - custom_card
-    reference_dashboard:
-      name: Reference dashboard YAML
-      description: Existing dashboard YAML used as style/context only. UrDash does not modify it.
-      required: false
-      selector:
-        text:
-          multiline: true
+            - auto
+            - viewport
+            - fixed
     entity_ids:
       name: Entity IDs
       description: Optional list of entities that UrDash may use. Leave empty to allow all entities.

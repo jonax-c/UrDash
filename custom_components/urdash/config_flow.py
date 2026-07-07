@@ -6,19 +6,20 @@ from homeassistant import config_entries
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_ALLOW_CUSTOM_CARDS,
     CONF_API_KEY,
     CONF_BASE_URL,
-    CONF_DEFAULT_STYLE,
+    CONF_DEFAULT_HEIGHT_MODE,
+    CONF_DEFAULT_THEME,
     CONF_MODEL,
-    DEFAULT_ALLOW_CUSTOM_CARDS,
+    DEFAULT_HEIGHT_MODE,
     DEFAULT_OPENAI_BASE_URL,
     DEFAULT_OPENAI_MODEL,
-    DEFAULT_STYLE,
+    DEFAULT_THEME,
     DOMAIN,
 )
 
-STYLE_OPTIONS = ["modern", "minimal", "glass", "compact"]
+THEME_OPTIONS = ["aurora", "quiet", "graphite", "calm", "sunrise"]
+HEIGHT_MODE_OPTIONS = ["auto", "viewport", "fixed"]
 
 
 class UrDashConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -91,18 +92,23 @@ def _schema(current):
                 default=current.get(CONF_BASE_URL, DEFAULT_OPENAI_BASE_URL),
             ): str,
             vol.Optional(
-                CONF_DEFAULT_STYLE,
-                default=current.get(CONF_DEFAULT_STYLE, DEFAULT_STYLE),
+                CONF_DEFAULT_THEME,
+                default=current.get(CONF_DEFAULT_THEME, DEFAULT_THEME),
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=STYLE_OPTIONS,
+                    options=THEME_OPTIONS,
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
             vol.Optional(
-                CONF_ALLOW_CUSTOM_CARDS,
-                default=current.get(CONF_ALLOW_CUSTOM_CARDS, DEFAULT_ALLOW_CUSTOM_CARDS),
-            ): bool,
+                CONF_DEFAULT_HEIGHT_MODE,
+                default=current.get(CONF_DEFAULT_HEIGHT_MODE, DEFAULT_HEIGHT_MODE),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=HEIGHT_MODE_OPTIONS,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
         }
     )
 

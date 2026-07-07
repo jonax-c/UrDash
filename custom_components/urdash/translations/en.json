@@ -6,13 +6,13 @@
     "step": {
       "user": {
         "title": "Set up UrDash",
-        "description": "Create the UrDash dashboard designer panel.",
+        "description": "Create the UrDash v2 card designer panel.",
         "data": {
           "api_key": "API key",
           "model": "Model",
           "base_url": "API base URL",
-          "default_style": "Default dashboard style",
-          "allow_custom_cards": "Allow custom Lovelace cards"
+          "default_theme": "Default card theme",
+          "default_height_mode": "Default height mode"
         }
       }
     }
@@ -21,13 +21,13 @@
     "step": {
       "init": {
         "title": "UrDash options",
-        "description": "Configure the OpenAI-compatible provider used by the dashboard design agent.",
+        "description": "Configure the OpenAI-compatible provider used by the v2 card design agent.",
         "data": {
           "api_key": "API key",
           "model": "Model",
           "base_url": "API base URL",
-          "default_style": "Default dashboard style",
-          "allow_custom_cards": "Allow custom Lovelace cards"
+          "default_theme": "Default card theme",
+          "default_height_mode": "Default height mode"
         }
       }
     }
