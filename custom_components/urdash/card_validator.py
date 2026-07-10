@@ -12,9 +12,25 @@ MAX_BLOCKS = 64
 MAX_ACTIONS = 96
 MAX_VISUAL_NODES = 48
 MAX_VISUAL_LINKS = 96
+MAX_EXPRESSION_DEPTH = 8
+MAX_EXPRESSION_OPERATIONS = 128
+MAX_EXPRESSION_ARGS = 16
+MAX_EXPRESSION_ENTITIES = 32
+MAX_EXPRESSION_OUTPUT = 1024
 CURRENT_SCHEMA_MINOR = 0
 
-BINDING_PATTERN = re.compile(r"^(state|last_changed|last_updated|attributes\.[A-Za-z0-9_]+)$")
+BINDING_PATTERN = re.compile(
+    r"^(state|last_changed|last_updated|attributes(?:\.[A-Za-z_][A-Za-z0-9_]*)+)$"
+)
+SAFE_PATH_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
+UNSAFE_PATH_PARTS = {"__proto__", "prototype", "constructor"}
+EXPRESSION_OPS = {
+    "literal", "entity", "local", "add", "subtract", "multiply", "divide",
+    "modulo", "min", "max", "average", "sum", "clamp", "round", "percentage",
+    "eq", "ne", "gt", "gte", "lt", "lte", "and", "or", "not", "if",
+    "coalesce", "map", "format_number", "format_datetime", "format_duration",
+    "relative_time", "convert_unit",
+}
 ACTION_TEMPLATE_PATTERN = re.compile(
     r"^\$(selected|value|current)(?:\s*[+-]\s*\d+(?:\.\d+)?)?$"
 )
@@ -29,6 +45,11 @@ def build_strict_provider_schema(schema: dict[str, Any]) -> dict[str, Any]:
         result["anyOf"] = [build_strict_provider_schema(option) for option in schema["anyOf"]]
         return result
     result = dict(schema)
+    if isinstance(schema.get("$defs"), dict):
+        result["$defs"] = {
+            name: build_strict_provider_schema(child)
+            for name, child in schema["$defs"].items()
+        }
     if schema.get("type") == "object":
         original_required = set(schema.get("required", []))
         properties = {}
@@ -77,7 +98,7 @@ def validate_card_config(
 ) -> list[dict[str, Any]]:
     """Validate an UrDash card structurally and semantically."""
     diagnostics: list[dict[str, Any]] = []
-    _validate_schema(config, schema, "$", diagnostics)
+    _validate_schema(config, schema, "$", diagnostics, schema)
     if any(item["severity"] == "error" for item in diagnostics):
         return diagnostics[:MAX_DIAGNOSTICS]
     _validate_semantics(
@@ -125,14 +146,23 @@ def _validate_schema(
     schema: Mapping[str, Any],
     path: str,
     diagnostics: list[dict[str, Any]],
+    root_schema: Mapping[str, Any] | None = None,
 ) -> None:
     if len(diagnostics) >= MAX_DIAGNOSTICS:
+        return
+    root_schema = root_schema or schema
+    if "$ref" in schema:
+        resolved = _resolve_local_ref(root_schema, schema["$ref"])
+        if resolved is None:
+            _diagnostic(diagnostics, path, "schema.invalid_ref", "Schema reference could not be resolved.", "Use a declared local schema reference.")
+            return
+        _validate_schema(value, resolved, path, diagnostics, root_schema)
         return
     if "anyOf" in schema:
         variants = []
         for option in schema["anyOf"]:
             option_diagnostics: list[dict[str, Any]] = []
-            _validate_schema(value, option, path, option_diagnostics)
+            _validate_schema(value, option, path, option_diagnostics, root_schema)
             if not option_diagnostics:
                 return
             variants.append(option_diagnostics)
@@ -188,7 +218,7 @@ def _validate_schema(
                     )
         for name, child in value.items():
             if name in properties:
-                _validate_schema(child, properties[name], f"{path}.{name}", diagnostics)
+                _validate_schema(child, properties[name], f"{path}.{name}", diagnostics, root_schema)
     elif expected == "array":
         if len(value) < schema.get("minItems", 0):
             _diagnostic(
@@ -207,7 +237,7 @@ def _validate_schema(
                 f"Keep at most {schema['maxItems']} items.",
             )
         for index, child in enumerate(value):
-            _validate_schema(child, schema.get("items", {}), f"{path}[{index}]", diagnostics)
+            _validate_schema(child, schema.get("items", {}), f"{path}[{index}]", diagnostics, root_schema)
     elif expected in {"number", "integer"}:
         if "minimum" in schema and value < schema["minimum"]:
             _diagnostic(
@@ -242,7 +272,20 @@ def _matches_type(value: Any, expected: str | list[str]) -> bool:
         return isinstance(value, int) and not isinstance(value, bool)
     if expected == "number":
         return isinstance(value, int | float) and not isinstance(value, bool)
+    if expected == "null":
+        return value is None
     return True
+
+
+def _resolve_local_ref(root_schema: Mapping[str, Any], ref: Any) -> Mapping[str, Any] | None:
+    if not isinstance(ref, str) or not ref.startswith("#/"):
+        return None
+    current: Any = root_schema
+    for part in ref[2:].split("/"):
+        if not isinstance(current, Mapping) or part not in current:
+            return None
+        current = current[part]
+    return current if isinstance(current, Mapping) else None
 
 
 def _validate_semantics(
@@ -265,6 +308,7 @@ def _validate_semantics(
 
     for index, entity_id in enumerate(card["intent"].get("primary_entities", [])):
         _validate_entity(entity_id, f"$.card.intent.primary_entities[{index}]", entities, diagnostics)
+    _validate_expressions(config, "$", entities, diagnostics)
 
     seen_ids: dict[str, str] = {}
     action_count = 0
@@ -358,13 +402,24 @@ def _validate_block_references(
     visibility = block.get("visibility")
     if visibility:
         _validate_entity(visibility.get("entity"), f"{path}.visibility.entity", entities, diagnostics)
+        if "expression" not in visibility and not (
+            isinstance(visibility.get("entity"), str)
+            and isinstance(visibility.get("operator"), str)
+        ):
+            _diagnostic(
+                diagnostics,
+                f"{path}.visibility",
+                "semantic.invalid_visibility",
+                "Visibility requires an expression or an entity and operator.",
+                "Add a boolean expression or a legacy entity visibility rule.",
+            )
 
 
 def _validate_bindings(value: Any, path: str, diagnostics: list[dict[str, Any]]) -> None:
     if isinstance(value, dict):
         if "bind" in value and isinstance(value["bind"], dict):
             for name, binding in value["bind"].items():
-                if isinstance(binding, str) and not BINDING_PATTERN.fullmatch(binding):
+                if isinstance(binding, str) and not _safe_binding(binding):
                     _diagnostic(
                         diagnostics,
                         f"{path}.bind.{name}",
@@ -378,6 +433,78 @@ def _validate_bindings(value: Any, path: str, diagnostics: list[dict[str, Any]])
     elif isinstance(value, list):
         for index, child in enumerate(value):
             _validate_bindings(child, f"{path}[{index}]", diagnostics)
+
+
+def _safe_binding(binding: str) -> bool:
+    return bool(BINDING_PATTERN.fullmatch(binding)) and not any(
+        part in UNSAFE_PATH_PARTS for part in binding.split(".")
+    )
+
+
+def _validate_expressions(
+    value: Any,
+    path: str,
+    entities: dict[str, dict[str, Any]],
+    diagnostics: list[dict[str, Any]],
+) -> None:
+    budget = {"operations": 0, "entities": set()}
+
+    def visit(node: Any, node_path: str, depth: int) -> None:
+        if isinstance(node, list):
+            for index, child in enumerate(node):
+                visit(child, f"{node_path}[{index}]", depth)
+            return
+        if not isinstance(node, dict):
+            return
+        if isinstance(node.get("op"), str):
+            budget["operations"] += 1
+            if budget["operations"] > MAX_EXPRESSION_OPERATIONS:
+                _diagnostic(diagnostics, node_path, "expression.operation_budget", f"Expression exceeds {MAX_EXPRESSION_OPERATIONS} operations.", "Simplify or split the derived value.")
+                return
+            if depth > MAX_EXPRESSION_DEPTH:
+                _diagnostic(diagnostics, node_path, "expression.depth_budget", f"Expression nesting exceeds {MAX_EXPRESSION_DEPTH} levels.", "Flatten the expression tree.")
+                return
+            op = node["op"]
+            if op not in EXPRESSION_OPS:
+                _diagnostic(diagnostics, f"{node_path}.op", "expression.invalid_op", f"Expression operation {op!r} is not allowed.", "Use a documented declarative operation.")
+                return
+            args = node.get("args", [])
+            if isinstance(args, list) and len(args) > MAX_EXPRESSION_ARGS:
+                _diagnostic(diagnostics, f"{node_path}.args", "expression.argument_budget", f"Expression has more than {MAX_EXPRESSION_ARGS} arguments.", "Reduce the aggregation inputs.")
+            required = {
+                "literal": "value", "entity": "entity_id", "local": "name",
+                "if": "condition", "map": "cases", "convert_unit": "to_unit",
+            }.get(op)
+            if required and required not in node:
+                _diagnostic(diagnostics, f"{node_path}.{required}", "expression.missing_field", f"Operation {op!r} requires {required!r}.", f"Add the {required!r} property.")
+            if op == "entity":
+                entity_id = node.get("entity_id")
+                if isinstance(entity_id, str):
+                    budget["entities"].add(entity_id)
+                    _validate_entity(entity_id, f"{node_path}.entity_id", entities, diagnostics)
+                path_value = node.get("path", "state")
+                if not isinstance(path_value, str) or not _safe_expression_path(path_value):
+                    _diagnostic(diagnostics, f"{node_path}.path", "expression.invalid_path", "Entity path is unsafe or malformed.", "Use state, last_changed, last_updated, or attributes.<nested.path>.")
+            for name, child in node.items():
+                if name not in {"op", "entity_id", "path", "name", "value", "from_unit", "to_unit", "style", "decimals", "min", "max", "prefix", "suffix"}:
+                    visit(child, f"{node_path}.{name}", depth + 1)
+            if op == "literal" and isinstance(node.get("value"), str) and len(node["value"]) > MAX_EXPRESSION_OUTPUT:
+                _diagnostic(diagnostics, f"{node_path}.value", "expression.output_budget", f"Literal exceeds {MAX_EXPRESSION_OUTPUT} characters.", "Use a shorter display value.")
+            return
+        for name, child in node.items():
+            visit(child, f"{node_path}.{name}", depth)
+
+    visit(value, path, 1)
+    if len(budget["entities"]) > MAX_EXPRESSION_ENTITIES:
+        _diagnostic(diagnostics, path, "expression.entity_budget", f"Expressions reference more than {MAX_EXPRESSION_ENTITIES} entities.", "Reduce multi-entity inputs.")
+
+
+def _safe_expression_path(path: str) -> bool:
+    if path in {"state", "last_changed", "last_updated"}:
+        return True
+    return bool(path.startswith("attributes.") and SAFE_PATH_PATTERN.fullmatch(path)) and not any(
+        part in UNSAFE_PATH_PARTS for part in path.split(".")
+    )
 
 
 def _block_actions(block: dict[str, Any], path: str) -> list[tuple[dict[str, Any], str]]:
@@ -525,6 +652,8 @@ def _validate_action_data(
 
 
 def _parameter_allowed(parameter: dict[str, Any], value: Any) -> bool:
+    if isinstance(value, dict) and value.get("op") in EXPRESSION_OPS:
+        return True
     if isinstance(value, str) and ACTION_TEMPLATE_PATTERN.fullmatch(value):
         return True
     parameter_type = parameter.get("type")

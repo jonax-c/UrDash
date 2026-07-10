@@ -227,6 +227,88 @@ class CardValidatorTests(unittest.TestCase):
         blocks = [{"id": f"block-{index}", "kind": "text", "text": "x"} for index in range(65)]
         self.assertIn("budget.blocks", {item["code"] for item in errors(base_card(blocks))})
 
+    def test_expression_reads_nested_attributes_and_aggregates_entities(self):
+        card = base_card()
+        card["card"]["layout"]["blocks"][0]["bind"]["value"] = {
+            "op": "average",
+            "args": [
+                {"op": "entity", "entity_id": "sensor.temperature", "path": "state"},
+                {"op": "entity", "entity_id": "sensor.temperature", "path": "attributes.calibration.offset"},
+            ],
+        }
+        ENTITIES[0]["attributes"]["calibration"] = {"offset": 2}
+        try:
+            self.assertEqual(errors(card), [])
+        finally:
+            ENTITIES[0]["attributes"].pop("calibration")
+
+    def test_expression_supports_visibility_mapping_and_action_parameters(self):
+        card = base_card(
+            [
+                {
+                    "id": "mapped",
+                    "kind": "button",
+                    "entity": "fan.bedroom",
+                    "label": {
+                        "op": "map",
+                        "args": [{"op": "entity", "entity_id": "fan.bedroom", "path": "state"}],
+                        "cases": [{"when": "on", "value": {"op": "literal", "value": "Cooling"}}],
+                        "default": {"op": "literal", "value": "Idle"},
+                    },
+                    "visibility": {
+                        "expression": {
+                            "op": "eq",
+                            "args": [
+                                {"op": "entity", "entity_id": "fan.bedroom", "path": "state"},
+                                {"op": "literal", "value": "on"},
+                            ],
+                        }
+                    },
+                    "action": {
+                        "type": "service",
+                        "domain": "fan",
+                        "service": "set_percentage",
+                        "entity_id": "fan.bedroom",
+                        "data": {
+                            "percentage": {
+                                "op": "clamp",
+                                "args": [{"op": "local", "name": "selected"}],
+                                "min": 0,
+                                "max": 100,
+                            }
+                        },
+                    },
+                }
+            ]
+        )
+        ENTITIES[1]["attributes"]["supported_features"] = 1
+        try:
+            self.assertEqual(errors(card, {"fan.set_percentage"}), [])
+        finally:
+            ENTITIES[1]["attributes"]["supported_features"] = 0
+
+    def test_expression_rejects_unsafe_paths_and_enforces_budgets(self):
+        card = base_card()
+        block = card["card"]["layout"]["blocks"][0]
+        block["bind"]["value"] = {
+            "op": "entity",
+            "entity_id": "sensor.temperature",
+            "path": "attributes.constructor.prototype",
+        }
+        self.assertIn("expression.invalid_path", {item["code"] for item in errors(card)})
+
+        expression = {"op": "literal", "value": 1}
+        for _ in range(9):
+            expression = {"op": "not", "args": [expression]}
+        block["bind"]["value"] = expression
+        self.assertIn("expression.depth_budget", {item["code"] for item in errors(card)})
+
+    def test_expression_schema_references_are_strict_and_resolvable(self):
+        self.assertIn("expression", SCHEMA["$defs"])
+        strict = validator.build_strict_provider_schema(SCHEMA)
+        self.assertIn("expression", strict["$defs"])
+        self.assertEqual(strict["$defs"]["expression"]["properties"]["args"]["anyOf"][0]["items"]["$ref"], "#/$defs/expression")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -96,6 +96,16 @@ card._hass = {
       state: "on",
       attributes: { supported_features: 0 },
     },
+    "sensor.indoor_temperature": {
+      entity_id: "sensor.indoor_temperature",
+      state: "24",
+      attributes: { calibration: { offset: 2 }, unit_of_measurement: "°C" },
+    },
+    "sensor.outdoor_temperature": {
+      entity_id: "sensor.outdoor_temperature",
+      state: "30",
+      attributes: { unit_of_measurement: "°C" },
+    },
     "cover.garage": {
       entity_id: "cover.garage",
       state: "closed",
@@ -159,6 +169,64 @@ assert.equal(card._requiresConfirmation({
 assert.equal(card._navigationAllowed("/lovelace/home"), true);
 assert.equal(card._navigationAllowed("//external.example"), false);
 assert.equal(card._navigationAllowed("javascript:alert(1)"), false);
+
+const averageExpression = {
+  op: "round",
+  args: [{
+    op: "average",
+    args: [
+      { op: "entity", entity_id: "sensor.indoor_temperature", path: "state" },
+      { op: "entity", entity_id: "sensor.outdoor_temperature", path: "state" },
+    ],
+  }],
+  decimals: 1,
+};
+assert.equal(card._evaluateExpression(averageExpression), 27);
+assert.equal(card._evaluateExpression({
+  op: "add",
+  args: [
+    { op: "entity", entity_id: "sensor.indoor_temperature", path: "attributes.calibration.offset" },
+    { op: "literal", value: 3 },
+  ],
+}), 5);
+assert.equal(card._evaluateExpression({
+  op: "map",
+  args: [{ op: "entity", entity_id: "fan.bedroom", path: "state" }],
+  cases: [{ when: "on", value: { op: "literal", value: "Cooling" } }],
+  default: { op: "literal", value: "Idle" },
+}), "Cooling");
+assert.equal(card._evaluateExpression({
+  op: "convert_unit",
+  args: [{ op: "literal", value: 1000 }],
+  from_unit: "W",
+  to_unit: "kW",
+}), 1);
+assert.equal(card._evaluateExpression({
+  op: "format_duration",
+  args: [{ op: "literal", value: 3661 }],
+}), "1h 1m 1s");
+assert.equal(card._evaluateExpression({ op: "unknown", args: [] }), null);
+assert.equal(card._readEntityPath("sensor.indoor_temperature", "attributes.constructor.prototype"), null);
+assert.equal(card._isVisible({ visibility: {
+  expression: { op: "gt", args: [averageExpression, { op: "literal", value: 25 }] },
+} }), true);
+assert.deepEqual(card._resolveActionData({ percentage: {
+  op: "clamp",
+  args: [{ op: "local", name: "selected" }],
+  min: 0,
+  max: 100,
+} }, { selected: 120 }), { percentage: 100 });
+
+const dependencies = card._collectEntityDependencies(validConfig);
+assert.deepEqual([...dependencies], []);
+const expressionDependencies = card._collectEntityDependencies({ value: averageExpression });
+assert.deepEqual([...expressionDependencies].sort(), ["sensor.indoor_temperature", "sensor.outdoor_temperature"]);
+const previousHass = card._hass;
+const irrelevantHass = { ...previousHass, states: { ...previousHass.states, "sensor.unrelated": { state: "1" } } };
+card._entityDependencies = expressionDependencies;
+assert.equal(card._dependenciesChanged(previousHass, irrelevantHass), false);
+const relevantHass = { ...previousHass, states: { ...previousHass.states, "sensor.indoor_temperature": { ...previousHass.states["sensor.indoor_temperature"], state: "25" } } };
+assert.equal(card._dependenciesChanged(previousHass, relevantHass), true);
 
 await Promise.all([
   card._runAction(validLightAction),

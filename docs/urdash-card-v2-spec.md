@@ -956,12 +956,14 @@ card:
 
 ## Entity Binding
 
-Bindings read HA state safely. No arbitrary expressions are allowed.
+Bindings read HA state safely. They accept either a legacy binding path or a
+bounded declarative expression AST. No expression source code is executed.
 
 Allowed binding sources:
 
 - `state`
 - `attributes.<name>`
+- `attributes.<nested.path>`
 - `last_changed`
 - `last_updated`
 
@@ -972,6 +974,11 @@ bind:
   value: attributes.current_temperature
   label: state
 ```
+
+For derived values, `bind.value` and `bind.unit` can contain an expression. A
+missing entity, unavailable nested path, invalid conversion, divide by zero, or
+exhausted budget resolves to `null`; display primitives render their normal
+missing-value fallback.
 
 Invalid:
 
@@ -1073,18 +1080,59 @@ error states, and action errors emit an `urdash-action-error` event.
 
 ## Safe Data Expressions
 
-Allowed action data values:
+Expressions are JSON/YAML objects with an `op` and operation-specific fields.
+They never contain JavaScript, templates, function names, raw property access,
+or executable source. Legacy `$selected`, `$value`, `$current`, and bounded
+`$current +/- number` action values remain accepted.
 
-- Literal strings.
-- Literal numbers.
-- Literal booleans.
-- `$selected`
-- `$value`
-- `$current`
-- `$current + number`
-- `$current - number`
+```yaml
+bind:
+  value:
+    op: round
+    decimals: 1
+    args:
+      - op: average
+        args:
+          - op: entity
+            entity_id: sensor.living_room_temperature
+            path: state
+          - op: entity
+            entity_id: sensor.bedroom_temperature
+            path: state
+  unit:
+    op: literal
+    value: " °C"
+```
 
-No arbitrary expression language.
+Sources:
+
+- `literal`: safe string, number, boolean, or null.
+- `entity`: `entity_id` plus `state`, timestamps, or a safe nested
+  `attributes.*` path.
+- `local`: `selected`, `value`, or `current` from a control action.
+
+Operations:
+
+- Arithmetic: `add`, `subtract`, `multiply`, `divide`, `modulo`, `min`, `max`,
+  `average`, `sum`, `clamp`, `round`, `percentage`.
+- Logic: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `and`, `or`, `not`, `if`,
+  `coalesce`.
+- Presentation: `map`, `format_number`, `format_datetime`, `format_duration`,
+  `relative_time`, `convert_unit`.
+
+`map` uses ordered `{when, value}` cases and an optional default. This supports
+safe label, icon, color, and state mapping without arbitrary object lookup.
+
+Expressions are accepted in display text, binding values and units, style
+accents, icon selection, visibility, animation activation, visual-map labels
+and flow state, and allowlisted action parameters. The renderer tracks every
+referenced entity and skips rerenders when unrelated Home Assistant states
+change.
+
+Budgets are fixed: at most 8 nested expression levels, 128 operations, 16
+arguments per operation, 32 distinct referenced entities, and 1024 output
+characters. Unsafe keys such as `constructor`, `prototype`, and `__proto__` are
+rejected.
 
 ## Styling
 

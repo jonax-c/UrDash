@@ -12,10 +12,16 @@ async function loadModuleJson(relativePath, label) {
   return response.json();
 }
 
-function validateSchema(value, schema, path = "$", diagnostics = []) {
+function validateSchema(value, schema, path = "$", diagnostics = [], rootSchema = CARD_SCHEMA) {
   if (diagnostics.length >= 64) return diagnostics;
+  if (schema.$ref) {
+    const resolved = resolveLocalSchemaRef(rootSchema, schema.$ref);
+    if (!resolved) diagnostics.push(schemaDiagnostic(path, "schema.invalid_ref", "Schema reference could not be resolved."));
+    else validateSchema(value, resolved, path, diagnostics, rootSchema);
+    return diagnostics;
+  }
   if (schema.anyOf) {
-    const matches = schema.anyOf.some((option) => validateSchema(value, option, path, []).length === 0);
+    const matches = schema.anyOf.some((option) => validateSchema(value, option, path, [], rootSchema).length === 0);
     if (!matches) diagnostics.push(schemaDiagnostic(path, "schema.any_of", "Value does not match any allowed schema variant."));
     return diagnostics;
   }
@@ -38,17 +44,22 @@ function validateSchema(value, schema, path = "$", diagnostics = []) {
       }
     }
     for (const [name, child] of Object.entries(value)) {
-      if (properties[name]) validateSchema(child, properties[name], `${path}.${name}`, diagnostics);
+      if (properties[name]) validateSchema(child, properties[name], `${path}.${name}`, diagnostics, rootSchema);
     }
   } else if (schema.type === "array") {
     if (schema.minItems != null && value.length < schema.minItems) diagnostics.push(schemaDiagnostic(path, "schema.min_items", "Array has too few items."));
     if (schema.maxItems != null && value.length > schema.maxItems) diagnostics.push(schemaDiagnostic(path, "schema.max_items", "Array exceeds its item limit."));
-    value.forEach((child, index) => validateSchema(child, schema.items || {}, `${path}[${index}]`, diagnostics));
+    value.forEach((child, index) => validateSchema(child, schema.items || {}, `${path}[${index}]`, diagnostics, rootSchema));
   } else if (["number", "integer"].includes(schema.type)) {
     if (schema.minimum != null && value < schema.minimum) diagnostics.push(schemaDiagnostic(path, "schema.minimum", `Value is below ${schema.minimum}.`));
     if (schema.maximum != null && value > schema.maximum) diagnostics.push(schemaDiagnostic(path, "schema.maximum", `Value exceeds ${schema.maximum}.`));
   }
   return diagnostics;
+}
+
+function resolveLocalSchemaRef(rootSchema, ref) {
+  if (typeof ref !== "string" || !ref.startsWith("#/")) return null;
+  return ref.slice(2).split("/").reduce((current, part) => current?.[part], rootSchema) || null;
 }
 
 function matchesSchemaType(value, expected) {
@@ -59,6 +70,7 @@ function matchesSchemaType(value, expected) {
   if (expected === "number") return typeof value === "number" && Number.isFinite(value);
   if (expected === "boolean") return typeof value === "boolean";
   if (expected === "string") return typeof value === "string";
+  if (expected === "null") return value === null;
   return true;
 }
 
@@ -74,17 +86,24 @@ class UrDashCard extends HTMLElement {
     this._card = null;
     this._pendingActions = new Set();
     this._actionTimeoutMs = 15000;
+    this._entityDependencies = new Set();
+    this._expressionMetadata = new WeakMap();
+    this._expressionCache = new WeakMap();
   }
 
   setConfig(config) {
     this._config = this._normalizeConfig(config || {});
     this._card = this._config.card;
+    this._entityDependencies = this._collectEntityDependencies(this._config);
+    this._expressionMetadata = new WeakMap();
+    this._expressionCache = new WeakMap();
     this._render();
   }
 
   set hass(hass) {
+    const previous = this._hass;
     this._hass = hass;
-    this._render();
+    if (!previous || this._dependenciesChanged(previous, hass)) this._render();
   }
 
   getCardSize() {
@@ -154,7 +173,7 @@ class UrDashCard extends HTMLElement {
       this._animationClasses(config.animation),
     ].join(" ");
     block.dataset.blockId = config.id || "";
-    block.style.setProperty("--accent", this._safeAccent(config.style?.accent));
+    block.style.setProperty("--accent", this._safeAccent(this._resolveDisplay(config.style?.accent)));
 
     if (layoutType === "grid") this._applyGrid(block, config.grid);
     else this._applyFrame(block, config.frame, config.responsive?.mobile?.frame);
@@ -173,16 +192,19 @@ class UrDashCard extends HTMLElement {
   _createBlockHeader(config) {
     const header = document.createElement("div");
     header.className = "block-header";
-    if (config.icon) header.appendChild(this._icon(config.icon));
+    const iconValue = this._resolveDisplay(config.icon);
+    if (iconValue) header.appendChild(this._icon(iconValue));
     const text = document.createElement("div");
-    if (config.title) {
+    const titleValue = this._resolveDisplay(config.title);
+    if (titleValue) {
       const title = document.createElement("h4");
-      title.textContent = config.title;
+      title.textContent = titleValue;
       text.appendChild(title);
     }
-    if (config.subtitle) {
+    const subtitleValue = this._resolveDisplay(config.subtitle);
+    if (subtitleValue) {
       const subtitle = document.createElement("p");
-      subtitle.textContent = config.subtitle;
+      subtitle.textContent = subtitleValue;
       text.appendChild(subtitle);
     }
     header.appendChild(text);
@@ -260,7 +282,7 @@ class UrDashCard extends HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = `text text-${this._safeEnum(config.variant, ["label", "body", "headline", "display", "title", "caption"], "body")}`;
     const text = document.createElement("p");
-    text.textContent = config.text || config.title || "";
+    text.textContent = this._resolveDisplay(config.text ?? config.title ?? "");
     wrap.appendChild(text);
     return wrap;
   }
@@ -268,7 +290,7 @@ class UrDashCard extends HTMLElement {
   _iconBlock(config) {
     const wrap = document.createElement("div");
     wrap.className = "icon-orb";
-    wrap.appendChild(this._icon(config.icon || "mdi:view-dashboard"));
+    wrap.appendChild(this._icon(this._resolveDisplay(config.icon) || "mdi:view-dashboard"));
     return wrap;
   }
 
@@ -288,7 +310,7 @@ class UrDashCard extends HTMLElement {
     svg.setAttribute("viewBox", viewBox);
     svg.setAttribute("role", "img");
     svg.setAttribute("aria-label", label);
-    svg.style.setProperty("--vector-accent", this._safeAccent(config.style?.accent));
+    svg.style.setProperty("--vector-accent", this._safeAccent(this._resolveDisplay(config.style?.accent)));
     const gradientIds = this._vectorGradients(svg, config.gradients, metrics, budget);
 
     for (const shape of (config.shapes || []).slice(0, budget.shapes)) {
@@ -832,7 +854,7 @@ class UrDashCard extends HTMLElement {
     const strong = document.createElement("strong");
     strong.textContent = this._formatValue(value, unit);
     const label = document.createElement("span");
-    label.textContent = config.label || this._stateName(state) || config.entity || "Value";
+    label.textContent = this._resolveDisplay(config.label) || this._stateName(state) || config.entity || "Value";
     wrap.append(strong, label);
     return wrap;
   }
@@ -842,7 +864,7 @@ class UrDashCard extends HTMLElement {
     grid.className = "value-cluster";
     for (const item of (config.items || []).slice(0, 12)) {
       const state = this._state(item.entity);
-      grid.appendChild(this._signalTile(item.label, this._formatValue(this._boundValue(state, item.value || "state"), item.unit || state?.attributes?.unit_of_measurement)));
+      grid.appendChild(this._signalTile(this._resolveDisplay(item.label), this._formatValue(this._boundValue(state, item.value || "state"), this._resolveDisplay(item.unit) || state?.attributes?.unit_of_measurement)));
     }
     if (!grid.children.length) grid.appendChild(this._empty("No values configured."));
     return grid;
@@ -1030,8 +1052,9 @@ class UrDashCard extends HTMLElement {
     for (const chip of chips.slice(0, 12)) {
       const state = this._state(chip.entity);
       const span = document.createElement("span");
-      if (chip.icon) span.appendChild(this._icon(chip.icon));
-      span.append(document.createTextNode(`${chip.label}${state ? ` · ${this._humanize(state.state)}` : ""}`));
+      const icon = this._resolveDisplay(chip.icon);
+      if (icon) span.appendChild(this._icon(icon));
+      span.append(document.createTextNode(`${this._resolveDisplay(chip.label)}${state ? ` · ${this._humanize(state.state)}` : ""}`));
       group.appendChild(span);
     }
     if (!group.children.length) group.appendChild(this._empty("No chips configured."));
@@ -1046,13 +1069,14 @@ class UrDashCard extends HTMLElement {
     wrap.className = "hero-value";
     if (String(value ?? "").length > 5) wrap.classList.add("hero-value-long");
     else wrap.classList.add("hero-value-short");
-    if (config.icon) wrap.appendChild(this._icon(config.icon));
+    const icon = this._resolveDisplay(config.icon);
+    if (icon) wrap.appendChild(this._icon(icon));
     const valueEl = document.createElement("strong");
     valueEl.textContent = this._formatValue(value, unit);
     const label = document.createElement("span");
-    label.textContent = config.label || config.title || this._stateName(state) || config.entity || "Status";
+    label.textContent = this._resolveDisplay(config.label) || this._resolveDisplay(config.title) || this._stateName(state) || config.entity || "Status";
     const subtitle = document.createElement("p");
-    subtitle.textContent = config.subtitle || this._humanize(state?.state || "");
+    subtitle.textContent = this._resolveDisplay(config.subtitle) || this._humanize(state?.state || "");
     wrap.append(valueEl, label, subtitle);
     return wrap;
   }
@@ -1193,24 +1217,26 @@ class UrDashCard extends HTMLElement {
       const toPoint = this._visualAnchor(to, link.to_anchor);
       const state = this._state(link.entity);
       const value = Number(this._boundValue(state, link.bind?.value || "state"));
+      const animated = this._isExpression(link.style?.animated) ? Boolean(this._evaluateExpression(link.style.animated)) : link.style?.animated;
       const active = Number.isFinite(value) ? Math.abs(value) > 0 : Boolean(state);
+      const linkAccent = this._resolveDisplay(link.style?.accent) || this._resolveDisplay(config.style?.accent);
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("class", `visual-link ${link.style?.animated && active && !link.style?.flow_dot ? "visual-link-animated" : ""}`);
+      path.setAttribute("class", `visual-link ${animated && active && !link.style?.flow_dot ? "visual-link-animated" : ""}`);
       path.setAttribute("d", this._visualMapPath(fromPoint, toPoint, link));
       path.setAttribute("pathLength", "100");
-      path.style.setProperty("--link-accent", this._safeAccent(link.style?.accent || config.style?.accent));
+      path.style.setProperty("--link-accent", this._safeAccent(linkAccent));
       path.style.setProperty("--link-width", `${this._visualLinkWidth(link, value)}px`);
-      const markerId = this._visualMarker(defs, config.id, index, link.style?.accent || config.style?.accent);
+      const markerId = this._visualMarker(defs, config.id, index, linkAccent);
       if (link.style?.direction === "reverse") path.setAttribute("marker-start", `url(#${markerId})`);
       else if (link.style?.direction !== "none") path.setAttribute("marker-end", `url(#${markerId})`);
       svg.appendChild(path);
       if (link.style?.flow_dot) {
-        if (link.style?.animated && active) {
+        if (animated && active) {
           const tracer = document.createElementNS("http://www.w3.org/2000/svg", "path");
           tracer.setAttribute("class", "visual-flow-tracer");
           tracer.setAttribute("d", path.getAttribute("d"));
           tracer.setAttribute("pathLength", "100");
-          tracer.style.setProperty("--link-accent", this._safeAccent(link.style?.accent || config.style?.accent));
+          tracer.style.setProperty("--link-accent", this._safeAccent(linkAccent));
           tracer.style.setProperty("--flow-width", `${this._clampNumber(link.style?.dot_size, 0.8, 3, 1.1) * 1.45}px`);
           tracer.style.setProperty("--flow-delay", `${-(index % 4) * 0.42}s`);
           svg.appendChild(tracer);
@@ -1221,7 +1247,7 @@ class UrDashCard extends HTMLElement {
           dot.setAttribute("cx", String(dotPoint.x));
           dot.setAttribute("cy", String(dotPoint.y));
           dot.setAttribute("r", String(this._clampNumber(link.style?.dot_size, 0.8, 4.5, 2.2)));
-          dot.style.setProperty("--link-accent", this._safeAccent(link.style?.accent || config.style?.accent));
+          dot.style.setProperty("--link-accent", this._safeAccent(linkAccent));
           svg.appendChild(dot);
         }
       }
@@ -1230,7 +1256,7 @@ class UrDashCard extends HTMLElement {
       label.className = "visual-link-label";
       label.style.left = `${this._clampNumber(link.label_position?.x, 0, 100, (fromPoint.x + toPoint.x) / 2)}%`;
       label.style.top = `${this._clampNumber(link.label_position?.y, 0, 100, (fromPoint.y + toPoint.y) / 2)}%`;
-      label.style.setProperty("--link-accent", this._safeAccent(link.style?.accent || config.style?.accent));
+      label.style.setProperty("--link-accent", this._safeAccent(linkAccent));
       label.textContent = this._visualLinkLabel(link, state);
       label.dataset.linkIndex = String(index);
       if (link.show_label !== false && label.textContent) wrap.appendChild(label);
@@ -1249,7 +1275,8 @@ class UrDashCard extends HTMLElement {
       ].join(" ");
       element.style.left = `${node.x}%`;
       element.style.top = `${node.y}%`;
-      element.style.setProperty("--node-accent", this._safeAccent(node.style?.accent || config.style?.accent));
+      const nodeAccent = this._resolveDisplay(node.style?.accent) || this._resolveDisplay(config.style?.accent);
+      element.style.setProperty("--node-accent", this._safeAccent(nodeAccent));
       if (element.tagName === "BUTTON") {
         element.type = "button";
         element.addEventListener("click", () => this._runAction(
@@ -1259,18 +1286,18 @@ class UrDashCard extends HTMLElement {
       }
       if (node.vector_icon) {
         const icon = this._vectorSvg(
-          { ...node.vector_icon, style: { ...(node.vector_icon.style || {}), accent: node.vector_icon.style?.accent || node.style?.accent || config.style?.accent } },
-          node.label || node.id || "Vector node icon",
+          { ...node.vector_icon, style: { ...(node.vector_icon.style || {}), accent: this._resolveDisplay(node.vector_icon.style?.accent) || nodeAccent } },
+          this._resolveDisplay(node.label) || node.id || "Vector node icon",
         );
         icon.classList.add("visual-node-vector-icon");
         element.appendChild(icon);
       } else if (node.icon) {
-        element.appendChild(this._icon(node.icon));
+        element.appendChild(this._icon(this._resolveDisplay(node.icon)));
       }
       const value = document.createElement("strong");
       value.textContent = this._visualNodeValue(node, state);
       const label = document.createElement("span");
-      label.textContent = node.label || this._shortName(state) || node.id;
+      label.textContent = this._resolveDisplay(node.label) || this._shortName(state) || node.id;
       element.append(value, label);
       const stats = this._visualNodeStats(node);
       if (stats) element.appendChild(stats);
@@ -1353,7 +1380,7 @@ class UrDashCard extends HTMLElement {
   }
 
   _visualNodeValue(node, state) {
-    if (node.value) return node.value;
+    if (node.value !== undefined) return this._resolveDisplay(node.value);
     return this._formatValue(
       this._boundValue(state, node.bind?.value || "state"),
       this._boundValue(state, node.bind?.unit || "attributes.unit_of_measurement"),
@@ -1370,9 +1397,9 @@ class UrDashCard extends HTMLElement {
       const row = document.createElement("small");
       row.className = `visual-stat-${this._safeEnum(stat.tone, ["neutral", "positive", "negative", "muted"], "neutral")}`;
       row.textContent = [
-        stat.prefix || "",
-        this._formatValue(this._boundValue(state, stat.bind?.value || "state"), stat.unit || this._boundValue(state, stat.bind?.unit || "attributes.unit_of_measurement")),
-        stat.suffix || "",
+        this._resolveDisplay(stat.prefix),
+        this._formatValue(this._boundValue(state, stat.bind?.value || "state"), this._resolveDisplay(stat.unit) || this._boundValue(state, stat.bind?.unit || "attributes.unit_of_measurement")),
+        this._resolveDisplay(stat.suffix),
       ].join("");
       wrap.appendChild(row);
     }
@@ -1404,22 +1431,24 @@ class UrDashCard extends HTMLElement {
   }
 
   _visualLinkLabel(link, state) {
-    if (link.label && !state) return link.label;
-    if (!state) return link.label || "";
+    const label = this._resolveDisplay(link.label);
+    if (label && !state) return label;
+    if (!state) return label || "";
     const value = this._formatValue(
       this._boundValue(state, link.bind?.value || "state"),
       this._boundValue(state, link.bind?.unit || "attributes.unit_of_measurement"),
     );
-    return link.label ? `${link.label} ${value}` : value;
+    return label ? `${label} ${value}` : value;
   }
 
   _actionButton(label, icon, action) {
     const button = document.createElement("button");
     button.className = "action-button";
     button.type = "button";
-    if (icon) button.appendChild(this._icon(icon));
+    const iconValue = this._resolveDisplay(icon);
+    if (iconValue) button.appendChild(this._icon(iconValue));
     const text = document.createElement("span");
-    text.textContent = label || "Action";
+    text.textContent = this._resolveDisplay(label) || "Action";
     button.appendChild(text);
     button.disabled = !this._actionAllowed(action);
     if (button.disabled) button.title = "Action unavailable or denied by UrDash policy.";
@@ -1541,6 +1570,7 @@ class UrDashCard extends HTMLElement {
   }
 
   _parameterAllowed(parameter, value, allowTemplates) {
+    if (allowTemplates && this._isExpression(value)) return true;
     if (allowTemplates && this._isActionTemplate(value)) return true;
     if (typeof value === "string" && value.startsWith("$")) return false;
     if (parameter.type === "number" || parameter.type === "integer") {
@@ -1674,6 +1704,7 @@ class UrDashCard extends HTMLElement {
   }
 
   _resolveValue(value, context) {
+    if (this._isExpression(value)) return this._evaluateExpression(value, context);
     if (value === "$selected") return context.selected;
     if (value === "$value") return context.value;
     if (value === "$current") return context.current;
@@ -1682,6 +1713,201 @@ class UrDashCard extends HTMLElement {
       return add[1] === "+" ? Number(context.current) + Number(add[2]) : Number(context.current) - Number(add[2]);
     }
     return value;
+  }
+
+  _isExpression(value) {
+    return value !== null && typeof value === "object" && !Array.isArray(value) && typeof value.op === "string";
+  }
+
+  _resolveDisplay(value, context = {}) {
+    const resolved = this._isExpression(value) ? this._evaluateExpression(value, context) : value;
+    if (resolved === null || resolved === undefined) return "";
+    return String(resolved).slice(0, 1024);
+  }
+
+  _evaluateExpression(expression, context = {}, depth = 1, budget = { operations: 0 }) {
+    if (!this._isExpression(expression) || depth > 8 || ++budget.operations > 128) return null;
+    const metadata = this._expressionMetadataFor(expression);
+    const cacheable = !metadata.volatile && !metadata.local;
+    const cached = cacheable ? this._expressionCache.get(expression) : null;
+    if (cached && [...metadata.entities].every((entityId) => cached.states.get(entityId) === this._hass?.states?.[entityId])) return cached.value;
+    const evaluate = (value) => this._isExpression(value)
+      ? this._evaluateExpression(value, context, depth + 1, budget)
+      : value;
+    const args = Array.isArray(expression.args) ? expression.args.slice(0, 16).map(evaluate) : [];
+    const numbers = args.map(Number).filter(Number.isFinite);
+    const number = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
+    let result = null;
+    switch (expression.op) {
+      case "literal": result = expression.value; break;
+      case "entity": result = this._readEntityPath(expression.entity_id, expression.path || "state"); break;
+      case "local": result = context[expression.name] ?? null; break;
+      case "add": result = numbers.length === args.length ? numbers.reduce((sum, value) => sum + value, 0) : null; break;
+      case "subtract": result = numbers.length === args.length && numbers.length ? numbers.slice(1).reduce((value, part) => value - part, numbers[0]) : null; break;
+      case "multiply": result = numbers.length === args.length ? numbers.reduce((value, part) => value * part, 1) : null; break;
+      case "divide": result = numbers.length === args.length && numbers.length > 1 && numbers.slice(1).every((value) => value !== 0) ? numbers.slice(1).reduce((value, part) => value / part, numbers[0]) : null; break;
+      case "modulo": result = numbers.length === 2 && numbers[1] !== 0 ? numbers[0] % numbers[1] : null; break;
+      case "min": result = numbers.length === args.length && numbers.length ? Math.min(...numbers) : null; break;
+      case "max": result = numbers.length === args.length && numbers.length ? Math.max(...numbers) : null; break;
+      case "average": result = numbers.length === args.length && numbers.length ? numbers.reduce((sum, value) => sum + value, 0) / numbers.length : null; break;
+      case "sum": result = numbers.length === args.length ? numbers.reduce((sum, value) => sum + value, 0) : null; break;
+      case "clamp": {
+        const value = number(args[0]);
+        result = value === null ? null : Math.min(Number(expression.max ?? value), Math.max(Number(expression.min ?? value), value));
+        break;
+      }
+      case "round": {
+        const value = number(args[0]);
+        const factor = 10 ** Math.min(6, Math.max(0, Number(expression.decimals ?? 0)));
+        result = value === null ? null : Math.round((value + Number.EPSILON) * factor) / factor;
+        break;
+      }
+      case "percentage": result = numbers.length >= 2 && numbers[1] !== 0 ? (numbers[0] / numbers[1]) * 100 : null; break;
+      case "eq": result = args[0] === args[1]; break;
+      case "ne": result = args[0] !== args[1]; break;
+      case "gt": result = args[0] > args[1]; break;
+      case "gte": result = args[0] >= args[1]; break;
+      case "lt": result = args[0] < args[1]; break;
+      case "lte": result = args[0] <= args[1]; break;
+      case "and": result = args.every(Boolean); break;
+      case "or": result = args.some(Boolean); break;
+      case "not": result = !args[0]; break;
+      case "if": result = evaluate(expression.condition) ? evaluate(expression.then) : evaluate(expression.else); break;
+      case "coalesce": result = args.find((value) => value !== null && value !== undefined && value !== "") ?? evaluate(expression.default); break;
+      case "map": {
+        const source = args[0];
+        const match = (expression.cases || []).slice(0, 32).find((item) => item?.when === source);
+        result = match ? evaluate(match.value) : evaluate(expression.default);
+        break;
+      }
+      case "format_number": result = this._formatExpressionNumber(args[0], expression); break;
+      case "format_datetime": result = this._formatExpressionDate(args[0], expression); break;
+      case "format_duration": result = this._formatExpressionDuration(args[0]); break;
+      case "relative_time": result = this._formatRelativeTime(args[0], expression.locale); break;
+      case "convert_unit": result = this._convertUnit(args[0], expression.from_unit, expression.to_unit); break;
+      default: result = null;
+    }
+    if (typeof result === "string") result = `${expression.prefix || ""}${result.slice(0, 1024)}${expression.suffix || ""}`.slice(0, 1024);
+    if (cacheable) {
+      this._expressionCache.set(expression, {
+        states: new Map([...metadata.entities].map((entityId) => [entityId, this._hass?.states?.[entityId]])),
+        value: result,
+      });
+    }
+    return result;
+  }
+
+  _expressionMetadataFor(expression) {
+    const cached = this._expressionMetadata.get(expression);
+    if (cached) return cached;
+    const metadata = { entities: new Set(), local: false, volatile: false };
+    const visit = (node) => {
+      if (Array.isArray(node)) {
+        node.forEach(visit);
+        return;
+      }
+      if (!this._isExpression(node)) {
+        if (node && typeof node === "object") Object.values(node).forEach(visit);
+        return;
+      }
+      if (node.op === "entity" && typeof node.entity_id === "string") metadata.entities.add(node.entity_id);
+      if (node.op === "local") metadata.local = true;
+      if (node.op === "relative_time") metadata.volatile = true;
+      Object.values(node).forEach(visit);
+    };
+    visit(expression);
+    this._expressionMetadata.set(expression, metadata);
+    return metadata;
+  }
+
+  _readEntityPath(entityId, path) {
+    const state = this._state(entityId);
+    if (!state || !this._safeDataPath(path)) return null;
+    return path.split(".").reduce((value, part) => value?.[part], state) ?? null;
+  }
+
+  _safeDataPath(path) {
+    const value = String(path || "");
+    if (["state", "last_changed", "last_updated"].includes(value)) return true;
+    return /^attributes(?:\.[A-Za-z_][A-Za-z0-9_]*)+$/.test(value)
+      && !value.split(".").some((part) => ["__proto__", "prototype", "constructor"].includes(part));
+  }
+
+  _formatExpressionNumber(value, expression) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return null;
+    const locale = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(expression.locale || "") ? expression.locale : undefined;
+    const style = ["decimal", "percent", "currency", "unit"].includes(expression.style) ? expression.style : "decimal";
+    const options = { style, maximumFractionDigits: Math.min(6, Math.max(0, Number(expression.decimals ?? 2))) };
+    if (style === "currency") options.currency = /^[A-Z]{3}$/.test(expression.currency || "") ? expression.currency : "USD";
+    if (style === "unit" && /^[A-Za-z0-9-]{1,24}$/.test(expression.unit || "")) options.unit = expression.unit;
+    try { return new Intl.NumberFormat(locale, options).format(number); } catch { return String(number); }
+  }
+
+  _formatExpressionDate(value, expression) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return null;
+    const locale = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(expression.locale || "") ? expression.locale : undefined;
+    const dateStyle = ["short", "medium", "long", "full"].includes(expression.style) ? expression.style : "medium";
+    try { return new Intl.DateTimeFormat(locale, { dateStyle, timeStyle: dateStyle === "full" ? "long" : "short" }).format(date); } catch { return date.toLocaleString(); }
+  }
+
+  _formatExpressionDuration(value) {
+    let seconds = Math.max(0, Math.floor(Number(value)));
+    if (!Number.isFinite(seconds)) return null;
+    const hours = Math.floor(seconds / 3600);
+    seconds %= 3600;
+    const minutes = Math.floor(seconds / 60);
+    seconds %= 60;
+    return [hours ? `${hours}h` : "", minutes ? `${minutes}m` : "", `${seconds}s`].filter(Boolean).join(" ");
+  }
+
+  _formatRelativeTime(value, locale) {
+    const timestamp = new Date(value).getTime();
+    if (!Number.isFinite(timestamp)) return null;
+    const seconds = Math.round((timestamp - Date.now()) / 1000);
+    const [amount, unit] = Math.abs(seconds) >= 86400 ? [Math.round(seconds / 86400), "day"] : Math.abs(seconds) >= 3600 ? [Math.round(seconds / 3600), "hour"] : Math.abs(seconds) >= 60 ? [Math.round(seconds / 60), "minute"] : [seconds, "second"];
+    try { return new Intl.RelativeTimeFormat(locale || undefined, { numeric: "auto" }).format(amount, unit); } catch { return `${amount} ${unit}`; }
+  }
+
+  _convertUnit(value, fromUnit, toUnit) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return null;
+    const key = `${String(fromUnit || "").toLowerCase()}>${String(toUnit || "").toLowerCase()}`;
+    const conversions = {
+      "c>f": (v) => v * 9 / 5 + 32, "°c>°f": (v) => v * 9 / 5 + 32,
+      "f>c": (v) => (v - 32) * 5 / 9, "°f>°c": (v) => (v - 32) * 5 / 9,
+      "w>kw": (v) => v / 1000, "kw>w": (v) => v * 1000,
+      "wh>kwh": (v) => v / 1000, "kwh>wh": (v) => v * 1000,
+      "m/s>km/h": (v) => v * 3.6, "km/h>m/s": (v) => v / 3.6,
+      "pa>kpa": (v) => v / 1000, "kpa>pa": (v) => v * 1000,
+    };
+    return fromUnit === toUnit ? number : conversions[key]?.(number) ?? null;
+  }
+
+  _collectEntityDependencies(value) {
+    const dependencies = new Set();
+    const visit = (node, key = "") => {
+      if (Array.isArray(node)) {
+        node.forEach((child) => visit(child, key));
+        return;
+      }
+      if (!node || typeof node !== "object") return;
+      if (node.op === "entity" && typeof node.entity_id === "string") dependencies.add(node.entity_id);
+      for (const [name, child] of Object.entries(node)) {
+        if (["entity", "entity_id"].includes(name) && typeof child === "string" && child.includes(".")) dependencies.add(child);
+        else if (["entities", "primary_entities"].includes(name) && Array.isArray(child)) child.filter((item) => typeof item === "string").forEach((item) => dependencies.add(item));
+        visit(child, name);
+      }
+    };
+    visit(value);
+    return dependencies;
+  }
+
+  _dependenciesChanged(previous, next) {
+    if (!previous || !next) return true;
+    if (!this._entityDependencies.size) return previous !== next;
+    return [...this._entityDependencies].some((entityId) => previous.states?.[entityId] !== next.states?.[entityId]);
   }
 
   _toggleActionFor(entityId, state) {
@@ -1693,6 +1919,7 @@ class UrDashCard extends HTMLElement {
   _isVisible(config) {
     const rule = config.visibility;
     if (!rule) return true;
+    if (rule.expression) return Boolean(this._evaluateExpression(rule.expression));
     const state = this._state(rule.entity);
     if (rule.operator === "exists") return Boolean(state);
     if (!state) return false;
@@ -1708,12 +1935,9 @@ class UrDashCard extends HTMLElement {
   }
 
   _boundValue(state, binding) {
+    if (this._isExpression(binding)) return this._evaluateExpression(binding);
     if (!state) return null;
-    if (binding === "state") return state.state;
-    if (binding === "last_changed") return state.last_changed;
-    if (binding === "last_updated") return state.last_updated;
-    if (String(binding || "").startsWith("attributes.")) return state.attributes?.[String(binding).slice(11)];
-    return null;
+    return this._safeDataPath(binding) ? String(binding).split(".").reduce((value, part) => value?.[part], state) ?? null : null;
   }
 
   _stateName(state) {
@@ -1790,7 +2014,8 @@ class UrDashCard extends HTMLElement {
 
   _icon(icon) {
     const element = document.createElement("ha-icon");
-    element.setAttribute("icon", icon && icon.startsWith("mdi:") ? icon : "mdi:view-dashboard");
+    const value = typeof icon === "string" ? icon : "";
+    element.setAttribute("icon", value.startsWith("mdi:") ? value : "mdi:view-dashboard");
     return element;
   }
 
@@ -1844,9 +2069,9 @@ class UrDashCard extends HTMLElement {
 
   _styleClasses(style = {}) {
     return [
-      `tone-${this._safeEnum(style.tone, ["neutral", "calm", "warm", "cool", "alert", "success"], "neutral")}`,
-      `emphasis-${this._safeEnum(style.emphasis, ["low", "normal", "high", "hero"], "normal")}`,
-      `shape-${this._safeEnum(style.shape, ["none", "soft", "pill", "circle"], "soft")}`,
+      `tone-${this._safeEnum(this._resolveDisplay(style.tone), ["neutral", "calm", "warm", "cool", "alert", "success"], "neutral")}`,
+      `emphasis-${this._safeEnum(this._resolveDisplay(style.emphasis), ["low", "normal", "high", "hero"], "normal")}`,
+      `shape-${this._safeEnum(this._resolveDisplay(style.shape), ["none", "soft", "pill", "circle"], "soft")}`,
     ].join(" ");
   }
 
@@ -1860,6 +2085,7 @@ class UrDashCard extends HTMLElement {
   }
 
   _animationClasses(animation = {}) {
+    if (animation.active != null && !Boolean(this._isExpression(animation.active) ? this._evaluateExpression(animation.active) : animation.active)) return "anim-none trigger-always speed-normal intensity-normal";
     const preset = this._safeEnum(animation.preset, ["none", "pulse", "breathe", "glow", "float", "shimmer", "progress", "orbit", "wave", "count_up", "state_flash", "slide_in", "fade_in"], "none");
     const trigger = this._safeEnum(animation.trigger, ["always", "on_load", "on_state_change", "state_on", "state_alert", "on_hover"], "always");
     const speed = this._safeEnum(animation.speed, ["slow", "normal", "fast"], "normal");

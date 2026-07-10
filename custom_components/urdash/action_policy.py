@@ -7,6 +7,7 @@ from typing import Any
 ACTION_MANIFEST_PATH = Path(__file__).parent / "frontend" / "action-manifest.json"
 ACTION_TYPES = ["service", "more_info", "navigate", "none"]
 RISK_LEVELS = {"low", "medium", "high"}
+EXPRESSION_REF = {"$ref": "#/$defs/expression"}
 
 
 def load_action_manifest(path: Path = ACTION_MANIFEST_PATH) -> dict[str, Any]:
@@ -104,26 +105,26 @@ def _parameter_schema(parameter: dict[str, Any]) -> dict[str, Any]:
             numeric["minimum"] = parameter["min"]
         if "max" in parameter:
             numeric["maximum"] = parameter["max"]
-        return {"anyOf": [numeric, {"type": "string"}]}
+        return {"anyOf": [numeric, {"type": "string"}, EXPRESSION_REF]}
     if parameter_type == "boolean":
-        return {"anyOf": [{"type": "boolean"}, {"type": "string"}]}
+        return {"anyOf": [{"type": "boolean"}, {"type": "string"}, EXPRESSION_REF]}
     if parameter_type == "rgb":
-        return {
+        return {"anyOf": [{
             "type": "array",
             "minItems": 3,
             "maxItems": 3,
             "items": {"type": "integer", "minimum": 0, "maximum": 255},
-        }
+        }, EXPRESSION_REF]}
     if parameter_type == "string_list":
-        return {
+        return {"anyOf": [{
             "type": "array",
             "maxItems": parameter.get("max_items", 16),
             "items": {"type": "string"},
-        }
+        }, EXPRESSION_REF]}
     schema: dict[str, Any] = {"type": "string"}
     if parameter_type == "enum" and parameter.get("options"):
         schema["enum"] = parameter["options"]
-    return schema
+    return {"anyOf": [schema, EXPRESSION_REF]}
 
 
 def _merge_parameter_schema(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:

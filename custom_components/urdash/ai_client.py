@@ -37,17 +37,75 @@ Use vector_icon when a custom symbol is useful, including inside visual_map node
 For premium glow, prefer layered radial gradients with userSpaceOnUse or numeric coordinate_mode, focal points, matrix/scale transforms, blend modes, and safe filter_preset values. For design-tool-style art, set vector_icon render_budget to art, viewBox to the source coordinate space, and coordinate_mode to number. Avoid animating shapes that use heavy blur/glow/neon effects; animate transform or opacity on gradient-filled shapes instead.
 Prefer direct, usable controls over decorative blocks, but make the interface visually distinctive.
 Use declarative animation presets only when they improve clarity.
+Use bounded declarative expressions for derived values, labels, icons, colors, visibility, animation state, and action parameters. Expressions are JSON AST objects, never source code. Prefer direct entity bindings for simple values and expressions when they add meaningful aggregation, mapping, formatting, or conditional behavior.
 """
+
+EXPRESSION_REF: dict[str, Any] = {"$ref": "#/$defs/expression"}
+SAFE_SCALAR_SCHEMA: dict[str, Any] = {
+    "anyOf": [
+        {"type": "string"},
+        {"type": "number"},
+        {"type": "boolean"},
+        {"type": "null"},
+    ]
+}
+EXPRESSION_CASE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["when", "value"],
+    "properties": {"when": SAFE_SCALAR_SCHEMA, "value": EXPRESSION_REF},
+}
+EXPRESSION_DEFINITION: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["op"],
+    "properties": {
+        "op": {
+            "type": "string",
+            "enum": [
+                "literal", "entity", "local", "add", "subtract", "multiply", "divide",
+                "modulo", "min", "max", "average", "sum", "clamp", "round", "percentage",
+                "eq", "ne", "gt", "gte", "lt", "lte", "and", "or", "not", "if",
+                "coalesce", "map", "format_number", "format_datetime", "format_duration",
+                "relative_time", "convert_unit",
+            ],
+        },
+        "value": SAFE_SCALAR_SCHEMA,
+        "entity_id": {"type": "string"},
+        "path": {"type": "string"},
+        "name": {"type": "string", "enum": ["selected", "value", "current"]},
+        "args": {"type": "array", "maxItems": 16, "items": EXPRESSION_REF},
+        "condition": EXPRESSION_REF,
+        "then": EXPRESSION_REF,
+        "else": EXPRESSION_REF,
+        "cases": {"type": "array", "maxItems": 32, "items": EXPRESSION_CASE_SCHEMA},
+        "default": EXPRESSION_REF,
+        "min": {"type": "number"},
+        "max": {"type": "number"},
+        "decimals": {"type": "integer", "minimum": 0, "maximum": 6},
+        "from_unit": {"type": "string"},
+        "to_unit": {"type": "string"},
+        "style": {"type": "string", "enum": ["decimal", "percent", "currency", "unit", "short", "medium", "long", "full"]},
+        "prefix": {"type": "string"},
+        "suffix": {"type": "string"},
+        "locale": {"type": "string"},
+        "currency": {"type": "string"},
+        "unit": {"type": "string"},
+    },
+}
+DISPLAY_VALUE_SCHEMA: dict[str, Any] = {
+    "anyOf": [{"type": "string"}, {"type": "number"}, {"type": "boolean"}, EXPRESSION_REF]
+}
 
 STYLE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "tone": {"type": "string", "enum": ["neutral", "calm", "warm", "cool", "alert", "success"]},
-        "emphasis": {"type": "string", "enum": ["low", "normal", "high", "hero"]},
-        "shape": {"type": "string", "enum": ["none", "soft", "pill", "circle"]},
-        "density": {"type": "string", "enum": ["compact", "comfortable", "spacious"]},
-        "accent": {"type": "string"},
+        "tone": {"anyOf": [{"type": "string", "enum": ["neutral", "calm", "warm", "cool", "alert", "success"]}, EXPRESSION_REF]},
+        "emphasis": {"anyOf": [{"type": "string", "enum": ["low", "normal", "high", "hero"]}, EXPRESSION_REF]},
+        "shape": {"anyOf": [{"type": "string", "enum": ["none", "soft", "pill", "circle"]}, EXPRESSION_REF]},
+        "density": {"anyOf": [{"type": "string", "enum": ["compact", "comfortable", "spacious"]}, EXPRESSION_REF]},
+        "accent": DISPLAY_VALUE_SCHEMA,
     },
 }
 
@@ -55,7 +113,7 @@ VISUAL_NODE_STYLE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "accent": {"type": "string"},
+        "accent": DISPLAY_VALUE_SCHEMA,
         "shape": {"type": "string", "enum": ["none", "soft", "pill", "circle", "orb", "core", "ring"]},
         "ring_width": {"type": "string", "enum": ["thin", "normal", "thick"]},
         "tone": {"type": "string", "enum": ["neutral", "calm", "warm", "cool", "alert", "success"]},
@@ -67,10 +125,10 @@ VISUAL_LINK_STYLE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "accent": {"type": "string"},
+        "accent": DISPLAY_VALUE_SCHEMA,
         "width": {"anyOf": [{"type": "number"}, {"type": "string", "enum": ["dynamic"]}]},
         "curve": {"type": "string", "enum": ["straight", "soft", "arc"]},
-        "animated": {"type": "boolean"},
+        "animated": {"anyOf": [{"type": "boolean"}, EXPRESSION_REF]},
         "direction": {"type": "string", "enum": ["forward", "reverse", "none"]},
         "flow_dot": {"type": "boolean"},
         "dot_size": {"type": "number"},
@@ -401,8 +459,8 @@ VISUAL_BIND_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "value": {"type": "string"},
-        "unit": {"type": "string"},
+        "value": DISPLAY_VALUE_SCHEMA,
+        "unit": DISPLAY_VALUE_SCHEMA,
     },
 }
 
@@ -412,9 +470,9 @@ VISUAL_STAT_SCHEMA: dict[str, Any] = {
     "required": ["entity"],
     "properties": {
         "entity": {"type": "string"},
-        "prefix": {"type": "string"},
-        "suffix": {"type": "string"},
-        "unit": {"type": "string"},
+        "prefix": DISPLAY_VALUE_SCHEMA,
+        "suffix": DISPLAY_VALUE_SCHEMA,
+        "unit": DISPLAY_VALUE_SCHEMA,
         "tone": {"type": "string", "enum": ["neutral", "positive", "negative", "muted"]},
         "bind": VISUAL_BIND_SCHEMA,
     },
@@ -426,10 +484,10 @@ VISUAL_MAP_NODE_SCHEMA: dict[str, Any] = {
     "required": ["id", "label", "position"],
     "properties": {
         "id": {"type": "string"},
-        "label": {"type": "string"},
-        "value": {"type": "string"},
+        "label": DISPLAY_VALUE_SCHEMA,
+        "value": DISPLAY_VALUE_SCHEMA,
         "entity": {"type": "string"},
-        "icon": {"type": "string"},
+        "icon": DISPLAY_VALUE_SCHEMA,
         "vector_icon": VECTOR_ICON_SCHEMA,
         "size": {"type": "string", "enum": ["micro", "small", "normal", "large", "hero"]},
         "position": {
@@ -471,7 +529,7 @@ VISUAL_MAP_LINK_SCHEMA: dict[str, Any] = {
         "to": {"type": "string"},
         "from_anchor": {"type": "string", "enum": VISUAL_ANCHOR_VALUES},
         "to_anchor": {"type": "string", "enum": VISUAL_ANCHOR_VALUES},
-        "label": {"type": "string"},
+        "label": DISPLAY_VALUE_SCHEMA,
         "show_label": {"type": "boolean"},
         "label_position": VISUAL_POINT_SCHEMA,
         "flow_position": VISUAL_POINT_SCHEMA,
@@ -516,6 +574,7 @@ ANIMATION_SCHEMA: dict[str, Any] = {
         },
         "speed": {"type": "string", "enum": ["slow", "normal", "fast"]},
         "intensity": {"type": "string", "enum": ["subtle", "normal", "strong"]},
+        "active": {"anyOf": [{"type": "boolean"}, EXPRESSION_REF]},
     },
 }
 
@@ -571,12 +630,12 @@ BLOCK_SCHEMA: dict[str, Any] = {
                 "visual_map",
             ],
         },
-        "title": {"type": "string"},
-        "subtitle": {"type": "string"},
-        "text": {"type": "string"},
+        "title": DISPLAY_VALUE_SCHEMA,
+        "subtitle": DISPLAY_VALUE_SCHEMA,
+        "text": DISPLAY_VALUE_SCHEMA,
         "variant": {"type": "string", "enum": ["label", "body", "headline", "display", "title", "caption"]},
-        "label": {"type": "string"},
-        "icon": {"type": "string"},
+        "label": DISPLAY_VALUE_SCHEMA,
+        "icon": DISPLAY_VALUE_SCHEMA,
         "viewBox": {"type": "string"},
         "coordinate_mode": {"type": "string", "enum": ["percent", "number"]},
         "coordinateMode": {"type": "string", "enum": ["percent", "number"]},
@@ -592,9 +651,9 @@ BLOCK_SCHEMA: dict[str, Any] = {
             "type": "object",
             "additionalProperties": False,
             "properties": {
-                "value": {"type": "string"},
-                "label": {"type": "string"},
-                "unit": {"type": "string"},
+                "value": DISPLAY_VALUE_SCHEMA,
+                "label": DISPLAY_VALUE_SCHEMA,
+                "unit": DISPLAY_VALUE_SCHEMA,
             },
         },
         "grid": {
@@ -618,9 +677,9 @@ BLOCK_SCHEMA: dict[str, Any] = {
                 "required": ["entity", "label", "value"],
                 "properties": {
                     "entity": {"type": "string"},
-                    "label": {"type": "string"},
-                    "value": {"type": "string"},
-                    "unit": {"type": "string"},
+                    "label": DISPLAY_VALUE_SCHEMA,
+                    "value": DISPLAY_VALUE_SCHEMA,
+                    "unit": DISPLAY_VALUE_SCHEMA,
                 },
             },
         },
@@ -631,8 +690,8 @@ BLOCK_SCHEMA: dict[str, Any] = {
                 "additionalProperties": False,
                 "required": ["label", "action"],
                 "properties": {
-                    "label": {"type": "string"},
-                    "icon": {"type": "string"},
+                    "label": DISPLAY_VALUE_SCHEMA,
+                    "icon": DISPLAY_VALUE_SCHEMA,
                     "action": ACTION_SCHEMA,
                 },
             },
@@ -644,9 +703,9 @@ BLOCK_SCHEMA: dict[str, Any] = {
                 "additionalProperties": False,
                 "required": ["label"],
                 "properties": {
-                    "label": {"type": "string"},
+                    "label": DISPLAY_VALUE_SCHEMA,
                     "entity": {"type": "string"},
-                    "icon": {"type": "string"},
+                    "icon": DISPLAY_VALUE_SCHEMA,
                 },
             },
         },
@@ -695,10 +754,11 @@ BLOCK_SCHEMA: dict[str, Any] = {
         "visibility": {
             "type": "object",
             "additionalProperties": False,
-            "required": ["entity", "operator"],
+            "required": [],
             "properties": {
                 "entity": {"type": "string"},
                 "operator": {"type": "string", "enum": ["equals", "not_equals", "in", "not_in", "exists"]},
+                "expression": EXPRESSION_REF,
                 "value": {
                     "anyOf": [
                         {"type": "string"},
@@ -713,6 +773,7 @@ BLOCK_SCHEMA: dict[str, Any] = {
 }
 
 CARD_V2_SCHEMA: dict[str, Any] = {
+    "$defs": {"expression": EXPRESSION_DEFINITION},
     "type": "object",
     "additionalProperties": False,
     "required": ["type", "urdash_schema", "height_mode", "card"],
@@ -778,6 +839,7 @@ CARD_V2_SCHEMA: dict[str, Any] = {
 }
 
 GENERATION_SCHEMA: dict[str, Any] = {
+    "$defs": {"expression": EXPRESSION_DEFINITION},
     "type": "object",
     "additionalProperties": False,
     "required": ["card_config", "summary", "notes"],
@@ -951,6 +1013,7 @@ def _requirements() -> list[str]:
         "Keep blocks focused. Prefer 4 to 12 blocks unless the user requests a dense card.",
         "Do not invent entity IDs.",
         "Use each entity's capabilities for device-aware design. Do not create controls for operations missing from that entity, and only emit actions permitted by the output action schema.",
+        "Use bounded expression AST objects for safe derived values, multi-entity aggregation, mapping, formatting, visibility, styles, animation state, and action parameters; never emit expression source code.",
         "Use declarative animation presets or vector keyframes only; no CSS, HTML, raw SVG, raw filters, or JavaScript.",
     ]
 

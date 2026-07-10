@@ -94,21 +94,21 @@ Primary implementation area: `custom_components/urdash/ai_client.py` and
 
 ## P0: Safe Data And Expression Engine
 
-- [ ] Design a bounded declarative expression AST; never evaluate JavaScript.
-- [ ] Support state and nested attribute reads with safe missing-value behavior.
-- [ ] Support constants, entity references, and local control values.
-- [ ] Support arithmetic, min, max, average, sum, clamp, round, and percentage.
-- [ ] Support comparisons, boolean operations, conditional values, and coalescing.
-- [ ] Support enum/state mapping for labels, icons, colors, visibility, and styles.
-- [ ] Support unit conversion and locale-aware number formatting.
-- [ ] Support date, time, duration, and relative-time formatting.
-- [ ] Support multi-entity aggregation and derived values.
-- [ ] Allow expressions in text, style tokens, icon selection, visibility,
+- [x] Design a bounded declarative expression AST; never evaluate JavaScript.
+- [x] Support state and nested attribute reads with safe missing-value behavior.
+- [x] Support constants, entity references, and local control values.
+- [x] Support arithmetic, min, max, average, sum, clamp, round, and percentage.
+- [x] Support comparisons, boolean operations, conditional values, and coalescing.
+- [x] Support enum/state mapping for labels, icons, colors, visibility, and styles.
+- [x] Support unit conversion and locale-aware number formatting.
+- [x] Support date, time, duration, and relative-time formatting.
+- [x] Support multi-entity aggregation and derived values.
+- [x] Allow expressions in text, style tokens, icon selection, visibility,
   animation state, progress, and safe action parameters.
-- [ ] Build a dependency graph so only expressions affected by changed entities
+- [x] Build a dependency graph so only expressions affected by changed entities
   are reevaluated.
-- [ ] Enforce operation, nesting, entity-reference, and output-size limits.
-- [ ] Add deterministic expression tests and malformed-input tests.
+- [x] Enforce operation, nesting, entity-reference, and output-size limits.
+- [x] Add deterministic expression tests and malformed-input tests.
 
 ## P1: Generic Scene And Component Tree
 

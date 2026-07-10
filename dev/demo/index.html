@@ -153,7 +153,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260710.4");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260710.5");
 
       const hass = {
         config: {
@@ -230,6 +230,10 @@
       };
 
       const samples = [
+        {
+          title: "Expression Energy Balance",
+          config: expressionEnergyCard(),
+        },
         {
           title: "Xyris Hero Orb",
           config: xyrisHeroOrbCard(),
@@ -356,6 +360,84 @@
           height_mode: heightMode,
           card: { intent, layout },
         };
+      }
+
+      function expressionEnergyCard() {
+        const solar = { op: "entity", entity_id: "sensor.solar_power", path: "state" };
+        const load = { op: "entity", entity_id: "sensor.home_power", path: "state" };
+        const selfPowered = {
+          op: "round",
+          args: [{ op: "percentage", args: [solar, load] }],
+          decimals: 0,
+        };
+        return baseCard({
+          intent: {
+            goal: "energy",
+            title: "Live Energy Balance",
+            summary: "Derived values and adaptive presentation from multiple Home Assistant entities.",
+            risk_level: "low",
+            primary_entities: ["sensor.solar_power", "sensor.home_power", "sensor.home_battery"],
+            primary_actions: [],
+          },
+          layout: {
+            type: "grid",
+            columns: 12,
+            density: "comfortable",
+            theme: "graphite",
+            blocks: [
+              {
+                id: "energy-ratio",
+                kind: "hero_value",
+                title: {
+                  op: "map",
+                  args: [{ op: "gt", args: [selfPowered, { op: "literal", value: 50 }] }],
+                  cases: [{ when: true, value: { op: "literal", value: "Solar is carrying the home" } }],
+                  default: { op: "literal", value: "Grid support is active" },
+                },
+                label: "self powered",
+                entity: "sensor.solar_power",
+                bind: { value: selfPowered, unit: { op: "literal", value: "%" } },
+                icon: {
+                  op: "if",
+                  condition: { op: "gt", args: [selfPowered, { op: "literal", value: 50 }] },
+                  then: { op: "literal", value: "mdi:solar-power" },
+                  else: { op: "literal", value: "mdi:transmission-tower" },
+                },
+                style: {
+                  accent: {
+                    op: "if",
+                    condition: { op: "gt", args: [selfPowered, { op: "literal", value: 50 }] },
+                    then: { op: "literal", value: "#35d39a" },
+                    else: { op: "literal", value: "#f4b860" },
+                  },
+                  emphasis: "hero",
+                },
+                animation: { preset: "glow", trigger: "always", speed: "slow", intensity: "subtle", active: { op: "gt", args: [solar, { op: "literal", value: 0 }] } },
+                grid: { col: 1, row: 1, w: 12, h: 3 },
+              },
+              {
+                id: "net-demand",
+                kind: "value",
+                label: "Net demand",
+                entity: "sensor.home_power",
+                bind: {
+                  value: { op: "subtract", args: [load, solar] },
+                  unit: { op: "literal", value: " W" },
+                },
+                grid: { col: 1, row: 4, w: 6, h: 2 },
+              },
+              {
+                id: "battery",
+                kind: "value",
+                label: "Battery reserve",
+                entity: "sensor.home_battery",
+                bind: { value: "state", unit: "attributes.unit_of_measurement" },
+                visibility: { expression: { op: "gt", args: [{ op: "entity", entity_id: "sensor.home_battery", path: "state" }, { op: "literal", value: 0 }] } },
+                grid: { col: 7, row: 4, w: 6, h: 2 },
+              },
+            ],
+          },
+        });
       }
 
       function fancySceneCard() {
