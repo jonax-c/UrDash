@@ -81,15 +81,19 @@ VALVE_FEATURES = {"open": 1, "close": 2, "set_position": 4, "stop": 8}
 LAWN_MOWER_FEATURES = {"start_mowing": 1, "pause": 2, "dock": 4}
 UPDATE_FEATURES = {"install": 1, "specific_version": 2, "progress": 4, "backup": 8, "release_notes": 16}
 REMOTE_FEATURE_ACTIVITY = 4
+WEATHER_FEATURES = {"daily": 1, "hourly": 2, "twice_daily": 4}
 
 DISPLAY_ATTRIBUTES = {
     "battery_level",
+    "apparent_temperature",
     "brightness",
+    "cloud_coverage",
     "color_mode",
     "color_temp_kelvin",
     "current_humidity",
     "current_position",
     "current_temperature",
+    "dew_point",
     "current_tilt_position",
     "device_class",
     "direction",
@@ -116,11 +120,22 @@ DISPLAY_ATTRIBUTES = {
     "swing_horizontal_mode",
     "swing_mode",
     "temperature",
+    "temperature_unit",
+    "precipitation_unit",
+    "pressure",
+    "pressure_unit",
     "target_temp_high",
     "target_temp_low",
     "unit_of_measurement",
+    "uv_index",
+    "visibility",
+    "visibility_unit",
     "update_percentage",
     "volume_level",
+    "wind_bearing",
+    "wind_gust_speed",
+    "wind_speed",
+    "wind_speed_unit",
     "xy_color",
 }
 
@@ -173,6 +188,23 @@ def build_entity_capability_descriptor(
         descriptor["display"] = display
 
     capabilities: list[dict[str, Any]] = descriptor["capabilities"]
+
+    if domain == "weather":
+        descriptor["data_sources"] = [
+            {
+                "type": "weather_forecast",
+                "forecast_types": [
+                    name for name, flag in WEATHER_FEATURES.items()
+                    if _has_feature(supported_features, flag)
+                ],
+                "fields": [
+                    "datetime", "condition", "temperature", "templow",
+                    "precipitation", "precipitation_probability", "humidity",
+                    "pressure", "cloud_coverage", "uv_index", "wind_bearing",
+                    "wind_speed", "wind_gust_speed", "is_daytime",
+                ],
+            }
+        ]
 
     def add(
         operation: str,

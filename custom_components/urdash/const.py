@@ -4,7 +4,7 @@ PANEL_TITLE = "UrDash"
 PANEL_ICON = "mdi:card-plus-outline"
 FRONTEND_DIR = "frontend"
 FRONTEND_JS = "urdash-panel.js"
-FRONTEND_VERSION = "20260710.5"
+FRONTEND_VERSION = "20260711.1"
 STATIC_URL = f"/{DOMAIN}/static"
 
 DEFAULT_THEME = "aurora"

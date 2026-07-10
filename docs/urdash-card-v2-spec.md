@@ -1134,6 +1134,48 @@ arguments per operation, 32 distinct referenced entities, and 1024 output
 characters. Unsafe keys such as `constructor`, `prototype`, and `__proto__` are
 rejected.
 
+## Weather Forecast Data Source
+
+Forecast cards use the same push subscription as Home Assistant's built-in
+weather card. The AI declares a bounded source; the renderer owns the fixed
+WebSocket command and subscription lifecycle.
+
+```yaml
+card:
+  data_sources:
+    - id: home_daily
+      type: weather_forecast
+      entity: weather.home
+      forecast_type: daily
+      limit: 5
+```
+
+Allowed forecast types are `daily`, `hourly`, and `twice_daily`, and the selected
+weather entity must advertise the corresponding supported feature. A card may
+declare at most four data sources and request at most 16 forecast entries per
+source.
+
+Forecast values are read with the safe `source` expression:
+
+```yaml
+op: source
+source_id: home_daily
+path: forecast.0.temperature
+```
+
+Safe top-level paths are `status` and `type`. `status` is `loading`, `ready`, or
+`error`. Forecast item paths use `forecast.<0-15>.<field>` and allow only the
+documented weather fields: date/time, day/night, condition, temperature and low
+temperature, apparent temperature, dew point, precipitation, precipitation
+probability, humidity, pressure, cloud coverage, UV index, wind bearing, wind
+speed, and wind gust speed.
+
+The `concat` operation can compose readings such as `31° / 25°` without raw
+templates. `format_datetime` also accepts `weekday_short`, `weekday_long`, and
+`time_short` for forecast labels. The renderer subscribes through
+`weather/subscribe_forecast`, rerenders on pushed updates, and always
+unsubscribes when the card disconnects or its source configuration changes.
+
 ## Styling
 
 AI can choose style tokens, not raw CSS.

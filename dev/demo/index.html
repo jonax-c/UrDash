@@ -153,7 +153,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260710.5");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.1");
 
       const hass = {
         config: {
@@ -179,7 +179,7 @@
           "binary_sensor.garage_motion": state("binary_sensor.garage_motion", "on", "Garage Motion"),
           "lock.front_door": state("lock.front_door", "locked", "Front Lock"),
           "lock.garage_entry": state("lock.garage_entry", "locked", "Garage Lock"),
-          "weather.home": state("weather.home", "partlycloudy", "Home Weather", { temperature: 27, temperature_unit: "°C", humidity: 63 }),
+          "weather.home": state("weather.home", "partlycloudy", "Home Weather", { supported_features: 1, temperature: 27, temperature_unit: "°C", humidity: 63 }),
           "sensor.outdoor_humidity": state("sensor.outdoor_humidity", "63", "Outdoor Humidity", { unit_of_measurement: "%" }),
           "sensor.wind_speed": state("sensor.wind_speed", "12", "Wind Speed", { unit_of_measurement: "km/h" }),
           "sensor.uv_index": state("sensor.uv_index", "6", "UV Index"),
@@ -224,12 +224,34 @@
             volume_level: 0.34,
           }),
         },
+        connection: {
+          subscribeMessage(callback, request) {
+            if (request.type === "weather/subscribe_forecast" && request.entity_id === "weather.home") {
+              queueMicrotask(() => callback({
+                type: request.forecast_type,
+                forecast: [
+                  { datetime: "2026-07-11T04:00:00+08:00", condition: "partlycloudy", temperature: 31, templow: 25, precipitation_probability: 20 },
+                  { datetime: "2026-07-12T04:00:00+08:00", condition: "sunny", temperature: 33, templow: 26, precipitation_probability: 10 },
+                  { datetime: "2026-07-13T04:00:00+08:00", condition: "rainy", temperature: 29, templow: 24, precipitation_probability: 70 },
+                  { datetime: "2026-07-14T04:00:00+08:00", condition: "lightning-rainy", temperature: 28, templow: 23, precipitation_probability: 85 },
+                  { datetime: "2026-07-15T04:00:00+08:00", condition: "cloudy", temperature: 30, templow: 24, precipitation_probability: 35 },
+                ],
+              }));
+            }
+            return Promise.resolve(() => {});
+          },
+        },
         callService(domain, service, data) {
           console.log("mock callService", { domain, service, data });
         },
       };
 
       const samples = [
+        {
+          title: "Live Weather Forecast",
+          className: "wide",
+          config: liveWeatherForecastCard(),
+        },
         {
           title: "Expression Energy Balance",
           config: expressionEnergyCard(),
@@ -353,12 +375,12 @@
         };
       }
 
-      function baseCard({ heightMode = "auto", intent, layout }) {
+      function baseCard({ heightMode = "auto", dataSources, intent, layout }) {
         return {
           type: "custom:urdash-card",
           urdash_schema: 2,
           height_mode: heightMode,
-          card: { intent, layout },
+          card: { ...(dataSources ? { data_sources: dataSources } : {}), intent, layout },
         };
       }
 
@@ -435,6 +457,91 @@
                 visibility: { expression: { op: "gt", args: [{ op: "entity", entity_id: "sensor.home_battery", path: "state" }, { op: "literal", value: 0 }] } },
                 grid: { col: 7, row: 4, w: 6, h: 2 },
               },
+            ],
+          },
+        });
+      }
+
+      function liveWeatherForecastCard() {
+        const source = (index, field) => ({ op: "source", source_id: "home_daily", path: `forecast.${index}.${field}` });
+        const literal = (value) => ({ op: "literal", value });
+        const conditionIcon = (condition) => ({
+          op: "map",
+          args: [condition],
+          cases: [
+            { when: "sunny", value: literal("mdi:weather-sunny") },
+            { when: "clear-night", value: literal("mdi:weather-night") },
+            { when: "partlycloudy", value: literal("mdi:weather-partly-cloudy") },
+            { when: "cloudy", value: literal("mdi:weather-cloudy") },
+            { when: "rainy", value: literal("mdi:weather-rainy") },
+            { when: "pouring", value: literal("mdi:weather-pouring") },
+            { when: "lightning-rainy", value: literal("mdi:weather-lightning-rainy") },
+            { when: "snowy", value: literal("mdi:weather-snowy") },
+            { when: "fog", value: literal("mdi:weather-fog") },
+          ],
+          default: literal("mdi:weather-cloudy-alert"),
+        });
+        const forecastBlocks = Array.from({ length: 5 }, (_, index) => ({
+          id: `live-day-${index}`,
+          kind: "value",
+          title: {
+            op: "format_datetime",
+            args: [source(index, "datetime")],
+            style: "weekday_short",
+            locale: "en-US",
+          },
+          icon: conditionIcon(source(index, "condition")),
+          entity: "weather.home",
+          bind: {
+            value: {
+              op: "concat",
+              args: [
+                { op: "format_number", args: [source(index, "temperature")], decimals: 0 },
+                literal("° / "),
+                { op: "format_number", args: [source(index, "templow")], decimals: 0 },
+                literal("°"),
+              ],
+            },
+            unit: literal(""),
+          },
+          label: {
+            op: "concat",
+            args: [literal("Rain "), source(index, "precipitation_probability"), literal("%")],
+          },
+          grid: { col: index * 2 + 1, row: 4, w: 2, h: 2 },
+          style: { tone: "cool", shape: "soft", accent: "#58a6a6" },
+          presentation: { surface: "ghost", layer: "base", align: "center", scale: "small" },
+        }));
+        return baseCard({
+          dataSources: [{ id: "home_daily", type: "weather_forecast", entity: "weather.home", forecast_type: "daily", limit: 5 }],
+          intent: {
+            goal: "weather",
+            title: "Taipei Sky",
+            summary: "Live current conditions and a five-day forecast subscribed directly from weather.home.",
+            risk_level: "low",
+            primary_entities: ["weather.home"],
+            primary_actions: [],
+          },
+          layout: {
+            type: "grid",
+            columns: 10,
+            density: "comfortable",
+            theme: "calm",
+            blocks: [
+              {
+                id: "live-current",
+                kind: "hero_value",
+                entity: "weather.home",
+                bind: { value: "attributes.temperature", unit: "attributes.temperature_unit" },
+                label: { op: "entity", entity_id: "weather.home", path: "state" },
+                icon: conditionIcon({ op: "entity", entity_id: "weather.home", path: "state" }),
+                grid: { col: 1, row: 1, w: 10, h: 3 },
+                style: { accent: "#2c8c99", emphasis: "hero", shape: "soft" },
+                presentation: { surface: "hero", layer: "raised", align: "center", scale: "xl" },
+                animation: { preset: "breathe", trigger: "always", speed: "slow", intensity: "subtle" },
+                action: { type: "more_info", entity_id: "weather.home" },
+              },
+              ...forecastBlocks,
             ],
           },
         });

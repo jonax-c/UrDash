@@ -3,6 +3,13 @@ const [ACTION_MANIFEST, CARD_SCHEMA] = await Promise.all([
   loadModuleJson("./card-schema-v2.json", "card schema"),
 ]);
 
+const FORECAST_FIELDS = new Set([
+  "datetime", "is_daytime", "condition", "temperature", "templow",
+  "apparent_temperature", "dew_point", "precipitation",
+  "precipitation_probability", "humidity", "pressure", "cloud_coverage",
+  "uv_index", "wind_bearing", "wind_speed", "wind_gust_speed",
+]);
+
 async function loadModuleJson(relativePath, label) {
   const moduleUrl = new URL(import.meta.url);
   const resourceUrl = new URL(relativePath, moduleUrl);
@@ -89,6 +96,12 @@ class UrDashCard extends HTMLElement {
     this._entityDependencies = new Set();
     this._expressionMetadata = new WeakMap();
     this._expressionCache = new WeakMap();
+    this._sourceValues = new Map();
+    this._sourceVersions = new Map();
+    this._sourceSubscriptions = new Map();
+    this._sourceGeneration = 0;
+    this._sourceSignature = "";
+    this._sourceConnection = null;
   }
 
   setConfig(config) {
@@ -97,18 +110,102 @@ class UrDashCard extends HTMLElement {
     this._entityDependencies = this._collectEntityDependencies(this._config);
     this._expressionMetadata = new WeakMap();
     this._expressionCache = new WeakMap();
+    this._syncDataSources();
     this._render();
   }
 
   set hass(hass) {
     const previous = this._hass;
     this._hass = hass;
+    this._syncDataSources();
     if (!previous || this._dependenciesChanged(previous, hass)) this._render();
+  }
+
+  connectedCallback() {
+    this._syncDataSources();
+  }
+
+  disconnectedCallback() {
+    this._unsubscribeDataSources();
   }
 
   getCardSize() {
     const blocks = this._card?.layout?.blocks || [];
     return Math.max(3, Math.min(12, Math.ceil(blocks.length / 2) + 2));
+  }
+
+  _syncDataSources() {
+    const sources = (this._card?.data_sources || []).slice(0, 4);
+    const signature = JSON.stringify(sources.map((source) => [source.id, source.type, source.entity, source.forecast_type, source.limit || 5]));
+    const connection = this._hass?.connection;
+    if (
+      signature === this._sourceSignature
+      && connection === this._sourceConnection
+      && this._sourceSubscriptions.size === sources.length
+    ) return;
+    this._unsubscribeDataSources();
+    this._sourceSignature = signature;
+    this._sourceConnection = connection || null;
+    if (!this.isConnected || !connection?.subscribeMessage || !sources.length) return;
+    const generation = this._sourceGeneration;
+    for (const source of sources) {
+      if (source.type !== "weather_forecast") continue;
+      const limit = this._clampInt(source.limit, 1, 16, 5);
+      this._sourceValues.set(source.id, { status: "loading", type: source.forecast_type, forecast: [] });
+      this._sourceVersions.set(source.id, 1);
+      const subscription = Promise.resolve().then(() => connection.subscribeMessage(
+        (event) => {
+          if (generation !== this._sourceGeneration || !this.isConnected) return;
+          this._sourceValues.set(source.id, this._sanitizeForecastEvent(event, source.forecast_type, limit));
+          this._sourceVersions.set(source.id, (this._sourceVersions.get(source.id) || 0) + 1);
+          this._expressionCache = new WeakMap();
+          this._render();
+        },
+        {
+          type: "weather/subscribe_forecast",
+          entity_id: source.entity,
+          forecast_type: source.forecast_type,
+        },
+      )).catch(() => {
+        if (generation === this._sourceGeneration && this.isConnected) {
+          this._sourceValues.set(source.id, { status: "error", type: source.forecast_type, forecast: [] });
+          this._sourceVersions.set(source.id, (this._sourceVersions.get(source.id) || 0) + 1);
+          this._expressionCache = new WeakMap();
+          this._render();
+        }
+        return null;
+      });
+      this._sourceSubscriptions.set(source.id, subscription);
+    }
+  }
+
+  _unsubscribeDataSources() {
+    this._sourceGeneration += 1;
+    for (const subscription of this._sourceSubscriptions.values()) {
+      subscription.then((unsubscribe) => {
+        if (typeof unsubscribe === "function") unsubscribe();
+      });
+    }
+    this._sourceSubscriptions.clear();
+    this._sourceValues.clear();
+    this._sourceVersions.clear();
+    this._expressionCache = new WeakMap();
+  }
+
+  _sanitizeForecastEvent(event, fallbackType, limit) {
+    const forecast = (Array.isArray(event?.forecast) ? event.forecast : []).slice(0, limit).map((entry) => {
+      const clean = {};
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return clean;
+      for (const [key, value] of Object.entries(entry)) {
+        if (FORECAST_FIELDS.has(key) && ["string", "number", "boolean"].includes(typeof value)) clean[key] = value;
+      }
+      return clean;
+    });
+    return {
+      status: "ready",
+      type: ["daily", "hourly", "twice_daily"].includes(event?.type) ? event.type : fallbackType,
+      forecast,
+    };
   }
 
   _normalizeConfig(config) {
@@ -186,7 +283,28 @@ class UrDashCard extends HTMLElement {
     body.className = "block-body";
     body.appendChild(this._createBlockBody(config));
     block.appendChild(body);
+    this._makeBlockActionable(block, config);
     return block;
+  }
+
+  _makeBlockActionable(block, config) {
+    const passiveKinds = new Set([
+      "text", "icon", "vector_icon", "value", "value_cluster", "entity_list",
+      "gauge", "radial_meter", "timeline", "sparkline", "hero_value", "ambient",
+    ]);
+    if (!passiveKinds.has(config.kind) || !this._actionAllowed(config.action)) return;
+    block.classList.add("block-actionable");
+    block.setAttribute("role", "button");
+    block.tabIndex = 0;
+    block.addEventListener("click", (event) => {
+      if (event.target?.closest?.("button,input,select")) return;
+      this._runAction(config.action, { element: block });
+    });
+    block.addEventListener("keydown", (event) => {
+      if (!["Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      this._runAction(config.action, { element: block });
+    });
   }
 
   _createBlockHeader(config) {
@@ -1730,7 +1848,11 @@ class UrDashCard extends HTMLElement {
     const metadata = this._expressionMetadataFor(expression);
     const cacheable = !metadata.volatile && !metadata.local;
     const cached = cacheable ? this._expressionCache.get(expression) : null;
-    if (cached && [...metadata.entities].every((entityId) => cached.states.get(entityId) === this._hass?.states?.[entityId])) return cached.value;
+    if (
+      cached
+      && [...metadata.entities].every((entityId) => cached.states.get(entityId) === this._hass?.states?.[entityId])
+      && [...metadata.sources].every((sourceId) => cached.sources.get(sourceId) === (this._sourceVersions.get(sourceId) || 0))
+    ) return cached.value;
     const evaluate = (value) => this._isExpression(value)
       ? this._evaluateExpression(value, context, depth + 1, budget)
       : value;
@@ -1741,7 +1863,9 @@ class UrDashCard extends HTMLElement {
     switch (expression.op) {
       case "literal": result = expression.value; break;
       case "entity": result = this._readEntityPath(expression.entity_id, expression.path || "state"); break;
+      case "source": result = this._readSourcePath(expression.source_id, expression.path); break;
       case "local": result = context[expression.name] ?? null; break;
+      case "concat": result = args.map((value) => value ?? "").join(""); break;
       case "add": result = numbers.length === args.length ? numbers.reduce((sum, value) => sum + value, 0) : null; break;
       case "subtract": result = numbers.length === args.length && numbers.length ? numbers.slice(1).reduce((value, part) => value - part, numbers[0]) : null; break;
       case "multiply": result = numbers.length === args.length ? numbers.reduce((value, part) => value * part, 1) : null; break;
@@ -1791,6 +1915,7 @@ class UrDashCard extends HTMLElement {
     if (cacheable) {
       this._expressionCache.set(expression, {
         states: new Map([...metadata.entities].map((entityId) => [entityId, this._hass?.states?.[entityId]])),
+        sources: new Map([...metadata.sources].map((sourceId) => [sourceId, this._sourceVersions.get(sourceId) || 0])),
         value: result,
       });
     }
@@ -1800,7 +1925,7 @@ class UrDashCard extends HTMLElement {
   _expressionMetadataFor(expression) {
     const cached = this._expressionMetadata.get(expression);
     if (cached) return cached;
-    const metadata = { entities: new Set(), local: false, volatile: false };
+    const metadata = { entities: new Set(), sources: new Set(), local: false, volatile: false };
     const visit = (node) => {
       if (Array.isArray(node)) {
         node.forEach(visit);
@@ -1811,6 +1936,7 @@ class UrDashCard extends HTMLElement {
         return;
       }
       if (node.op === "entity" && typeof node.entity_id === "string") metadata.entities.add(node.entity_id);
+      if (node.op === "source" && typeof node.source_id === "string") metadata.sources.add(node.source_id);
       if (node.op === "local") metadata.local = true;
       if (node.op === "relative_time") metadata.volatile = true;
       Object.values(node).forEach(visit);
@@ -1824,6 +1950,23 @@ class UrDashCard extends HTMLElement {
     const state = this._state(entityId);
     if (!state || !this._safeDataPath(path)) return null;
     return path.split(".").reduce((value, part) => value?.[part], state) ?? null;
+  }
+
+  _readSourcePath(sourceId, path) {
+    const source = this._sourceValues.get(sourceId);
+    const parts = String(path || "").split(".");
+    if (!source || !this._safeSourcePath(parts)) return null;
+    return parts.reduce((value, part) => value?.[/^\d+$/.test(part) ? Number(part) : part], source) ?? null;
+  }
+
+  _safeSourcePath(parts) {
+    if (parts.length === 1 && ["type", "status"].includes(parts[0])) return true;
+    return parts.length === 3
+      && parts[0] === "forecast"
+      && /^\d+$/.test(parts[1])
+      && Number(parts[1]) >= 0
+      && Number(parts[1]) < 16
+      && FORECAST_FIELDS.has(parts[2]);
   }
 
   _safeDataPath(path) {
@@ -1848,8 +1991,14 @@ class UrDashCard extends HTMLElement {
     const date = new Date(value);
     if (!Number.isFinite(date.getTime())) return null;
     const locale = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(expression.locale || "") ? expression.locale : undefined;
+    const specialStyles = {
+      weekday_short: { weekday: "short" },
+      weekday_long: { weekday: "long" },
+      time_short: { hour: "numeric", minute: "2-digit" },
+    };
     const dateStyle = ["short", "medium", "long", "full"].includes(expression.style) ? expression.style : "medium";
-    try { return new Intl.DateTimeFormat(locale, { dateStyle, timeStyle: dateStyle === "full" ? "long" : "short" }).format(date); } catch { return date.toLocaleString(); }
+    const options = specialStyles[expression.style] || { dateStyle, timeStyle: dateStyle === "full" ? "long" : "short" };
+    try { return new Intl.DateTimeFormat(locale, options).format(date); } catch { return date.toLocaleString(); }
   }
 
   _formatExpressionDuration(value) {
@@ -2288,6 +2437,12 @@ const styles = `
     backdrop-filter: blur(16px);
     box-shadow: 0 18px 42px rgba(20,36,40,0.12);
     overflow: hidden;
+  }
+
+  .block-actionable { cursor: pointer; }
+  .block-actionable:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
 
   .block-visual_map {

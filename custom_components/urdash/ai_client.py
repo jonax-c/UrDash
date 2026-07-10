@@ -38,6 +38,7 @@ For premium glow, prefer layered radial gradients with userSpaceOnUse or numeric
 Prefer direct, usable controls over decorative blocks, but make the interface visually distinctive.
 Use declarative animation presets only when they improve clarity.
 Use bounded declarative expressions for derived values, labels, icons, colors, visibility, animation state, and action parameters. Expressions are JSON AST objects, never source code. Prefer direct entity bindings for simple values and expressions when they add meaningful aggregation, mapping, formatting, or conditional behavior.
+For a multi-day or hourly weather card, declare card.data_sources with type weather_forecast, the selected weather entity, one advertised forecast_type, and a bounded limit. Read entries with source expressions such as {"op":"source","source_id":"home_daily","path":"forecast.0.temperature"}. Use condition mapping for icons and colors, format_datetime for labels, and concat for high/low temperature or precipitation text. Do not invent forecast sensor entities.
 """
 
 EXPRESSION_REF: dict[str, Any] = {"$ref": "#/$defs/expression"}
@@ -67,11 +68,12 @@ EXPRESSION_DEFINITION: dict[str, Any] = {
                 "modulo", "min", "max", "average", "sum", "clamp", "round", "percentage",
                 "eq", "ne", "gt", "gte", "lt", "lte", "and", "or", "not", "if",
                 "coalesce", "map", "format_number", "format_datetime", "format_duration",
-                "relative_time", "convert_unit",
+                "relative_time", "convert_unit", "concat", "source",
             ],
         },
         "value": SAFE_SCALAR_SCHEMA,
         "entity_id": {"type": "string"},
+        "source_id": {"type": "string"},
         "path": {"type": "string"},
         "name": {"type": "string", "enum": ["selected", "value", "current"]},
         "args": {"type": "array", "maxItems": 16, "items": EXPRESSION_REF},
@@ -85,7 +87,7 @@ EXPRESSION_DEFINITION: dict[str, Any] = {
         "decimals": {"type": "integer", "minimum": 0, "maximum": 6},
         "from_unit": {"type": "string"},
         "to_unit": {"type": "string"},
-        "style": {"type": "string", "enum": ["decimal", "percent", "currency", "unit", "short", "medium", "long", "full"]},
+        "style": {"type": "string", "enum": ["decimal", "percent", "currency", "unit", "short", "medium", "long", "full", "weekday_short", "weekday_long", "time_short"]},
         "prefix": {"type": "string"},
         "suffix": {"type": "string"},
         "locale": {"type": "string"},
@@ -95,6 +97,19 @@ EXPRESSION_DEFINITION: dict[str, Any] = {
 }
 DISPLAY_VALUE_SCHEMA: dict[str, Any] = {
     "anyOf": [{"type": "string"}, {"type": "number"}, {"type": "boolean"}, EXPRESSION_REF]
+}
+
+DATA_SOURCE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "type", "entity", "forecast_type"],
+    "properties": {
+        "id": {"type": "string"},
+        "type": {"type": "string", "enum": ["weather_forecast"]},
+        "entity": {"type": "string"},
+        "forecast_type": {"type": "string", "enum": ["daily", "hourly", "twice_daily"]},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 16},
+    },
 }
 
 STYLE_SCHEMA: dict[str, Any] = {
@@ -790,6 +805,7 @@ CARD_V2_SCHEMA: dict[str, Any] = {
             "additionalProperties": False,
             "required": ["intent", "layout"],
             "properties": {
+                "data_sources": {"type": "array", "maxItems": 4, "items": DATA_SOURCE_SCHEMA},
                 "intent": {
                     "type": "object",
                     "additionalProperties": False,
@@ -1013,6 +1029,7 @@ def _requirements() -> list[str]:
         "Keep blocks focused. Prefer 4 to 12 blocks unless the user requests a dense card.",
         "Do not invent entity IDs.",
         "Use each entity's capabilities for device-aware design. Do not create controls for operations missing from that entity, and only emit actions permitted by the output action schema.",
+        "For weather forecasts, declare a card.data_sources weather_forecast source for the selected weather entity and read forecast items with source expressions. Never invent forecast sensor entities.",
         "Use bounded expression AST objects for safe derived values, multi-entity aggregation, mapping, formatting, visibility, styles, animation state, and action parameters; never emit expression source code.",
         "Use declarative animation presets or vector keyframes only; no CSS, HTML, raw SVG, raw filters, or JavaScript.",
     ]

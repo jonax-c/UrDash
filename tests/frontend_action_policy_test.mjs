@@ -228,6 +228,72 @@ assert.equal(card._dependenciesChanged(previousHass, irrelevantHass), false);
 const relevantHass = { ...previousHass, states: { ...previousHass.states, "sensor.indoor_temperature": { ...previousHass.states["sensor.indoor_temperature"], state: "25" } } };
 assert.equal(card._dependenciesChanged(previousHass, relevantHass), true);
 
+const weatherCard = new UrDashCard();
+let forecastCallback;
+let forecastRequest;
+let forecastUnsubscribed = false;
+let forecastRenders = 0;
+Object.defineProperty(weatherCard, "isConnected", { value: true, configurable: true });
+weatherCard._render = () => { forecastRenders += 1; };
+weatherCard._card = {
+  data_sources: [{
+    id: "home_daily",
+    type: "weather_forecast",
+    entity: "weather.home",
+    forecast_type: "daily",
+    limit: 5,
+  }],
+};
+weatherCard._hass = {
+  states: {
+    "weather.home": { entity_id: "weather.home", state: "partlycloudy", attributes: { supported_features: 1 } },
+  },
+  connection: {
+    subscribeMessage: async (callback, request) => {
+      forecastCallback = callback;
+      forecastRequest = request;
+      return () => { forecastUnsubscribed = true; };
+    },
+  },
+};
+weatherCard._syncDataSources();
+await Promise.resolve();
+await Promise.resolve();
+assert.deepEqual(forecastRequest, {
+  type: "weather/subscribe_forecast",
+  entity_id: "weather.home",
+  forecast_type: "daily",
+});
+forecastCallback({
+  type: "daily",
+  forecast: [
+    { datetime: "2026-07-11T00:00:00+00:00", condition: "sunny", temperature: 31, templow: 25, unsafe: "drop" },
+    { datetime: "2026-07-12T00:00:00+00:00", condition: "rainy", temperature: 28, templow: 23 },
+  ],
+});
+assert.equal(forecastRenders, 1);
+assert.equal(weatherCard._readSourcePath("home_daily", "status"), "ready");
+assert.equal(weatherCard._readSourcePath("home_daily", "forecast.0.temperature"), 31);
+assert.equal(weatherCard._readSourcePath("home_daily", "forecast.0.unsafe"), null);
+assert.equal(weatherCard._evaluateExpression({
+  op: "concat",
+  args: [
+    { op: "source", source_id: "home_daily", path: "forecast.0.temperature" },
+    { op: "literal", value: "° / " },
+    { op: "source", source_id: "home_daily", path: "forecast.0.templow" },
+    { op: "literal", value: "°" },
+  ],
+}), "31° / 25°");
+assert.equal(weatherCard._evaluateExpression({
+  op: "format_datetime",
+  args: [{ op: "source", source_id: "home_daily", path: "forecast.0.datetime" }],
+  style: "weekday_short",
+  locale: "en-US",
+}), "Sat");
+weatherCard.disconnectedCallback();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(forecastUnsubscribed, true);
+
 await Promise.all([
   card._runAction(validLightAction),
   card._runAction(validLightAction),

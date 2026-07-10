@@ -17,19 +17,28 @@ MAX_EXPRESSION_OPERATIONS = 128
 MAX_EXPRESSION_ARGS = 16
 MAX_EXPRESSION_ENTITIES = 32
 MAX_EXPRESSION_OUTPUT = 1024
+MAX_DATA_SOURCES = 4
 CURRENT_SCHEMA_MINOR = 0
 
 BINDING_PATTERN = re.compile(
     r"^(state|last_changed|last_updated|attributes(?:\.[A-Za-z_][A-Za-z0-9_]*)+)$"
 )
 SAFE_PATH_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
+SOURCE_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 UNSAFE_PATH_PARTS = {"__proto__", "prototype", "constructor"}
 EXPRESSION_OPS = {
     "literal", "entity", "local", "add", "subtract", "multiply", "divide",
     "modulo", "min", "max", "average", "sum", "clamp", "round", "percentage",
     "eq", "ne", "gt", "gte", "lt", "lte", "and", "or", "not", "if",
     "coalesce", "map", "format_number", "format_datetime", "format_duration",
-    "relative_time", "convert_unit",
+    "relative_time", "convert_unit", "concat", "source",
+}
+WEATHER_FEATURES = {"daily": 1, "hourly": 2, "twice_daily": 4}
+FORECAST_FIELDS = {
+    "datetime", "is_daytime", "condition", "temperature", "templow",
+    "apparent_temperature", "dew_point", "precipitation",
+    "precipitation_probability", "humidity", "pressure", "cloud_coverage",
+    "uv_index", "wind_bearing", "wind_speed", "wind_gust_speed",
 }
 ACTION_TEMPLATE_PATTERN = re.compile(
     r"^\$(selected|value|current)(?:\s*[+-]\s*\d+(?:\.\d+)?)?$"
@@ -308,7 +317,8 @@ def _validate_semantics(
 
     for index, entity_id in enumerate(card["intent"].get("primary_entities", [])):
         _validate_entity(entity_id, f"$.card.intent.primary_entities[{index}]", entities, diagnostics)
-    _validate_expressions(config, "$", entities, diagnostics)
+    data_sources = _validate_data_sources(card.get("data_sources", []), entities, diagnostics)
+    _validate_expressions(config, "$", entities, data_sources, diagnostics)
 
     seen_ids: dict[str, str] = {}
     action_count = 0
@@ -383,6 +393,41 @@ def _validate_entity(
         )
 
 
+def _validate_data_sources(
+    sources: list[dict[str, Any]],
+    entities: dict[str, dict[str, Any]],
+    diagnostics: list[dict[str, Any]],
+) -> set[str]:
+    source_ids: set[str] = set()
+    if len(sources) > MAX_DATA_SOURCES:
+        _diagnostic(diagnostics, "$.card.data_sources", "budget.data_sources", f"Card has more than {MAX_DATA_SOURCES} data sources.", "Reduce the number of subscribed sources.")
+    for index, source in enumerate(sources):
+        path = f"$.card.data_sources[{index}]"
+        source_id = source.get("id")
+        if isinstance(source_id, str):
+            if not SOURCE_ID_PATTERN.fullmatch(source_id):
+                _diagnostic(diagnostics, f"{path}.id", "data_source.invalid_id", "Data source ID is malformed.", "Use 1-64 letters, numbers, underscores, or hyphens, starting with a letter.")
+            if source_id in source_ids:
+                _diagnostic(diagnostics, f"{path}.id", "semantic.duplicate_source", f"Data source ID {source_id!r} is duplicated.", "Use a unique data source ID.")
+            source_ids.add(source_id)
+        entity_id = source.get("entity")
+        _validate_entity(entity_id, f"{path}.entity", entities, diagnostics)
+        if isinstance(entity_id, str) and entity_id.partition(".")[0] != "weather":
+            _diagnostic(diagnostics, f"{path}.entity", "data_source.invalid_domain", "Weather forecast sources require a weather entity.", "Select an entity whose ID starts with weather.")
+            continue
+        entity = entities.get(entity_id) if isinstance(entity_id, str) else None
+        if entity and entity.get("domain", str(entity_id).partition(".")[0]) != "weather":
+            _diagnostic(diagnostics, f"{path}.entity", "data_source.invalid_domain", "Weather forecast sources require a weather entity.", "Select an entity whose ID starts with weather.")
+            continue
+        forecast_type = source.get("forecast_type")
+        if entity and isinstance(forecast_type, str):
+            features = int((entity.get("attributes") or {}).get("supported_features") or 0)
+            required_feature = WEATHER_FEATURES.get(forecast_type, 0)
+            if required_feature and not features & required_feature:
+                _diagnostic(diagnostics, f"{path}.forecast_type", "data_source.unsupported_forecast", f"Entity {entity_id} does not advertise {forecast_type} forecasts.", "Use one of the entity's supported forecast types.")
+    return source_ids
+
+
 def _validate_block_references(
     block: dict[str, Any],
     path: str,
@@ -445,6 +490,7 @@ def _validate_expressions(
     value: Any,
     path: str,
     entities: dict[str, dict[str, Any]],
+    data_sources: set[str],
     diagnostics: list[dict[str, Any]],
 ) -> None:
     budget = {"operations": 0, "entities": set()}
@@ -472,7 +518,7 @@ def _validate_expressions(
             if isinstance(args, list) and len(args) > MAX_EXPRESSION_ARGS:
                 _diagnostic(diagnostics, f"{node_path}.args", "expression.argument_budget", f"Expression has more than {MAX_EXPRESSION_ARGS} arguments.", "Reduce the aggregation inputs.")
             required = {
-                "literal": "value", "entity": "entity_id", "local": "name",
+                "literal": "value", "entity": "entity_id", "local": "name", "source": "source_id",
                 "if": "condition", "map": "cases", "convert_unit": "to_unit",
             }.get(op)
             if required and required not in node:
@@ -485,8 +531,15 @@ def _validate_expressions(
                 path_value = node.get("path", "state")
                 if not isinstance(path_value, str) or not _safe_expression_path(path_value):
                     _diagnostic(diagnostics, f"{node_path}.path", "expression.invalid_path", "Entity path is unsafe or malformed.", "Use state, last_changed, last_updated, or attributes.<nested.path>.")
+            if op == "source":
+                source_id = node.get("source_id")
+                if source_id not in data_sources:
+                    _diagnostic(diagnostics, f"{node_path}.source_id", "expression.missing_source", f"Data source {source_id!r} is not declared.", "Reference an ID from card.data_sources.")
+                source_path = node.get("path")
+                if not isinstance(source_path, str) or not _safe_forecast_path(source_path):
+                    _diagnostic(diagnostics, f"{node_path}.path", "expression.invalid_source_path", "Forecast source path is unsafe or unsupported.", "Use type or forecast.<0-15>.<documented field>.")
             for name, child in node.items():
-                if name not in {"op", "entity_id", "path", "name", "value", "from_unit", "to_unit", "style", "decimals", "min", "max", "prefix", "suffix"}:
+                if name not in {"op", "entity_id", "source_id", "path", "name", "value", "from_unit", "to_unit", "style", "decimals", "min", "max", "prefix", "suffix"}:
                     visit(child, f"{node_path}.{name}", depth + 1)
             if op == "literal" and isinstance(node.get("value"), str) and len(node["value"]) > MAX_EXPRESSION_OUTPUT:
                 _diagnostic(diagnostics, f"{node_path}.value", "expression.output_budget", f"Literal exceeds {MAX_EXPRESSION_OUTPUT} characters.", "Use a shorter display value.")
@@ -504,6 +557,19 @@ def _safe_expression_path(path: str) -> bool:
         return True
     return bool(path.startswith("attributes.") and SAFE_PATH_PATTERN.fullmatch(path)) and not any(
         part in UNSAFE_PATH_PARTS for part in path.split(".")
+    )
+
+
+def _safe_forecast_path(path: str) -> bool:
+    if path in {"type", "status"}:
+        return True
+    parts = path.split(".")
+    return (
+        len(parts) == 3
+        and parts[0] == "forecast"
+        and parts[1].isdigit()
+        and 0 <= int(parts[1]) < 16
+        and parts[2] in FORECAST_FIELDS
     )
 
 

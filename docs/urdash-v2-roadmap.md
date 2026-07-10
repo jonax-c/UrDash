@@ -110,6 +110,17 @@ Primary implementation area: `custom_components/urdash/ai_client.py` and
 - [x] Enforce operation, nesting, entity-reference, and output-size limits.
 - [x] Add deterministic expression tests and malformed-input tests.
 
+## P0: Weather Forecast Data Source
+
+- [x] Expose supported daily, hourly, and twice-daily forecast types to the AI.
+- [x] Add a bounded, allowlisted `weather_forecast` source declaration.
+- [x] Subscribe through Home Assistant's `weather/subscribe_forecast` API.
+- [x] Sanitize forecast events and expose only documented scalar fields.
+- [x] Support safe indexed source expressions, forecast status, and date labels.
+- [x] Unsubscribe on disconnect and source reconfiguration.
+- [x] Add deterministic subscription, expression, capability, and validation tests.
+- [x] Add a live forecast demo driven by a mocked Home Assistant subscription.
+
 ## P1: Generic Scene And Component Tree
 
 - [ ] Replace flat-only composition with safe nested containers.

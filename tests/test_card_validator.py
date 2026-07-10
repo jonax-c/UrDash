@@ -76,6 +76,12 @@ ENTITIES = [
         "state": "on",
         "attributes": {"supported_features": 0},
     },
+    {
+        "entity_id": "weather.home",
+        "domain": "weather",
+        "state": "partlycloudy",
+        "attributes": {"supported_features": 1, "temperature": 27},
+    },
 ]
 
 
@@ -308,6 +314,42 @@ class CardValidatorTests(unittest.TestCase):
         strict = validator.build_strict_provider_schema(SCHEMA)
         self.assertIn("expression", strict["$defs"])
         self.assertEqual(strict["$defs"]["expression"]["properties"]["args"]["anyOf"][0]["items"]["$ref"], "#/$defs/expression")
+
+    def test_weather_forecast_source_and_expression_are_validated(self):
+        card = base_card()
+        card["card"]["data_sources"] = [
+            {
+                "id": "home_daily",
+                "type": "weather_forecast",
+                "entity": "weather.home",
+                "forecast_type": "daily",
+                "limit": 5,
+            }
+        ]
+        card["card"]["layout"]["blocks"][0]["bind"]["value"] = {
+            "op": "concat",
+            "args": [
+                {"op": "source", "source_id": "home_daily", "path": "forecast.0.temperature"},
+                {"op": "literal", "value": "° / "},
+                {"op": "source", "source_id": "home_daily", "path": "forecast.0.templow"},
+                {"op": "literal", "value": "°"},
+            ],
+        }
+        self.assertEqual(errors(card), [])
+
+        card["card"]["data_sources"][0]["forecast_type"] = "hourly"
+        codes = {item["code"] for item in errors(card)}
+        self.assertIn("data_source.unsupported_forecast", codes)
+
+        card["card"]["data_sources"][0]["forecast_type"] = "daily"
+        card["card"]["layout"]["blocks"][0]["bind"]["value"] = {
+            "op": "source",
+            "source_id": "missing",
+            "path": "forecast.99.constructor",
+        }
+        codes = {item["code"] for item in errors(card)}
+        self.assertIn("expression.missing_source", codes)
+        self.assertIn("expression.invalid_source_path", codes)
 
 
 if __name__ == "__main__":

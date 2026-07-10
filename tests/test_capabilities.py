@@ -27,6 +27,26 @@ def operation(descriptor: dict, operation_id: str) -> dict:
 
 
 class CapabilityDescriptorTests(unittest.TestCase):
+    def test_weather_exposes_forecast_data_source_and_current_metrics(self):
+        descriptor = capabilities.build_entity_capability_descriptor(
+            {
+                "entity_id": "weather.home",
+                "state": "partlycloudy",
+                "attributes": {
+                    "supported_features": 3,
+                    "temperature": 27,
+                    "apparent_temperature": 29,
+                    "wind_speed": 12,
+                    "temperature_unit": "°C",
+                },
+            }
+        )
+        source = descriptor["data_sources"][0]
+        self.assertEqual(source["type"], "weather_forecast")
+        self.assertEqual(source["forecast_types"], ["daily", "hourly"])
+        self.assertEqual(descriptor["display"]["temperature"], 27)
+        self.assertEqual(descriptor["display"]["wind_speed"], 12)
+
     def test_light_exposes_only_supported_color_controls(self):
         descriptor = capabilities.build_entity_capability_descriptor(
             entity(
