@@ -115,14 +115,14 @@ class UrDashPanel extends HTMLElement {
     }
     await this._loadUrDashCard();
     const card = document.createElement("urdash-card");
-    card.setConfig(this._result.card_config);
+    card.setConfig({ ...this._result.card_config, preview: true });
     card.hass = this._hass;
     host.appendChild(card);
   }
 
   async _loadUrDashCard() {
     if (customElements.get("urdash-card")) return;
-    await import("/urdash/static/urdash-custom-card.js?v=20260707.5");
+    await import("/urdash/static/urdash-custom-card.js?v=20260709.4");
   }
 
   _refreshPreviewHass() {

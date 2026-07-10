@@ -36,18 +36,20 @@ class UrDashCard extends HTMLElement {
     const theme = this._safeEnum(layout.theme, ["aurora", "quiet", "graphite", "calm", "sunrise"], "aurora");
     const density = this._safeEnum(layout.density, ["compact", "comfortable", "spacious"], "comfortable");
     const type = this._safeEnum(layout.type, ["grid", "canvas"], "grid");
+    const chrome = this._safeEnum(layout.chrome, ["normal", "art"], "normal");
+    const showRisk = this._config.preview === true || this._config.preview_mode === true;
 
     this.shadowRoot.innerHTML = `
       <style>${styles}</style>
-      <article class="urdash-card theme-${theme} density-${density} height-${heightMode} layout-${type}">
-        <header class="card-header">
+      <article class="urdash-card theme-${theme} density-${density} height-${heightMode} layout-${type} chrome-${chrome}">
+        ${chrome === "art" ? "" : `<header class="card-header">
           <div>
             <span>${escapeHtml(intent.goal || "urdash")}</span>
             <h3>${escapeHtml(intent.title || "UrDash Card")}</h3>
             <p>${escapeHtml(intent.summary || "")}</p>
           </div>
-          <div class="risk risk-${this._risk(intent.risk_level)}">${escapeHtml(intent.risk_level || "low")}</div>
-        </header>
+          ${showRisk ? `<div class="risk risk-${this._risk(intent.risk_level)}">${escapeHtml(intent.risk_level || "low")}</div>` : ""}
+        </header>`}
         <section class="block-stage"></section>
       </article>
     `;
@@ -59,6 +61,7 @@ class UrDashCard extends HTMLElement {
       stage.style.setProperty("--urdash-columns", String(this._clampInt(layout.columns, 4, 16, 12)));
     } else {
       stage.style.setProperty("--urdash-aspect", this._safeAspect(layout.aspect_ratio));
+      stage.style.setProperty("--urdash-mobile-aspect", this._safeAspect(layout.responsive?.mobile?.aspect_ratio || layout.mobile_aspect_ratio || "4/5"));
     }
 
     for (const blockConfig of (layout.blocks || []).slice(0, 48)) {
@@ -79,7 +82,7 @@ class UrDashCard extends HTMLElement {
     block.style.setProperty("--accent", this._safeAccent(config.style?.accent));
 
     if (layoutType === "grid") this._applyGrid(block, config.grid);
-    else this._applyFrame(block, config.frame);
+    else this._applyFrame(block, config.frame, config.responsive?.mobile?.frame);
 
     if (this._shouldRenderHeader(config)) {
       block.appendChild(this._createBlockHeader(config));
@@ -124,6 +127,8 @@ class UrDashCard extends HTMLElement {
         return this._textBlock(config);
       case "icon":
         return this._iconBlock(config);
+      case "vector_icon":
+        return this._vectorIcon(config);
       case "value":
         return this._valueBlock(config);
       case "value_cluster":
@@ -178,7 +183,7 @@ class UrDashCard extends HTMLElement {
 
   _textBlock(config) {
     const wrap = document.createElement("div");
-    wrap.className = `text text-${this._safeEnum(config.variant, ["label", "body", "headline", "title", "caption"], "body")}`;
+    wrap.className = `text text-${this._safeEnum(config.variant, ["label", "body", "headline", "display", "title", "caption"], "body")}`;
     const text = document.createElement("p");
     text.textContent = config.text || config.title || "";
     wrap.appendChild(text);
@@ -190,6 +195,557 @@ class UrDashCard extends HTMLElement {
     wrap.className = "icon-orb";
     wrap.appendChild(this._icon(config.icon || "mdi:view-dashboard"));
     return wrap;
+  }
+
+  _vectorIcon(config) {
+    const wrap = document.createElement("div");
+    wrap.className = "vector-icon";
+    wrap.appendChild(this._vectorSvg(config, config.label || config.title || "UrDash vector icon"));
+    return wrap;
+  }
+
+  _vectorSvg(config = {}, label = "UrDash vector icon") {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const viewBox = this._safeViewBox(config.viewBox || config.viewbox);
+    const metrics = this._vectorViewBoxMetrics(viewBox);
+    const budget = this._vectorBudget(config);
+    const coordinateMode = this._safeEnum(config.coordinate_mode ?? config.coordinateMode, ["percent", "number"], "percent");
+    svg.setAttribute("viewBox", viewBox);
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", label);
+    svg.style.setProperty("--vector-accent", this._safeAccent(config.style?.accent));
+    const gradientIds = this._vectorGradients(svg, config.gradients, metrics, budget);
+
+    for (const shape of (config.shapes || []).slice(0, budget.shapes)) {
+      const element = this._vectorShape(shape, gradientIds, 0, metrics, coordinateMode, budget, svg);
+      if (element) svg.appendChild(element);
+    }
+    if (!svg.children.length) {
+      const fallback = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      fallback.setAttribute("cx", "50");
+      fallback.setAttribute("cy", "50");
+      fallback.setAttribute("r", "28");
+      fallback.setAttribute("fill", "none");
+      fallback.setAttribute("stroke", "var(--vector-accent, var(--accent))");
+      fallback.setAttribute("stroke-width", "8");
+      svg.appendChild(fallback);
+    }
+    return svg;
+  }
+
+  _vectorGradients(svg, gradients = [], metrics = this._vectorViewBoxMetrics(), budget = this._vectorBudget()) {
+    const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    const ids = new Map();
+    for (const [index, gradient] of (gradients || []).slice(0, budget.gradients).entries()) {
+      const rawId = this._safeGradientId(gradient.id || `g${index}`);
+      if (!rawId || ids.has(rawId)) continue;
+      const type = this._safeEnum(gradient.type, ["linear", "radial"], "linear");
+      const element = document.createElementNS("http://www.w3.org/2000/svg", type === "radial" ? "radialGradient" : "linearGradient");
+      const domId = `urdash-vector-${Math.random().toString(36).slice(2)}-${rawId}`;
+      element.setAttribute("id", domId);
+      element.setAttribute("spreadMethod", this._safeEnum(gradient.spread_method ?? gradient.spreadMethod, ["pad", "reflect", "repeat"], "pad"));
+      const units = this._safeEnum(gradient.units, ["objectBoundingBox", "userSpaceOnUse"], "objectBoundingBox");
+      element.setAttribute("gradientUnits", units);
+      const coordinateMode = this._safeEnum(gradient.coordinate_mode ?? gradient.coordinateMode, ["percent", "number"], "percent");
+      if (type === "radial") {
+        element.setAttribute("cx", this._vectorGradientCoord(gradient.center?.x, units, coordinateMode, 50));
+        element.setAttribute("cy", this._vectorGradientCoord(gradient.center?.y, units, coordinateMode, 50));
+        element.setAttribute("fx", this._vectorGradientCoord(gradient.focal?.x ?? gradient.fx ?? gradient.center?.x, units, coordinateMode, 50));
+        element.setAttribute("fy", this._vectorGradientCoord(gradient.focal?.y ?? gradient.fy ?? gradient.center?.y, units, coordinateMode, 50));
+        element.setAttribute("r", this._vectorGradientCoord(gradient.radius, units, coordinateMode, 50));
+        if (gradient.fr != null) element.setAttribute("fr", this._vectorGradientCoord(gradient.fr, units, coordinateMode, 0));
+      } else {
+        element.setAttribute("x1", this._vectorGradientCoord(gradient.from?.x, units, coordinateMode, 0));
+        element.setAttribute("y1", this._vectorGradientCoord(gradient.from?.y, units, coordinateMode, 0));
+        element.setAttribute("x2", this._vectorGradientCoord(gradient.to?.x, units, coordinateMode, 100));
+        element.setAttribute("y2", this._vectorGradientCoord(gradient.to?.y, units, coordinateMode, 100));
+      }
+      const gradientTransform = this._vectorTransform(gradient.transform, gradient.rotation, 50, 50, metrics);
+      if (gradientTransform) element.setAttribute("gradientTransform", gradientTransform);
+      for (const stop of (gradient.stops || []).slice(0, budget.stops)) {
+        const stopElement = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+        stopElement.setAttribute("offset", `${this._clampNumber(stop.offset, 0, 1, 0) * 100}%`);
+        stopElement.setAttribute("stop-color", this._vectorStopColor(stop.color));
+        stopElement.setAttribute("stop-opacity", String(this._clampNumber(stop.opacity, 0, 1, 1)));
+        element.appendChild(stopElement);
+      }
+      if (element.children.length >= 2) {
+        defs.appendChild(element);
+        ids.set(rawId, domId);
+      }
+    }
+    if (defs.children.length) svg.appendChild(defs);
+    return ids;
+  }
+
+  _vectorShape(shape = {}, gradientIds = new Map(), depth = 0, metrics = this._vectorViewBoxMetrics(), inheritedCoordinateMode = "percent", budget = this._vectorBudget(), svg = null) {
+    const kind = this._safeEnum(shape.type, ["path", "circle", "ellipse", "rect", "line", "polyline", "group"], "");
+    if (!kind) return null;
+    const element = document.createElementNS("http://www.w3.org/2000/svg", kind === "group" ? "g" : kind);
+    const coordinateMode = this._safeEnum(shape.coordinate_mode ?? shape.coordinateMode, ["percent", "number"], inheritedCoordinateMode);
+    let originX = 50;
+    let originY = 50;
+    if (kind === "group") {
+      originX = this._vectorCoord(shape.origin?.x ?? shape.transform?.origin?.x ?? shape.transform_origin?.x ?? shape.transformOrigin?.x, "x", coordinateMode, metrics, 50);
+      originY = this._vectorCoord(shape.origin?.y ?? shape.transform?.origin?.y ?? shape.transform_origin?.y ?? shape.transformOrigin?.y, "y", coordinateMode, metrics, 50);
+      for (const child of (shape.shapes || []).slice(0, budget.children)) {
+        if (depth >= budget.depth) break;
+        const childElement = this._vectorShape(child, gradientIds, depth + 1, metrics, coordinateMode, budget, svg);
+        if (childElement) element.appendChild(childElement);
+      }
+      if (!element.children.length) return null;
+    } else if (kind === "path") {
+      const d = this._safePathData(shape.d, budget.path);
+      if (!d) return null;
+      element.setAttribute("d", d);
+    } else if (kind === "circle") {
+      element.setAttribute("cx", String(this._vectorCoord(shape.cx, "x", coordinateMode, metrics, 50)));
+      element.setAttribute("cy", String(this._vectorCoord(shape.cy, "y", coordinateMode, metrics, 50)));
+      element.setAttribute("r", String(this._vectorSize(shape.r, coordinateMode, metrics, 10)));
+      originX = this._vectorCoord(shape.cx, "x", coordinateMode, metrics, 50);
+      originY = this._vectorCoord(shape.cy, "y", coordinateMode, metrics, 50);
+    } else if (kind === "ellipse") {
+      element.setAttribute("cx", String(this._vectorCoord(shape.cx, "x", coordinateMode, metrics, 50)));
+      element.setAttribute("cy", String(this._vectorCoord(shape.cy, "y", coordinateMode, metrics, 50)));
+      element.setAttribute("rx", String(this._vectorSize(shape.rx, coordinateMode, metrics, 16)));
+      element.setAttribute("ry", String(this._vectorSize(shape.ry, coordinateMode, metrics, 28)));
+      originX = this._vectorCoord(shape.cx, "x", coordinateMode, metrics, 50);
+      originY = this._vectorCoord(shape.cy, "y", coordinateMode, metrics, 50);
+    } else if (kind === "rect") {
+      const x = this._vectorCoord(shape.x, "x", coordinateMode, metrics, 0);
+      const y = this._vectorCoord(shape.y, "y", coordinateMode, metrics, 0);
+      const width = this._vectorSize(shape.width, coordinateMode, metrics, 20);
+      const height = this._vectorSize(shape.height, coordinateMode, metrics, 20);
+      element.setAttribute("x", String(x));
+      element.setAttribute("y", String(y));
+      element.setAttribute("width", String(width));
+      element.setAttribute("height", String(height));
+      if (shape.rx != null) element.setAttribute("rx", String(this._vectorSize(shape.rx, coordinateMode, metrics, 0)));
+      if (shape.ry != null) element.setAttribute("ry", String(this._vectorSize(shape.ry, coordinateMode, metrics, 0)));
+      originX = x + width / 2;
+      originY = y + height / 2;
+    } else if (kind === "line") {
+      element.setAttribute("x1", String(this._vectorCoord(shape.x1, "x", coordinateMode, metrics, 0)));
+      element.setAttribute("y1", String(this._vectorCoord(shape.y1, "y", coordinateMode, metrics, 0)));
+      element.setAttribute("x2", String(this._vectorCoord(shape.x2, "x", coordinateMode, metrics, 100)));
+      element.setAttribute("y2", String(this._vectorCoord(shape.y2, "y", coordinateMode, metrics, 100)));
+    } else if (kind === "polyline") {
+      const points = (shape.points || [])
+        .slice(0, budget.points)
+        .map((point) => `${this._vectorCoord(point.x, "x", coordinateMode, metrics, 0)},${this._vectorCoord(point.y, "y", coordinateMode, metrics, 0)}`)
+        .join(" ");
+      if (!points) return null;
+      element.setAttribute("points", points);
+    }
+
+    if (kind !== "group") {
+      element.setAttribute("fill", this._vectorPaint(shape.fill, ["path", "circle", "ellipse", "rect"].includes(kind) ? "none" : "none", gradientIds));
+      element.setAttribute("stroke", this._vectorPaint(shape.stroke, "accent", gradientIds));
+      const strokeWidth = coordinateMode === "number"
+        ? this._clampNumber(shape.stroke_width ?? shape.strokeWidth, 0, Math.max(20, Math.max(metrics.width, metrics.height) / 8), 4)
+        : this._clampNumber(shape.stroke_width ?? shape.strokeWidth, 0, 20, 4);
+      element.setAttribute("stroke-width", String(strokeWidth));
+      element.setAttribute("stroke-linecap", this._safeEnum(shape.stroke_linecap ?? shape.strokeLinecap, ["butt", "round", "square"], "round"));
+      element.setAttribute("stroke-linejoin", this._safeEnum(shape.stroke_linejoin ?? shape.strokeLinejoin, ["miter", "round", "bevel"], "round"));
+      element.setAttribute("stroke-miterlimit", String(this._clampNumber(shape.stroke_miterlimit ?? shape.strokeMiterlimit, 1, 20, 4)));
+      const dashArray = this._vectorDashArray(shape.stroke_dasharray ?? shape.strokeDasharray);
+      if (dashArray) element.style.setProperty("--vector-dash-array", dashArray);
+    }
+    element.setAttribute("opacity", String(this._clampNumber(shape.opacity, 0, 1, 1)));
+    const transform = this._vectorTransform(shape.transform, shape.rotation, originX, originY, metrics, shape.transform_origin ?? shape.transformOrigin);
+    if (transform) element.setAttribute("transform", transform);
+    this._applyVectorEffects(element, shape, svg);
+    this._applyVectorAnimation(element, shape.animation, originX, originY, metrics, coordinateMode);
+    return element;
+  }
+
+  _applyVectorAnimation(element, animation = {}, originX = 50, originY = 50, metrics = this._vectorViewBoxMetrics(), coordinateMode = "percent") {
+    if (this._applyVectorKeyframeAnimation(element, animation, originX, originY, metrics, coordinateMode)) return;
+    const preset = this._safeEnum(animation.preset, ["none", "pulse", "breathe", "spin", "orbit", "rain_drop", "drift", "dash_flow", "draw", "twinkle", "fade", "shimmer"], "none");
+    if (preset === "none") return;
+    const speed = this._safeEnum(animation.speed, ["slow", "normal", "fast"], "normal");
+    const intensity = this._safeEnum(animation.intensity, ["subtle", "normal", "strong"], "normal");
+    const durations = { slow: "3.6s", normal: "2.4s", fast: "1.35s" };
+    const strengths = { subtle: "0.55", normal: "1", strong: "1.55" };
+    const duration = animation.duration != null ? `${this._clampNumber(animation.duration, 0.5, 30, Number.parseFloat(durations[speed]))}s` : durations[speed];
+    const delay = this._clampNumber(animation.delay, 0, 8, 0);
+    const ox = this._vectorCoord(animation.origin?.x, "x", coordinateMode, metrics, originX);
+    const oy = this._vectorCoord(animation.origin?.y, "y", coordinateMode, metrics, originY);
+    if (preset === "spin" || preset === "orbit") {
+      const animate = document.createElementNS("http://www.w3.org/2000/svg", "animateTransform");
+      animate.setAttribute("attributeName", "transform");
+      animate.setAttribute("type", "rotate");
+      animate.setAttribute("from", `0 ${ox} ${oy}`);
+      animate.setAttribute("to", `360 ${ox} ${oy}`);
+      animate.setAttribute("dur", duration);
+      animate.setAttribute("begin", `${delay}s`);
+      animate.setAttribute("repeatCount", "indefinite");
+      animate.setAttribute("additive", "sum");
+      element.appendChild(animate);
+      return;
+    }
+    if (preset === "fade") {
+      const animate = document.createElementNS("http://www.w3.org/2000/svg", "animate");
+      animate.setAttribute("attributeName", "opacity");
+      animate.setAttribute("values", "0.32;1;0.32");
+      animate.setAttribute("dur", duration);
+      animate.setAttribute("begin", `${delay}s`);
+      animate.setAttribute("repeatCount", "indefinite");
+      element.appendChild(animate);
+      return;
+    }
+    element.classList.add("vector-animated", `vector-anim-${preset}`);
+    element.style.setProperty("--vector-duration", duration);
+    element.style.setProperty("--vector-delay", `${delay}s`);
+    element.style.setProperty("--vector-strength", strengths[intensity]);
+    element.style.transformOrigin = `${ox}% ${oy}%`;
+    element.style.transformBox = "view-box";
+    if (preset === "dash_flow" || preset === "draw") {
+      element.setAttribute("pathLength", "100");
+    }
+  }
+
+  _applyVectorKeyframeAnimation(element, animation = {}, originX = 50, originY = 50, metrics = this._vectorViewBoxMetrics(), coordinateMode = "percent") {
+    const keyframes = Array.isArray(animation.keyframes) ? animation.keyframes.slice(0, 8) : [];
+    if (keyframes.length < 2) return false;
+    const property = this._safeEnum(animation.property, ["opacity", "rotate", "scale", "translate"], "");
+    if (!property) return false;
+    const speed = this._safeEnum(animation.speed, ["slow", "normal", "fast"], "normal");
+    const defaults = { slow: 3.6, normal: 2.4, fast: 1.35 };
+    const durationNumber = this._clampNumber(animation.duration, 0.5, 30, defaults[speed]);
+    const phase = this._clampNumber(animation.phase_offset ?? animation.phaseOffset, 0, durationNumber, 0);
+    const delay = this._clampNumber(animation.delay, 0, 8, 0) - phase;
+    const repeat = animation.repeat === false ? "1" : animation.repeat === true || animation.repeat == null ? "indefinite" : String(this._clampInt(animation.repeat, 1, 20, 1));
+    const offsets = keyframes.map((frame, index) => this._clampNumber(frame.offset, 0, 1, index / (keyframes.length - 1)));
+    const keyTimes = offsets.map((offset, index) => index === 0 ? 0 : Math.max(offset, offsets[index - 1])).join(";");
+    const easing = this._safeEnum(animation.easing, ["linear", "ease", "ease_in", "ease_out", "ease_in_out"], "linear");
+    const ox = this._vectorCoord(animation.origin?.x, "x", coordinateMode, metrics, originX);
+    const oy = this._vectorCoord(animation.origin?.y, "y", coordinateMode, metrics, originY);
+    let animate;
+    let values = [];
+    if (property === "opacity") {
+      animate = document.createElementNS("http://www.w3.org/2000/svg", "animate");
+      animate.setAttribute("attributeName", "opacity");
+      values = keyframes.map((frame) => String(this._clampNumber(frame.opacity ?? frame.value, 0, 1, 1)));
+    } else {
+      animate = document.createElementNS("http://www.w3.org/2000/svg", "animateTransform");
+      animate.setAttribute("attributeName", "transform");
+      animate.setAttribute("additive", "sum");
+      if (property === "rotate") {
+        animate.setAttribute("type", "rotate");
+        values = keyframes.map((frame) => `${this._clampNumber(frame.rotate ?? frame.angle ?? frame.value, -360, 360, 0)} ${ox} ${oy}`);
+      } else if (property === "scale") {
+        animate.setAttribute("type", "scale");
+        values = keyframes.map((frame) => {
+          const scale = frame.scale ?? frame.value ?? 1;
+          const sx = this._clampNumber(frame.scale_x ?? frame.scaleX ?? frame.x ?? scale, 0.1, 4, 1);
+          const sy = this._clampNumber(frame.scale_y ?? frame.scaleY ?? frame.y ?? scale, 0.1, 4, 1);
+          return `${sx} ${sy}`;
+        });
+      } else if (property === "translate") {
+        animate.setAttribute("type", "translate");
+        const limit = this._vectorTranslationLimit(metrics);
+        values = keyframes.map((frame) => {
+          const x = this._clampNumber(frame.x ?? frame.translate_x ?? frame.translateX, -limit, limit, 0);
+          const y = this._clampNumber(frame.y ?? frame.translate_y ?? frame.translateY, -limit, limit, 0);
+          return `${x} ${y}`;
+        });
+      }
+    }
+    if (!animate || values.length < 2) return false;
+    animate.setAttribute("values", values.join(";"));
+    animate.setAttribute("keyTimes", keyTimes);
+    animate.setAttribute("dur", `${durationNumber}s`);
+    animate.setAttribute("begin", `${delay}s`);
+    animate.setAttribute("repeatCount", repeat);
+    if (easing !== "linear" && keyframes.length > 1) {
+      animate.setAttribute("calcMode", "spline");
+      animate.setAttribute("keySplines", Array.from({ length: keyframes.length - 1 }, () => this._vectorKeySpline(easing)).join(";"));
+    }
+    element.appendChild(animate);
+    return true;
+  }
+
+  _vectorKeySpline(easing) {
+    if (easing === "ease_in") return "0.42 0 1 1";
+    if (easing === "ease_out") return "0 0 0.58 1";
+    if (easing === "ease_in_out") return "0.42 0 0.58 1";
+    return "0.25 0.1 0.25 1";
+  }
+
+  _vectorDashArray(value) {
+    if (Array.isArray(value)) {
+      const parts = value.slice(0, 4).map((part) => this._clampNumber(part, 0, 100, 0)).filter((part) => part > 0);
+      return parts.length ? parts.join(" ") : "";
+    }
+    const text = String(value || "").trim();
+    if (!text) return "";
+    const parts = text.split(/[\s,]+/).slice(0, 4).map((part) => this._clampNumber(part, 0, 100, 0)).filter((part) => part > 0);
+    return parts.length ? parts.join(" ") : "";
+  }
+
+  _applyVectorEffects(element, shape = {}, svg = null) {
+    const blendMode = this._safeEnum(shape.blend_mode ?? shape.blendMode, ["normal", "screen", "plus-lighter", "soft-light", "overlay", "color-dodge", "hard-light", "lighten"], "normal");
+    if (blendMode !== "normal") element.style.mixBlendMode = blendMode;
+    const effects = shape.effects || {};
+    const filters = [];
+    const brightness = this._clampNumber(effects.brightness, 0.2, 3, 1);
+    const saturate = this._clampNumber(effects.saturate, 0.2, 3, 1);
+    if (brightness !== 1) filters.push(`brightness(${brightness})`);
+    if (saturate !== 1) filters.push(`saturate(${saturate})`);
+    const blur = this._clampNumber(effects.blur, 0, 16, 0);
+    if (blur > 0) filters.push(`blur(${blur}px)`);
+    const preset = this._safeEnum(effects.filter_preset ?? effects.filterPreset, ["none", "soft_blur", "outer_glow", "inner_glow", "bloom", "colored_shadow", "luminous_ring", "svg_blur", "svg_white_neon"], "none");
+    const presetColor = this._vectorCssColor(effects.color || effects.accent || effects.glow?.color || "accent", effects.opacity ?? 0.72);
+    if (preset === "svg_blur" || preset === "svg_white_neon") {
+      const filterId = this._vectorNativeFilter(svg, preset, effects);
+      if (filterId) element.setAttribute("filter", `url(#${filterId})`);
+    } else if (preset === "soft_blur") {
+      filters.push("blur(3px)", "brightness(1.08)", "saturate(1.08)");
+    } else if (preset === "outer_glow") {
+      filters.push(`drop-shadow(0 0 10px ${presetColor})`, `drop-shadow(0 0 22px ${presetColor})`);
+    } else if (preset === "inner_glow") {
+      filters.push("brightness(1.18)", `drop-shadow(0 0 8px ${presetColor})`);
+    } else if (preset === "bloom") {
+      filters.push("brightness(1.28)", "saturate(1.18)", `drop-shadow(0 0 12px ${presetColor})`, `drop-shadow(0 0 28px ${presetColor})`);
+    } else if (preset === "colored_shadow") {
+      filters.push(`drop-shadow(0 6px 18px ${presetColor})`);
+    } else if (preset === "luminous_ring") {
+      filters.push("brightness(1.2)", `drop-shadow(0 0 5px ${presetColor})`, `drop-shadow(0 0 18px ${presetColor})`);
+    }
+    const glow = effects.glow || {};
+    const glowSize = this._clampNumber(glow.size, 0, 40, 0);
+    if (glowSize > 0) {
+      filters.push(`drop-shadow(0 0 ${glowSize}px ${this._vectorCssColor(glow.color || "accent", glow.opacity)})`);
+    }
+    const neon = effects.neon_glow || effects.neonGlow || {};
+    const neonSize = this._clampNumber(neon.size, 0, 48, 0);
+    if (neonSize > 0) {
+      const color = this._vectorCssColor(neon.color || glow.color || "accent", neon.opacity ?? glow.opacity ?? 0.72);
+      const layers = this._clampInt(neon.layers, 1, 4, 3);
+      for (let index = 1; index <= layers; index += 1) {
+        filters.push(`drop-shadow(0 0 ${Math.round((neonSize * index) / layers)}px ${color})`);
+      }
+    }
+    if (filters.length) element.style.filter = filters.join(" ");
+  }
+
+  _vectorNativeFilter(svg, preset, effects = {}) {
+    if (!svg) return "";
+    let defs = svg.querySelector("defs");
+    if (!defs) {
+      defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+      svg.prepend(defs);
+    }
+    const id = `urdash-filter-${Math.random().toString(36).slice(2)}-${preset}`;
+    const filter = document.createElementNS("http://www.w3.org/2000/svg", "filter");
+    filter.setAttribute("id", id);
+    filter.setAttribute("x", "-30%");
+    filter.setAttribute("y", "-30%");
+    filter.setAttribute("width", "160%");
+    filter.setAttribute("height", "160%");
+    const blur = document.createElementNS("http://www.w3.org/2000/svg", "feGaussianBlur");
+    blur.setAttribute("stdDeviation", String(this._clampNumber(effects.std_deviation ?? effects.stdDeviation ?? effects.blur, 0, 24, preset === "svg_white_neon" ? 2 : 10)));
+    if (preset === "svg_blur") {
+      filter.appendChild(blur);
+      defs.appendChild(filter);
+      return id;
+    }
+    blur.setAttribute("result", "blurred");
+    const flood = document.createElementNS("http://www.w3.org/2000/svg", "feFlood");
+    flood.setAttribute("flood-color", this._vectorStopColor(effects.color || "#ffffff"));
+    flood.setAttribute("flood-opacity", String(this._clampNumber(effects.opacity, 0, 1, 1)));
+    flood.setAttribute("result", "neonColor");
+    const composite = document.createElementNS("http://www.w3.org/2000/svg", "feComposite");
+    composite.setAttribute("in", "neonColor");
+    composite.setAttribute("in2", "blurred");
+    composite.setAttribute("operator", "in");
+    const merge = document.createElementNS("http://www.w3.org/2000/svg", "feMerge");
+    merge.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "feMergeNode"));
+    const source = document.createElementNS("http://www.w3.org/2000/svg", "feMergeNode");
+    source.setAttribute("in", "SourceGraphic");
+    merge.appendChild(source);
+    filter.append(blur, flood, composite, merge);
+    defs.appendChild(filter);
+    return id;
+  }
+
+  _vectorTransform(transform = {}, rotationFallback = null, originX = 50, originY = 50, metrics = this._vectorViewBoxMetrics(), originOverride = null) {
+    const stack = Array.isArray(transform.transforms ?? transform.stack) ? (transform.transforms ?? transform.stack).slice(0, 8) : null;
+    if (stack?.length) {
+      return stack.map((item) => this._vectorTransformPart(item, originX, originY, metrics, originOverride)).filter(Boolean).join(" ");
+    }
+    const parts = [];
+    const matrixPart = this._vectorTransformPart({ type: "matrix", ...(transform.matrix || {}) }, originX, originY, metrics, originOverride);
+    if (matrixPart && transform.matrix) parts.push(matrixPart);
+    const tx = this._clampNumber(transform.translate_x ?? transform.translateX, -100, 100, 0);
+    const ty = this._clampNumber(transform.translate_y ?? transform.translateY, -100, 100, 0);
+    if (tx || ty) parts.push(`translate(${tx} ${ty})`);
+    const rotate = this._clampNumber(transform.rotate ?? rotationFallback, -360, 360, 0);
+    const ox = this._vectorCoord(originOverride?.x ?? transform.origin?.x, "x", "number", metrics, originX);
+    const oy = this._vectorCoord(originOverride?.y ?? transform.origin?.y, "y", "number", metrics, originY);
+    if (rotate) parts.push(`rotate(${rotate} ${ox} ${oy})`);
+    const scale = transform.scale ?? undefined;
+    const sx = this._clampNumber(transform.scale_x ?? transform.scaleX ?? scale ?? undefined, 0.1, 4, 1);
+    const sy = this._clampNumber(transform.scale_y ?? transform.scaleY ?? scale ?? undefined, 0.1, 4, 1);
+    if (sx !== 1 || sy !== 1) parts.push(`translate(${ox} ${oy}) scale(${sx} ${sy}) translate(${-ox} ${-oy})`);
+    const skewX = this._clampNumber(transform.skew_x ?? transform.skewX, -60, 60, 0);
+    const skewY = this._clampNumber(transform.skew_y ?? transform.skewY, -60, 60, 0);
+    if (skewX) parts.push(`skewX(${skewX})`);
+    if (skewY) parts.push(`skewY(${skewY})`);
+    return parts.join(" ");
+  }
+
+  _vectorTransformPart(item = {}, originX = 50, originY = 50, metrics = this._vectorViewBoxMetrics(), originOverride = null) {
+    const type = this._safeEnum(item.type, ["matrix", "translate", "rotate", "scale", "skew_x", "skew_y"], item.a != null || item.matrix ? "matrix" : "");
+    const limit = this._vectorTranslationLimit(metrics);
+    if (type === "matrix") {
+      const matrix = item.matrix || item;
+      const a = this._clampNumber(matrix.a, -4, 4, 1);
+      const b = this._clampNumber(matrix.b, -4, 4, 0);
+      const c = this._clampNumber(matrix.c, -4, 4, 0);
+      const d = this._clampNumber(matrix.d, -4, 4, 1);
+      const e = this._clampNumber(matrix.e, -limit, limit, 0);
+      const f = this._clampNumber(matrix.f, -limit, limit, 0);
+      return `matrix(${a} ${b} ${c} ${d} ${e} ${f})`;
+    }
+    if (type === "translate") {
+      const x = this._clampNumber(item.x ?? item.translate_x ?? item.translateX, -limit, limit, 0);
+      const y = this._clampNumber(item.y ?? item.translate_y ?? item.translateY, -limit, limit, 0);
+      return x || y ? `translate(${x} ${y})` : "";
+    }
+    const ox = this._vectorCoord(originOverride?.x ?? item.origin?.x, "x", "number", metrics, originX);
+    const oy = this._vectorCoord(originOverride?.y ?? item.origin?.y, "y", "number", metrics, originY);
+    if (type === "rotate") {
+      const angle = this._clampNumber(item.angle ?? item.rotate, -360, 360, 0);
+      return angle ? `rotate(${angle} ${ox} ${oy})` : "";
+    }
+    if (type === "scale") {
+      const scale = item.scale ?? undefined;
+      const sx = this._clampNumber(item.x ?? item.scale_x ?? item.scaleX ?? scale ?? undefined, 0.1, 4, 1);
+      const sy = this._clampNumber(item.y ?? item.scale_y ?? item.scaleY ?? scale ?? undefined, 0.1, 4, 1);
+      return sx !== 1 || sy !== 1 ? `translate(${ox} ${oy}) scale(${sx} ${sy}) translate(${-ox} ${-oy})` : "";
+    }
+    if (type === "skew_x") {
+      const angle = this._clampNumber(item.angle ?? item.skew_x ?? item.skewX, -60, 60, 0);
+      return angle ? `skewX(${angle})` : "";
+    }
+    if (type === "skew_y") {
+      const angle = this._clampNumber(item.angle ?? item.skew_y ?? item.skewY, -60, 60, 0);
+      return angle ? `skewY(${angle})` : "";
+    }
+    return "";
+  }
+
+  _vectorGradientCoord(value, units, coordinateMode, fallback) {
+    if (coordinateMode === "number") {
+      return String(this._clampNumber(value, -5000, 5000, fallback));
+    }
+    const number = units === "userSpaceOnUse"
+      ? this._clampNumber(value, -200, 300, fallback)
+      : this._clampNumber(value, 0, 100, fallback);
+    return units === "userSpaceOnUse" ? String(number) : `${number}%`;
+  }
+
+  _vectorCoord(value, axis, coordinateMode, metrics, fallback) {
+    if (coordinateMode === "number") {
+      const min = axis === "x" ? metrics.minX - metrics.width : metrics.minY - metrics.height;
+      const max = axis === "x" ? metrics.minX + metrics.width * 2 : metrics.minY + metrics.height * 2;
+      const base = axis === "x" ? metrics.minX : metrics.minY;
+      const size = axis === "x" ? metrics.width : metrics.height;
+      const numeric = Number(value);
+      const fallbackNumber = base + size * (this._clampNumber(fallback, 0, 100, 0) / 100);
+      return Number.isFinite(numeric) ? this._clampNumber(numeric, min, max, fallbackNumber) : fallbackNumber;
+    }
+    return this._clampNumber(value, 0, 100, fallback);
+  }
+
+  _vectorSize(value, coordinateMode, metrics, fallback) {
+    const max = coordinateMode === "number" ? Math.max(metrics.width, metrics.height) * 2 : 100;
+    if (coordinateMode === "number" && !Number.isFinite(Number(value))) {
+      return Math.max(metrics.width, metrics.height) * (this._clampNumber(fallback, 0, 100, 0) / 100);
+    }
+    return this._clampNumber(value, 0, max, fallback);
+  }
+
+  _vectorTranslationLimit(metrics = this._vectorViewBoxMetrics()) {
+    return Math.max(200, Math.max(metrics.width, metrics.height) * 3);
+  }
+
+  _vectorBudget(config = {}) {
+    const mode = this._safeEnum(config.render_budget ?? config.renderBudget ?? config.performance_budget ?? config.performanceBudget, ["normal", "art"], "normal");
+    return mode === "art"
+      ? { shapes: 120, gradients: 24, stops: 16, children: 64, points: 96, depth: 3, path: 2400 }
+      : { shapes: 48, gradients: 8, stops: 8, children: 32, points: 32, depth: 2, path: 600 };
+  }
+
+  _vectorCssColor(value, opacity = 1) {
+    const token = String(value || "accent").trim();
+    const alpha = this._clampNumber(opacity, 0, 1, 1);
+    const match = token.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+    if (match) {
+      const hex = match[1].length === 3 ? match[1].split("").map((char) => char + char).join("") : match[1];
+      const number = Number.parseInt(hex, 16);
+      const r = (number >> 16) & 255;
+      const g = (number >> 8) & 255;
+      const b = number & 255;
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    if (token === "foreground") return "var(--urdash-fg)";
+    if (token === "muted") return "var(--urdash-muted)";
+    return "var(--vector-accent, var(--accent))";
+  }
+
+  _safeViewBox(value) {
+    const text = String(value || "0 0 100 100").trim();
+    if (/^-?\d+(\.\d+)?\s+-?\d+(\.\d+)?\s+\d+(\.\d+)?\s+\d+(\.\d+)?$/.test(text)) return text;
+    return "0 0 100 100";
+  }
+
+  _vectorViewBoxMetrics(value = "0 0 100 100") {
+    const parts = this._safeViewBox(value).split(/\s+/).map(Number);
+    const width = this._clampNumber(parts[2], 1, 5000, 100);
+    const height = this._clampNumber(parts[3], 1, 5000, 100);
+    return {
+      minX: this._clampNumber(parts[0], -5000, 5000, 0),
+      minY: this._clampNumber(parts[1], -5000, 5000, 0),
+      width,
+      height,
+    };
+  }
+
+  _safePathData(value, limit = 600) {
+    const text = String(value || "").trim().slice(0, limit);
+    if (!text || /[^MmZzLlHhVvCcSsQqTtAa0-9,.\-\s]/.test(text)) return "";
+    return text;
+  }
+
+  _safeGradientId(value) {
+    const text = String(value || "").trim();
+    return /^[a-zA-Z][a-zA-Z0-9_-]{0,31}$/.test(text) ? text : "";
+  }
+
+  _vectorStopColor(value) {
+    const token = String(value || "accent").trim();
+    if (token === "accent") return "var(--vector-accent, var(--accent))";
+    if (token === "foreground") return "var(--urdash-fg)";
+    if (token === "muted") return "var(--urdash-muted)";
+    if (/^#[0-9a-fA-F]{3,8}$/.test(token)) return token;
+    return "var(--vector-accent, var(--accent))";
+  }
+
+  _vectorPaint(value, fallback, gradientIds = new Map()) {
+    const token = String(value || fallback || "none").trim();
+    if (token.startsWith("gradient:")) {
+      const domId = gradientIds.get(this._safeGradientId(token.slice(9)));
+      if (domId) return `url(#${domId})`;
+    }
+    if (token === "none") return "none";
+    if (token === "accent") return "var(--vector-accent, var(--accent))";
+    if (token === "foreground") return "var(--urdash-fg)";
+    if (token === "muted") return "var(--urdash-muted)";
+    if (/^#[0-9a-fA-F]{3,8}$/.test(token)) return token;
+    return fallback === "none" ? "none" : "var(--vector-accent, var(--accent))";
   }
 
   _valueBlock(config) {
@@ -550,12 +1106,14 @@ class UrDashCard extends HTMLElement {
       const from = nodeById.get(link.from);
       const to = nodeById.get(link.to);
       if (!from || !to) continue;
+      const fromPoint = this._visualAnchor(from, link.from_anchor);
+      const toPoint = this._visualAnchor(to, link.to_anchor);
       const state = this._state(link.entity);
       const value = Number(this._boundValue(state, link.bind?.value || "state"));
       const active = Number.isFinite(value) ? Math.abs(value) > 0 : Boolean(state);
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("class", `visual-link ${link.style?.animated && active ? "visual-link-animated" : ""}`);
-      path.setAttribute("d", this._visualMapPath(from, to, link.style?.curve));
+      path.setAttribute("class", `visual-link ${link.style?.animated && active && !link.style?.flow_dot ? "visual-link-animated" : ""}`);
+      path.setAttribute("d", this._visualMapPath(fromPoint, toPoint, link));
       path.setAttribute("pathLength", "100");
       path.style.setProperty("--link-accent", this._safeAccent(link.style?.accent || config.style?.accent));
       path.style.setProperty("--link-width", `${this._visualLinkWidth(link, value)}px`);
@@ -563,11 +1121,32 @@ class UrDashCard extends HTMLElement {
       if (link.style?.direction === "reverse") path.setAttribute("marker-start", `url(#${markerId})`);
       else if (link.style?.direction !== "none") path.setAttribute("marker-end", `url(#${markerId})`);
       svg.appendChild(path);
+      if (link.style?.flow_dot) {
+        if (link.style?.animated && active) {
+          const tracer = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          tracer.setAttribute("class", "visual-flow-tracer");
+          tracer.setAttribute("d", path.getAttribute("d"));
+          tracer.setAttribute("pathLength", "100");
+          tracer.style.setProperty("--link-accent", this._safeAccent(link.style?.accent || config.style?.accent));
+          tracer.style.setProperty("--flow-width", `${this._clampNumber(link.style?.dot_size, 0.8, 3, 1.1) * 1.45}px`);
+          tracer.style.setProperty("--flow-delay", `${-(index % 4) * 0.42}s`);
+          svg.appendChild(tracer);
+        } else {
+          const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          const dotPoint = this._visualFlowDotPoint(fromPoint, toPoint, link);
+          dot.setAttribute("class", "visual-flow-dot");
+          dot.setAttribute("cx", String(dotPoint.x));
+          dot.setAttribute("cy", String(dotPoint.y));
+          dot.setAttribute("r", String(this._clampNumber(link.style?.dot_size, 0.8, 4.5, 2.2)));
+          dot.style.setProperty("--link-accent", this._safeAccent(link.style?.accent || config.style?.accent));
+          svg.appendChild(dot);
+        }
+      }
 
       const label = document.createElement("span");
       label.className = "visual-link-label";
-      label.style.left = `${(from.x + to.x) / 2}%`;
-      label.style.top = `${(from.y + to.y) / 2}%`;
+      label.style.left = `${this._clampNumber(link.label_position?.x, 0, 100, (fromPoint.x + toPoint.x) / 2)}%`;
+      label.style.top = `${this._clampNumber(link.label_position?.y, 0, 100, (fromPoint.y + toPoint.y) / 2)}%`;
       label.style.setProperty("--link-accent", this._safeAccent(link.style?.accent || config.style?.accent));
       label.textContent = this._visualLinkLabel(link, state);
       label.dataset.linkIndex = String(index);
@@ -582,7 +1161,8 @@ class UrDashCard extends HTMLElement {
       element.className = [
         "visual-node",
         `visual-node-${this._safeEnum(node.size, ["micro", "small", "normal", "large", "hero"], "normal")}`,
-        `visual-node-${this._safeEnum(node.style?.shape, ["none", "soft", "pill", "circle", "orb", "core"], "soft")}`,
+        `visual-node-${this._safeEnum(node.style?.shape, ["none", "soft", "pill", "circle", "orb", "core", "ring"], "soft")}`,
+        `visual-ring-${this._safeEnum(node.style?.ring_width, ["thin", "normal", "thick"], "normal")}`,
       ].join(" ");
       element.style.left = `${node.x}%`;
       element.style.top = `${node.y}%`;
@@ -591,15 +1171,23 @@ class UrDashCard extends HTMLElement {
         element.type = "button";
         element.addEventListener("click", () => this._runAction(node.action || { type: "more_info", entity_id: node.entity }));
       }
-      if (node.icon) element.appendChild(this._icon(node.icon));
+      if (node.vector_icon) {
+        const icon = this._vectorSvg(
+          { ...node.vector_icon, style: { ...(node.vector_icon.style || {}), accent: node.vector_icon.style?.accent || node.style?.accent || config.style?.accent } },
+          node.label || node.id || "Vector node icon",
+        );
+        icon.classList.add("visual-node-vector-icon");
+        element.appendChild(icon);
+      } else if (node.icon) {
+        element.appendChild(this._icon(node.icon));
+      }
       const value = document.createElement("strong");
-      value.textContent = this._formatValue(
-        this._boundValue(state, node.bind?.value || "state"),
-        this._boundValue(state, node.bind?.unit || "attributes.unit_of_measurement"),
-      );
+      value.textContent = this._visualNodeValue(node, state);
       const label = document.createElement("span");
       label.textContent = node.label || this._shortName(state) || node.id;
       element.append(value, label);
+      const stats = this._visualNodeStats(node);
+      if (stats) element.appendChild(stats);
       wrap.appendChild(element);
     }
 
@@ -607,7 +1195,17 @@ class UrDashCard extends HTMLElement {
     return wrap;
   }
 
-  _visualMapPath(from, to, curve = "soft") {
+  _visualMapPath(from, to, link) {
+    const points = (link.path?.points || []).slice(0, 8).map((point) => ({
+      x: this._clampNumber(point.x, 0, 100, 50),
+      y: this._clampNumber(point.y, 0, 100, 50),
+    }));
+    if (points.length) {
+      const all = [from, ...points, to];
+      if (link.style?.curve === "soft" || link.style?.curve === "arc") return this._smoothPolyline(all);
+      return all.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
+    }
+    const curve = link.style?.curve || "soft";
     if (curve === "straight") return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
     const dx = to.x - from.x;
     const dy = to.y - from.y;
@@ -617,6 +1215,82 @@ class UrDashCard extends HTMLElement {
     const c2x = to.x - dx * bend;
     const c2y = to.y - dy * 0.04;
     return `M ${from.x} ${from.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${to.x} ${to.y}`;
+  }
+
+  _visualFlowDotPoint(from, to, link) {
+    if (link.flow_position) {
+      return {
+        x: this._clampNumber(link.flow_position.x, 0, 100, (from.x + to.x) / 2),
+        y: this._clampNumber(link.flow_position.y, 0, 100, (from.y + to.y) / 2),
+      };
+    }
+    const points = (link.path?.points || []).slice(0, 8).map((point) => ({
+      x: this._clampNumber(point.x, 0, 100, 50),
+      y: this._clampNumber(point.y, 0, 100, 50),
+    }));
+    const route = [from, ...points, to];
+    return route[Math.floor(route.length / 2)] || { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+  }
+
+  _smoothPolyline(points) {
+    if (points.length < 2) return "";
+    let path = `M ${points[0].x} ${points[0].y}`;
+    for (let index = 1; index < points.length; index += 1) {
+      const prev = points[index - 1];
+      const current = points[index];
+      const midX = (prev.x + current.x) / 2;
+      const midY = (prev.y + current.y) / 2;
+      path += ` Q ${prev.x} ${prev.y}, ${midX} ${midY}`;
+    }
+    const last = points[points.length - 1];
+    path += ` T ${last.x} ${last.y}`;
+    return path;
+  }
+
+  _visualAnchor(node, anchor = "center") {
+    const offsets = {
+      center: [0, 0],
+      top: [0, -8],
+      right: [8, 0],
+      bottom: [0, 8],
+      left: [-8, 0],
+      top_left: [-6, -6],
+      top_right: [6, -6],
+      bottom_left: [-6, 6],
+      bottom_right: [6, 6],
+    };
+    const [dx, dy] = offsets[anchor] || offsets.center;
+    return {
+      x: this._clampNumber(node.x + dx, 0, 100, node.x),
+      y: this._clampNumber(node.y + dy, 0, 100, node.y),
+    };
+  }
+
+  _visualNodeValue(node, state) {
+    if (node.value) return node.value;
+    return this._formatValue(
+      this._boundValue(state, node.bind?.value || "state"),
+      this._boundValue(state, node.bind?.unit || "attributes.unit_of_measurement"),
+    );
+  }
+
+  _visualNodeStats(node) {
+    const stats = (node.stats || []).slice(0, 4);
+    if (!stats.length) return null;
+    const wrap = document.createElement("div");
+    wrap.className = "visual-node-stats";
+    for (const stat of stats) {
+      const state = this._state(stat.entity);
+      const row = document.createElement("small");
+      row.className = `visual-stat-${this._safeEnum(stat.tone, ["neutral", "positive", "negative", "muted"], "neutral")}`;
+      row.textContent = [
+        stat.prefix || "",
+        this._formatValue(this._boundValue(state, stat.bind?.value || "state"), stat.unit || this._boundValue(state, stat.bind?.unit || "attributes.unit_of_measurement")),
+        stat.suffix || "",
+      ].join("");
+      wrap.appendChild(row);
+    }
+    return wrap;
   }
 
   _visualMarker(defs, blockId, index, accent) {
@@ -638,7 +1312,7 @@ class UrDashCard extends HTMLElement {
   }
 
   _visualLinkWidth(link, value) {
-    if (typeof link.style?.width === "number") return this._clampNumber(link.style.width, 1, 10, 3);
+    if (typeof link.style?.width === "number") return this._clampNumber(link.style.width, 0.4, 10, 3);
     if (link.style?.width !== "dynamic" || !Number.isFinite(value)) return 3;
     return Math.max(2, Math.min(9, 2 + Math.sqrt(Math.abs(value)) / 8));
   }
@@ -865,15 +1539,30 @@ class UrDashCard extends HTMLElement {
     block.style.gridRow = `${safe.row} / span ${safe.h}`;
   }
 
-  _applyFrame(block, frame) {
-    const x = this._clampNumber(frame?.x, 0, 100, 0);
-    const y = this._clampNumber(frame?.y, 0, 100, 0);
-    const w = this._clampNumber(frame?.w, 1, 100, 40);
-    const h = this._clampNumber(frame?.h, 1, 100, 30);
-    block.style.left = `${x}%`;
-    block.style.top = `${y}%`;
-    block.style.width = `${w}%`;
-    block.style.height = `${h}%`;
+  _applyFrame(block, frame, mobileFrame) {
+    const desktop = this._safeFrame(frame, { x: 0, y: 0, w: 40, h: 30 });
+    const mobile = this._safeFrame(mobileFrame, desktop);
+    block.style.setProperty("--frame-x", `${desktop.x}%`);
+    block.style.setProperty("--frame-y", `${desktop.y}%`);
+    block.style.setProperty("--frame-w", `${desktop.w}%`);
+    block.style.setProperty("--frame-h", `${desktop.h}%`);
+    block.style.setProperty("--mobile-frame-x", `${mobile.x}%`);
+    block.style.setProperty("--mobile-frame-y", `${mobile.y}%`);
+    block.style.setProperty("--mobile-frame-w", `${mobile.w}%`);
+    block.style.setProperty("--mobile-frame-h", `${mobile.h}%`);
+    block.style.left = "var(--frame-x)";
+    block.style.top = "var(--frame-y)";
+    block.style.width = "var(--frame-w)";
+    block.style.height = "var(--frame-h)";
+  }
+
+  _safeFrame(frame, fallback) {
+    return {
+      x: this._clampNumber(frame?.x, 0, 100, fallback.x),
+      y: this._clampNumber(frame?.y, 0, 100, fallback.y),
+      w: this._clampNumber(frame?.w, 1, 100, fallback.w),
+      h: this._clampNumber(frame?.h, 1, 100, fallback.h),
+    };
   }
 
   _styleClasses(style = {}) {
@@ -887,7 +1576,7 @@ class UrDashCard extends HTMLElement {
   _presentationClasses(presentation = {}) {
     return [
       `surface-${this._safeEnum(presentation.surface, ["panel", "glass", "ghost", "naked", "hero", "floating", "orb", "strip", "rail"], "panel")}`,
-      `scale-${this._safeEnum(presentation.scale, ["micro", "small", "normal", "large", "xl"], "normal")}`,
+      `scale-${this._safeEnum(presentation.scale, ["micro", "small", "normal", "large", "xl", "full"], "normal")}`,
       `align-${this._safeEnum(presentation.align, ["start", "center", "end", "stretch"], "stretch")}`,
       `layer-${this._safeEnum(presentation.layer, ["backdrop", "base", "raised", "overlay"], "base")}`,
     ].join(" ");
@@ -959,7 +1648,10 @@ function escapeHtml(value) {
 }
 
 const styles = `
-  :host { display: block; }
+  :host {
+    container-type: inline-size;
+    display: block;
+  }
   * { box-sizing: border-box; }
   button { font: inherit; }
   h3, h4, p { margin: 0; }
@@ -1002,6 +1694,20 @@ const styles = `
   .theme-sunrise { --urdash-bg: linear-gradient(135deg, #fff6e8, #eaf7f2); --urdash-fg: #2a2c26; }
   .height-viewport { min-height: min(760px, 92vh); }
   .height-fixed { height: var(--urdash-card-height, 720px); overflow: auto; }
+
+  .chrome-art {
+    gap: 0;
+    padding: 0;
+  }
+
+  .chrome-art.theme-graphite {
+    --urdash-bg:
+      radial-gradient(circle at 50% 50%, rgba(38,58,74,0.34), rgba(16,24,32,0.24) 42%, rgba(13,13,13,0.94) 82%, #000 100%);
+  }
+
+  .chrome-art.layout-canvas .block-stage {
+    min-height: 100%;
+  }
 
   .card-header {
     display: flex;
@@ -1081,6 +1787,20 @@ const styles = `
     overflow: hidden;
   }
 
+  .block-visual_map {
+    align-content: stretch;
+  }
+
+  .block-visual_map .block-body {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .block-visual_map .visual-map {
+    min-height: 0;
+    height: 100%;
+  }
+
   .layer-backdrop { z-index: 0; pointer-events: none; }
   .layer-base { z-index: 1; }
   .layer-raised { z-index: 2; }
@@ -1089,6 +1809,8 @@ const styles = `
   .align-center { place-self: center; }
   .align-end { place-self: end stretch; }
   .align-stretch { place-self: stretch; }
+  .block-text.align-center .text { text-align: center; }
+  .block-text.align-end .text { text-align: right; }
 
   .surface-glass {
     background: linear-gradient(135deg, rgba(255,255,255,0.56), rgba(255,255,255,0.22));
@@ -1148,6 +1870,7 @@ const styles = `
   .scale-small { font-size: 0.88em; }
   .scale-large { font-size: 1.14em; }
   .scale-xl { font-size: 1.32em; }
+  .scale-full { font-size: 1em; }
 
   .theme-quiet .block {
     border-left: 0;
@@ -1192,6 +1915,7 @@ const styles = `
   }
 
   .text-headline p { font-size: 30px; line-height: 1.04; }
+  .text-display p { font-size: clamp(42px, 5vw, 62px); line-height: 0.94; }
   .text-title p { font-size: 22px; }
   .text-body p { font-size: 15px; }
   .text-caption p, .text-label p { color: var(--urdash-muted); font-size: 12px; }
@@ -1314,6 +2038,118 @@ const styles = `
   }
 
   .icon-orb ha-icon { width: 48px; height: 48px; }
+
+  .vector-icon {
+    display: grid;
+    place-items: center;
+    width: min(100%, 180px);
+    aspect-ratio: 1;
+    border-radius: 999px;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    filter: drop-shadow(0 18px 34px color-mix(in srgb, var(--accent) 18%, transparent));
+  }
+
+  .surface-naked .vector-icon, .surface-ghost .vector-icon {
+    background: transparent;
+  }
+
+  .scale-large .vector-icon { width: min(100%, 230px); }
+  .scale-xl .vector-icon { width: min(100%, 320px); }
+  .scale-full {
+    align-content: stretch;
+  }
+
+  .scale-full .block-body {
+    display: grid;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .scale-full .vector-icon {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .layout-canvas .block-vector_icon.scale-full {
+    padding: 0;
+    overflow: visible;
+  }
+
+  .layout-canvas .block-vector_icon.scale-full > .block-body {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .layout-canvas .block-vector_icon.scale-full > .block-body > .vector-icon {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    aspect-ratio: auto;
+  }
+
+  .vector-icon svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .vector-animated {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation-duration: var(--vector-duration, 2.4s);
+    animation-delay: var(--vector-delay, 0s);
+    animation-iteration-count: infinite;
+    animation-timing-function: ease-in-out;
+  }
+
+  .vector-anim-pulse, .vector-anim-breathe {
+    animation-name: urdash-vector-pulse;
+  }
+
+  .vector-anim-spin, .vector-anim-orbit {
+    animation-name: urdash-vector-spin;
+    animation-timing-function: linear;
+  }
+
+  .vector-anim-rain_drop {
+    animation-name: urdash-vector-rain;
+  }
+
+  .vector-anim-drift {
+    animation-name: urdash-vector-drift;
+  }
+
+  .vector-anim-dash_flow {
+    stroke-dasharray: var(--vector-dash-array, 18 82);
+    animation-name: urdash-vector-dash-flow;
+    animation-timing-function: linear;
+  }
+
+  .vector-anim-draw {
+    stroke-dasharray: 100;
+    animation-name: urdash-vector-draw;
+  }
+
+  .vector-anim-twinkle {
+    animation-name: urdash-vector-twinkle;
+  }
+
+  .vector-anim-fade {
+    animation-name: urdash-vector-fade;
+  }
+
+  .vector-anim-shimmer {
+    animation-name: urdash-vector-shimmer;
+  }
 
   .value-readout {
     display: grid;
@@ -1689,6 +2525,26 @@ const styles = `
     animation: urdash-flow 1.6s linear infinite;
   }
 
+  .visual-flow-tracer {
+    fill: none;
+    stroke: var(--link-accent, var(--accent));
+    stroke-width: var(--flow-width, 2px);
+    stroke-linecap: round;
+    stroke-dasharray: 8 92;
+    stroke-dashoffset: 100;
+    filter: drop-shadow(0 0 9px color-mix(in srgb, var(--link-accent, var(--accent)) 78%, transparent));
+    opacity: 0;
+    pointer-events: none;
+    animation: urdash-flow-tracer 2.55s linear infinite;
+    animation-delay: var(--flow-delay, 0s);
+  }
+
+  .visual-flow-dot {
+    fill: var(--link-accent, var(--accent));
+    filter: drop-shadow(0 0 8px color-mix(in srgb, var(--link-accent, var(--accent)) 72%, transparent));
+    pointer-events: none;
+  }
+
   .visual-link-label {
     position: absolute;
     z-index: 2;
@@ -1738,6 +2594,17 @@ const styles = `
     color: var(--node-accent, var(--accent));
   }
 
+  .visual-node-vector-icon {
+    width: 26px;
+    height: 26px;
+    color: var(--node-accent, var(--accent));
+    overflow: visible;
+  }
+  .visual-node-micro .visual-node-vector-icon { width: 18px; height: 18px; }
+  .visual-node-small .visual-node-vector-icon { width: 22px; height: 22px; }
+  .visual-node-large .visual-node-vector-icon { width: 30px; height: 30px; }
+  .visual-node-hero .visual-node-vector-icon { width: 38px; height: 38px; }
+
   .visual-node strong {
     max-width: 150px;
     color: var(--urdash-fg);
@@ -1756,13 +2623,47 @@ const styles = `
     white-space: nowrap;
   }
 
+  .visual-node-stats {
+    display: grid;
+    gap: 2px;
+    margin-top: 2px;
+  }
+
+  .visual-node-stats small {
+    color: var(--urdash-muted);
+    font-size: 10px;
+    font-weight: 900;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .visual-node-stats .visual-stat-positive {
+    color: #25a55f;
+  }
+
+  .visual-node-stats .visual-stat-negative {
+    color: #c06c5a;
+  }
+
+  .visual-node-stats .visual-stat-muted {
+    color: var(--urdash-muted);
+  }
+
   .visual-node-micro { min-width: 58px; min-height: 50px; padding: 7px; }
   .visual-node-small { min-width: 72px; min-height: 62px; }
   .visual-node-large { min-width: 112px; min-height: 96px; }
   .visual-node-hero { min-width: 148px; min-height: 128px; }
   .visual-node-hero strong { font-size: 34px; }
-  .visual-node-circle, .visual-node-orb, .visual-node-core { border-radius: 999px; aspect-ratio: 1; }
+  .visual-node-circle, .visual-node-orb, .visual-node-core, .visual-node-ring { border-radius: 999px; aspect-ratio: 1; }
   .visual-node-pill { border-radius: 999px; min-height: 54px; grid-template-columns: auto minmax(0, 1fr); text-align: left; }
+  .visual-node-ring {
+    border-width: 3px;
+    background:
+      radial-gradient(circle at center, rgba(255,255,255,0.08) 0 48%, transparent 49%),
+      color-mix(in srgb, var(--node-accent, var(--accent)) 8%, rgba(255,255,255,0.1));
+  }
+  .visual-ring-thin { border-width: 2px; }
+  .visual-ring-thick { border-width: 5px; }
   .visual-node-core {
     background:
       radial-gradient(circle, color-mix(in srgb, var(--node-accent, var(--accent)) 24%, rgba(255,255,255,0.84)), rgba(255,255,255,0.22));
@@ -1810,11 +2711,246 @@ const styles = `
     to { stroke-dashoffset: 0; }
   }
 
+  @keyframes urdash-flow-tracer {
+    0% {
+      opacity: 0;
+      stroke-dashoffset: 100;
+    }
+    8% {
+      opacity: 0.96;
+    }
+    88% {
+      opacity: 0.96;
+    }
+    100% {
+      opacity: 0;
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @keyframes urdash-vector-pulse {
+    0%, 100% { transform: scale(1); opacity: 0.82; }
+    50% { transform: scale(calc(1 + 0.08 * var(--vector-strength, 1))); opacity: 1; }
+  }
+
+  @keyframes urdash-vector-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes urdash-vector-rain {
+    0% { opacity: 0; transform: translateY(calc(-5px * var(--vector-strength, 1))); }
+    20% { opacity: 1; }
+    82% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(calc(8px * var(--vector-strength, 1))); }
+  }
+
+  @keyframes urdash-vector-drift {
+    0%, 100% { transform: translateX(calc(-2px * var(--vector-strength, 1))); }
+    50% { transform: translateX(calc(4px * var(--vector-strength, 1))); }
+  }
+
+  @keyframes urdash-vector-dash-flow {
+    from { stroke-dashoffset: 100; }
+    to { stroke-dashoffset: 0; }
+  }
+
+  @keyframes urdash-vector-draw {
+    0% { stroke-dashoffset: 100; opacity: 0.2; }
+    45% { opacity: 1; }
+    70%, 100% { stroke-dashoffset: 0; opacity: 1; }
+  }
+
+  @keyframes urdash-vector-twinkle {
+    0%, 100% { opacity: 0.38; transform: scale(0.92); }
+    50% { opacity: 1; transform: scale(calc(1 + 0.12 * var(--vector-strength, 1))); }
+  }
+
+  @keyframes urdash-vector-fade {
+    0%, 100% { opacity: 0.32; }
+    50% { opacity: 1; }
+  }
+
+  @keyframes urdash-vector-shimmer {
+    0%, 100% { opacity: 0.42; transform: translateX(calc(-2px * var(--vector-strength, 1))) scale(0.98); }
+    50% { opacity: 1; transform: translateX(calc(3px * var(--vector-strength, 1))) scale(1.02); }
+  }
+
+
   @media (max-width: 680px) {
     .urdash-card { padding: 14px; }
     .card-header { display: grid; }
     .layout-grid .block-stage { grid-template-columns: 1fr; }
     .layout-grid .block { grid-column: auto !important; grid-row: auto !important; }
+  }
+
+  @container (max-width: 520px) {
+    .urdash-card {
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .height-viewport {
+      min-height: min(680px, 142cqw);
+    }
+
+    .card-header {
+      display: grid;
+      gap: 8px;
+    }
+
+    .card-header h3 {
+      font-size: clamp(20px, 7cqw, 24px);
+      line-height: 1.08;
+    }
+
+    .card-header p {
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .risk {
+      justify-self: start;
+      padding: 4px 8px;
+      font-size: 10px;
+    }
+
+    .layout-canvas .block-stage {
+      aspect-ratio: var(--urdash-mobile-aspect, 4/5);
+      min-height: min(640px, 132cqw);
+    }
+
+    .layout-canvas .block {
+      left: var(--mobile-frame-x, var(--frame-x)) !important;
+      top: var(--mobile-frame-y, var(--frame-y)) !important;
+      width: var(--mobile-frame-w, var(--frame-w)) !important;
+      height: var(--mobile-frame-h, var(--frame-h)) !important;
+    }
+
+    .block {
+      gap: 8px;
+      padding: 10px;
+      box-shadow: 0 12px 28px rgba(20,36,40,0.1);
+    }
+
+    .block.surface-naked {
+      padding: 0;
+      box-shadow: none;
+    }
+
+    .visual-link {
+      stroke-width: calc(var(--link-width, 3px) * 0.82);
+    }
+
+    .visual-flow-tracer {
+      stroke-width: calc(var(--flow-width, 2px) * 0.82);
+    }
+
+    .vector-icon {
+      width: min(100%, 150px);
+    }
+
+    .scale-large .vector-icon { width: min(100%, 180px); }
+    .scale-xl .vector-icon { width: min(100%, 220px); }
+    .scale-full .vector-icon {
+      width: 100%;
+      height: 100%;
+    }
+
+    .visual-node {
+      gap: 2px;
+      min-width: 66px;
+      min-height: 58px;
+      padding: 7px;
+      box-shadow: 0 12px 30px color-mix(in srgb, var(--node-accent, var(--accent)) 18%, transparent);
+    }
+
+    .visual-node ha-icon {
+      width: 18px;
+      height: 18px;
+    }
+
+    .visual-node-vector-icon {
+      width: 19px;
+      height: 19px;
+    }
+    .visual-node-micro .visual-node-vector-icon { width: 14px; height: 14px; }
+    .visual-node-small .visual-node-vector-icon { width: 16px; height: 16px; }
+    .visual-node-large .visual-node-vector-icon { width: 22px; height: 22px; }
+    .visual-node-hero .visual-node-vector-icon { width: 28px; height: 28px; }
+
+    .visual-node strong {
+      max-width: 104px;
+      font-size: 16px;
+    }
+
+    .visual-node span {
+      max-width: 104px;
+      font-size: 9px;
+    }
+
+    .visual-node-stats {
+      gap: 1px;
+      margin-top: 0;
+    }
+
+    .visual-node-stats small {
+      font-size: 8px;
+    }
+
+    .visual-node-micro { min-width: 46px; min-height: 42px; padding: 5px; }
+    .visual-node-small { min-width: 58px; min-height: 52px; }
+    .visual-node-large { min-width: 88px; min-height: 78px; }
+    .visual-node-hero { min-width: 108px; min-height: 96px; }
+    .visual-node-hero strong { font-size: 24px; }
+    .visual-node-ring { border-width: 2px; }
+    .visual-ring-thin { border-width: 1px; }
+    .visual-ring-thick { border-width: 4px; }
+  }
+
+  @container (max-width: 360px) {
+    .urdash-card {
+      padding: 10px;
+    }
+
+    .card-header h3 {
+      font-size: 19px;
+    }
+
+    .layout-canvas .block-stage {
+      min-height: min(600px, 138cqw);
+    }
+
+    .visual-node {
+      min-width: 58px;
+      min-height: 52px;
+      padding: 6px;
+    }
+
+    .visual-node strong {
+      font-size: 14px;
+    }
+
+    .visual-node span {
+      font-size: 8px;
+    }
+
+    .visual-node-stats small {
+      font-size: 7px;
+    }
+
+    .visual-node-large { min-width: 78px; min-height: 70px; }
+    .visual-node-hero { min-width: 96px; min-height: 86px; }
+    .visual-node-hero strong { font-size: 21px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .block,
+    .vector-icon,
+    .vector-icon * {
+      animation: none !important;
+      transition: none !important;
+    }
   }
 `;
 

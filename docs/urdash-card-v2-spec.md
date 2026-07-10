@@ -126,6 +126,8 @@ High-risk cards can render normally, but high-risk actions must require confirma
 
 v2 supports two safe layout models.
 
+`layout.chrome` may be `normal` or `art`. Use `art` only when the generated vector/canvas artwork is the entire card surface and the card should render without the normal header chrome.
+
 ### Grid Layout
 
 Grid layout is the default and should handle most cards.
@@ -166,6 +168,9 @@ Canvas layout is for highly visual cards.
 layout:
   type: canvas
   aspect_ratio: "16/9"
+  responsive:
+    mobile:
+      aspect_ratio: "4/5"
   density: calm
   blocks:
     - id: home_pulse
@@ -175,6 +180,13 @@ layout:
         y: 12
         w: 38
         h: 42
+      responsive:
+        mobile:
+          frame:
+            x: 6
+            y: 10
+            w: 88
+            h: 38
 ```
 
 Canvas constraints:
@@ -182,7 +194,11 @@ Canvas constraints:
 - `x`, `y`, `w`, and `h` are percentages.
 - Values must be numeric and clamped from `0` to `100`.
 - Blocks cannot use raw CSS positioning strings.
-- Renderer may stack blocks on narrow screens.
+- Canvas cards automatically switch to a taller mobile aspect ratio on narrow cards.
+- AI may set `layout.responsive.mobile.aspect_ratio` when the mobile composition needs a specific shape.
+- Blocks may set `responsive.mobile.frame` to move or resize a block on mobile.
+- Keep mobile canvas layouts readable at about 350px wide.
+- Prefer fewer, larger focal elements on mobile rather than shrinking a dense desktop composition.
 
 ## Blocks
 
@@ -245,6 +261,7 @@ Allowed `scale` values:
 - `normal`
 - `large`
 - `xl`
+- `full`
 
 Allowed `align` values:
 
@@ -277,6 +294,7 @@ Variants:
 - `label`
 - `body`
 - `headline`
+- `display`
 - `title`
 - `caption`
 
@@ -287,6 +305,131 @@ kind: icon
 icon: mdi:sofa
 tone: calm
 ```
+
+### Vector Icon
+
+`vector_icon` lets AI create a custom SVG-like symbol without raw SVG markup. The renderer safely rebuilds each shape with DOM APIs.
+
+```yaml
+kind: vector_icon
+label: Solar cloud
+viewBox: "0 0 100 100"
+gradients:
+  - id: sky_glow
+    type: radial
+    center: { x: 50, y: 45 }
+    radius: 60
+    stops:
+      - offset: 0
+        color: accent
+        opacity: 0.9
+      - offset: 1
+        color: muted
+        opacity: 0.1
+shapes:
+  - type: circle
+    cx: 68
+    cy: 30
+    r: 14
+    fill: gradient:sky_glow
+    stroke: none
+    opacity: 0.35
+  - type: path
+    d: "M20 62 C26 46, 44 46, 50 58 C56 49, 76 52, 80 66 C74 74, 28 74, 20 62"
+    fill: none
+    stroke: accent
+    stroke_width: 6
+  - type: line
+    x1: 24
+    y1: 84
+    x2: 76
+    y2: 84
+    stroke: muted
+    stroke_width: 4
+    animation:
+      preset: dash_flow
+      speed: slow
+      intensity: subtle
+```
+
+Allowed shapes:
+
+- `path`
+- `circle`
+- `ellipse`
+- `rect`
+- `line`
+- `polyline`
+- `group`
+
+Safety rules:
+
+- No raw SVG, HTML, JavaScript, event handlers, `foreignObject`, images, filters, external references, or CSS.
+- Shape coordinates default to a safe 0-100 drawing space.
+- `vector_icon` and individual shapes may set `coordinate_mode: number` to use the icon `viewBox` coordinate space with viewBox-aware clamps. This is intended for design-tool-style exports such as `viewBox: "0 0 900 900"`.
+- Gradients normally use percent-style coordinates. For design-tool-style exports, gradients may set `coordinate_mode: number` to use clamped raw numeric gradient coordinates (`-5000` to `5000`) with matrix transforms.
+- Gradients using `userSpaceOnUse` may place centers, focal points, and endpoints slightly outside the drawing space (`-200` to `300`) for soft off-canvas glows when using the default percent coordinate mode.
+- Path data is length-limited and only supports normal SVG path commands and numeric values.
+- Paint values are safe tokens: `none`, `accent`, `foreground`, `muted`, safe hex colors, or `gradient:<id>`.
+- Gradients are declarative only. Allowed gradient types are `linear` and `radial`.
+- Each vector icon may define up to 8 gradients, each with up to 8 stops.
+- `render_budget: art` raises vector limits to 24 gradients, 16 stops, 120 top-level shapes, longer paths, and deeper groups for high-fidelity artwork.
+- Gradient IDs must use safe identifier characters and are automatically prefixed by the renderer.
+- Gradient stop colors may be `accent`, `foreground`, `muted`, or safe hex colors.
+- Shapes and gradients may use a safe declarative `transform` with clamped `rotate`, `scale`, `scale_x`, `scale_y`, `translate_x`, `translate_y`, `skew_x`, `skew_y`, `origin`, and a numeric SVG-style `matrix` (`a`/`b`/`c`/`d` clamped to `-4..4`, `e`/`f` clamped by the current viewBox budget).
+- For precise imported artwork, `transform.transforms` may contain an ordered list of safe transform steps: `matrix`, `translate`, `rotate`, `scale`, `skew_x`, and `skew_y`. This preserves transform order without allowing raw transform strings.
+- Gradients may use safe `units`, `coordinate_mode`, `spread_method`, `focal`, `fx`, `fy`, and `fr` fields.
+- Shapes may use safe `blend_mode` values: `normal`, `screen`, `plus-lighter`, `soft-light`, `overlay`, `color-dodge`, `hard-light`, or `lighten`.
+- Shapes may use safe `effects.blur`, `effects.brightness`, `effects.saturate`, `effects.glow`, and `effects.neon_glow`; the renderer clamps all values and does not accept raw filter strings.
+- Shapes may use safe `effects.filter_preset`: `soft_blur`, `outer_glow`, `inner_glow`, `bloom`, `colored_shadow`, `luminous_ring`, `svg_blur`, or `svg_white_neon`. The `svg_*` presets generate fixed native SVG filter nodes with clamped parameters; raw filter graphs are still not allowed.
+- Shapes may use safe `stroke_dasharray` values for controlled dashed strokes and flow effects.
+- Shape animations may set a safe `origin` so rotation/orbit effects can use an artwork-level center instead of the shape bounding box.
+- `group` may contain child shapes and can receive the same transform/effects/animation fields. Nested groups are intentionally shallow.
+
+Shape animations are optional and declarative:
+
+```yaml
+animation:
+  preset: rain_drop
+  delay: 0.2
+  speed: normal
+  intensity: subtle
+```
+
+Allowed shape animation presets:
+
+- `pulse`
+- `breathe`
+- `spin`
+- `orbit`
+- `rain_drop`
+- `drift`
+- `dash_flow`
+- `draw`
+- `twinkle`
+- `fade`
+- `shimmer`
+
+The renderer maps these presets to built-in CSS or safe native SVG animation primitives. AI must not output raw CSS, raw SVG `<animate>`, JavaScript, or unrestricted custom keyframes.
+
+Vector shapes may also use safe keyframe animation. UrDash converts the declaration into bounded `<animate>` / `<animateTransform>` nodes:
+
+```yaml
+animation:
+  property: rotate
+  duration: 10
+  phase_offset: 2
+  repeat: true
+  easing: linear
+  origin: { x: 450, y: 450 }
+  keyframes:
+    - offset: 0
+      rotate: 0
+    - offset: 1
+      rotate: 360
+```
+
+Allowed keyframe properties are `opacity`, `rotate`, `scale`, and `translate`.
 
 ### Value
 
@@ -612,7 +755,7 @@ actions:
 
 AI-designed node/link composition for flows, relationships, topology, spatial control, energy movement, irrigation paths, security perimeters, HVAC air movement, and similar cards.
 
-`visual_map` has no predefined layout. AI chooses node positions, sizes, icons, labels, link curves, link labels, animation, and actions based on the user request and available entities.
+`visual_map` has no predefined layout. AI chooses node positions, sizes, icons, labels, node stats, link routes, link anchors, path points, animation, and actions based on the user request and available entities.
 
 ```yaml
 kind: visual_map
@@ -621,11 +764,27 @@ nodes:
     label: Solar
     entity: sensor.solar_power
     icon: mdi:solar-power
+    # Or use vector_icon for a safe custom SVG-like node icon.
+    # vector_icon:
+    #   viewBox: "0 0 100 100"
+    #   shapes:
+    #     - type: circle
+    #       cx: 50
+    #       cy: 50
+    #       r: 22
+    #       fill: none
+    #       stroke: accent
+    #       stroke_width: 5
     size: large
     position: { x: 18, y: 24 }
+    stats:
+      - entity: sensor.solar_export
+        prefix: "↘ "
+        tone: positive
     style:
       accent: "#d9a441"
-      shape: orb
+      shape: ring
+      ring_width: normal
     action:
       type: more_info
       entity_id: sensor.solar_power
@@ -641,20 +800,40 @@ nodes:
 links:
   - from: solar
     to: home
+    from_anchor: bottom
+    to_anchor: left
     label: solar
     show_label: true
     entity: sensor.solar_power
+    path:
+      points:
+        - { x: 38, y: 48 }
+        - { x: 48, y: 48 }
+    flow_position: { x: 44, y: 48 }
     style:
       accent: "#d9a441"
       width: dynamic
-      curve: arc
+      curve: soft
       animated: true
       direction: forward
+      flow_dot: true
 ```
+
+Useful visual map features:
+
+- `nodes[].style.shape: ring`: circular outline node for market-style energy, water, gas, battery, network, or room topology displays.
+- `nodes[].vector_icon`: optional safe custom vector icon for the node, using the same `vector_icon` shape rules.
+- `nodes[].stats[]`: secondary readings inside a node, such as import/export, charge/discharge, or auxiliary sensor values.
+- `links[].from_anchor` / `to_anchor`: connect from `top`, `right`, `bottom`, `left`, corners, or `center`.
+- `links[].path.points[]`: manually route a line through safe percent coordinates.
+- `links[].style.flow_dot`: add a moving or static dot on a link to show flow.
+- `links[].flow_position`: manually place the flow dot when the route needs a precise visual point.
+- `links[].show_label: false`: keep topology clean when the line color and node stats already explain the connection.
 
 Safety constraints:
 
 - Node positions are clamped to the card bounds.
+- Link path points are clamped to the card bounds.
 - Links can only connect declared node IDs.
 - Icons remain declarative `mdi:*` references.
 - Actions use the normal UrDash action allowlist.
