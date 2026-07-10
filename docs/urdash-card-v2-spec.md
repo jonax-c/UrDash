@@ -110,6 +110,7 @@ Recommended `goal` values:
 - `climate_control`
 - `security`
 - `energy`
+- `hero_visual`
 - `scene_launcher`
 - `media_control`
 - `multi_device_control`
@@ -1221,19 +1222,44 @@ Allowed operators:
 
 ## Validation Rules
 
-Renderer must validate before rendering.
+UrDash uses a layered validation pipeline:
+
+1. `CARD_V2_SCHEMA` is the Python source used by AI structured output and backend
+   validation.
+2. `scripts/export_card_schema.py` generates the compact frontend
+   `card-schema-v2.json` artifact from that source.
+3. An equality test prevents the generated artifact from becoming stale.
+4. Backend semantic compilation validates HA-specific references and capabilities.
+5. The custom-card validates pasted YAML against the same artifact before creating
+   any DOM.
+
+AI generation uses a strict provider schema. Optional UrDash properties become
+required nullable provider fields, then null placeholders are removed before the
+canonical schema and semantic compiler run. A failed generation receives one
+diagnostic-guided repair attempt.
+
+Diagnostics contain:
+
+- JSON path.
+- Stable error code.
+- Human-readable message.
+- Suggested correction.
+- Severity.
 
 Recommended limits:
 
-- Max blocks: `48`
+- Max blocks: `64`
 - Max nested container depth: `3`
 - Max entities per block: `12`
 - Max buttons per group: `8`
 - Max sections/containers: `12`
 - Max text length per label: `80`
 - Max title length: `48`
-- Max visual map nodes per block: `16`
-- Max visual map links per block: `24`
+- Max visual map nodes per block: `48`
+- Max visual map links per block: `96`
+- Max actions per card: `96`
+- Normal vector budget: `48` shapes, `8` gradients, and `600` path characters.
+- Art vector budget: `120` shapes, `24` gradients, and `2400` path characters.
 
 Validation must reject or sanitize:
 
@@ -1246,6 +1272,13 @@ Validation must reject or sanitize:
 - Entity IDs not present in HA state.
 - Non-numeric layout coordinates.
 - Unknown block kinds.
+- Duplicate block or visual node IDs.
+- Visual links referencing missing nodes.
+- Invalid entity bindings.
+- Actions unsupported by the target entity's feature flags.
+
+`urdash_schema_minor` defaults to `0`. The v2.0 normalizer supplies this value for
+older v2 cards, while a renderer rejects future minor versions it does not support.
 
 Renderer should degrade gracefully:
 

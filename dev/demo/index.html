@@ -153,7 +153,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260710.1");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260710.4");
 
       const hass = {
         config: {
@@ -1713,7 +1713,7 @@
                 frame: { x: 8, y: 14, w: 34, h: 12 },
                 responsive: { mobile: { frame: { x: 8, y: 14, w: 34, h: 12 } } },
                 style: { accent: "#dffcff", emphasis: "high" },
-                presentation: { surface: "naked", layer: "overlay", align: "left", scale: "large" },
+                presentation: { surface: "naked", layer: "overlay", align: "start", scale: "large" },
               },
               {
                 id: "weather_condition_line",
@@ -1723,7 +1723,7 @@
                 frame: { x: 9, y: 29, w: 34, h: 7 },
                 responsive: { mobile: { frame: { x: 9, y: 29, w: 36, h: 8 } } },
                 style: { accent: "#dffcff", emphasis: "high" },
-                presentation: { surface: "naked", layer: "overlay", align: "left" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
               },
               {
                 id: "weather_metric_line",
@@ -1733,7 +1733,7 @@
                 frame: { x: 9, y: 37, w: 42, h: 6 },
                 responsive: { mobile: { frame: { x: 9, y: 37, w: 52, h: 7 } } },
                 style: { accent: "#a9c9d3", emphasis: "normal" },
-                presentation: { surface: "naked", layer: "overlay", align: "left" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
               },
               {
                 id: "weather_location_line",
@@ -1743,7 +1743,7 @@
                 frame: { x: 9, y: 7, w: 38, h: 5 },
                 responsive: { mobile: { frame: { x: 9, y: 7, w: 44, h: 6 } } },
                 style: { accent: "#dffcff", emphasis: "normal" },
-                presentation: { surface: "naked", layer: "overlay", align: "left" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
               },
               {
                 id: "weather_live_line",
@@ -1753,7 +1753,7 @@
                 frame: { x: 68, y: 7, w: 23, h: 5 },
                 responsive: { mobile: { frame: { x: 64, y: 7, w: 27, h: 6 } } },
                 style: { accent: "#74f6df", emphasis: "high" },
-                presentation: { surface: "naked", layer: "overlay", align: "right" },
+                presentation: { surface: "naked", layer: "overlay", align: "end" },
               },
               {
                 id: "weather_rain_value",
@@ -1763,7 +1763,7 @@
                 frame: { x: 17, y: 68.5, w: 14, h: 6 },
                 responsive: { mobile: { frame: { x: 17, y: 68.5, w: 14, h: 7 } } },
                 style: { accent: "#dffcff", emphasis: "high" },
-                presentation: { surface: "naked", layer: "overlay", align: "left" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
               },
               {
                 id: "weather_rain_label",
@@ -1773,7 +1773,7 @@
                 frame: { x: 17, y: 74.5, w: 14, h: 4 },
                 responsive: { mobile: { frame: { x: 17, y: 74.5, w: 14, h: 5 } } },
                 style: { accent: "#82a8b7", emphasis: "normal" },
-                presentation: { surface: "naked", layer: "overlay", align: "left" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
               },
               {
                 id: "weather_wind_value",
@@ -1783,7 +1783,7 @@
                 frame: { x: 47, y: 68.5, w: 19, h: 6 },
                 responsive: { mobile: { frame: { x: 47, y: 68.5, w: 19, h: 7 } } },
                 style: { accent: "#dffcff", emphasis: "high" },
-                presentation: { surface: "naked", layer: "overlay", align: "left" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
               },
               {
                 id: "weather_wind_label",
@@ -1793,7 +1793,7 @@
                 frame: { x: 47, y: 74.5, w: 22, h: 4 },
                 responsive: { mobile: { frame: { x: 47, y: 74.5, w: 22, h: 5 } } },
                 style: { accent: "#82a8b7", emphasis: "normal" },
-                presentation: { surface: "naked", layer: "overlay", align: "left" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
               },
               {
                 id: "weather_uv_value",
@@ -1803,7 +1803,7 @@
                 frame: { x: 74, y: 68.5, w: 16, h: 6 },
                 responsive: { mobile: { frame: { x: 74, y: 68.5, w: 16, h: 7 } } },
                 style: { accent: "#fff0b5", emphasis: "high" },
-                presentation: { surface: "naked", layer: "overlay", align: "left" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
               },
               {
                 id: "weather_uv_label",
@@ -1813,7 +1813,7 @@
                 frame: { x: 73.5, y: 74.5, w: 17.5, h: 4 },
                 responsive: { mobile: { frame: { x: 73.5, y: 74.5, w: 17.5, h: 5 } } },
                 style: { accent: "#82a8b7", emphasis: "normal" },
-                presentation: { surface: "naked", layer: "overlay", align: "left" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
               },
               {
                 id: "weather_forecast_day_mon",
@@ -2010,7 +2010,7 @@
                 frame: { x: 10, y: 7.2, w: 38, h: 4 },
                 responsive: { mobile: { frame: { x: 10, y: 7.2, w: 48, h: 7 } } },
                 style: { accent: "#17201c", emphasis: "normal" },
-                presentation: { surface: "naked", layer: "overlay", align: "left" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
               },
               {
                 id: "minimal_weather_temperature",
@@ -2020,7 +2020,7 @@
                 frame: { x: 8.5, y: 18, w: 39, h: 15 },
                 responsive: { mobile: { frame: { x: 8.5, y: 18, w: 46, h: 15 } } },
                 style: { accent: "#17201c", emphasis: "high" },
-                presentation: { surface: "naked", layer: "overlay", align: "left", scale: "large" },
+                presentation: { surface: "naked", layer: "overlay", align: "start", scale: "large" },
               },
               {
                 id: "minimal_weather_title",
@@ -2030,7 +2030,7 @@
                 frame: { x: 9.5, y: 36.5, w: 42, h: 7 },
                 responsive: { mobile: { frame: { x: 9.5, y: 37, w: 56, h: 10 } } },
                 style: { accent: "#17201c", emphasis: "high" },
-                presentation: { surface: "naked", layer: "overlay", align: "left", scale: "small" },
+                presentation: { surface: "naked", layer: "overlay", align: "start", scale: "small" },
               },
               {
                 id: "minimal_weather_condition",
@@ -2040,7 +2040,7 @@
                 frame: { x: 9.5, y: 44, w: 38, h: 5 },
                 responsive: { mobile: { frame: { x: 9.5, y: 45, w: 44, h: 8 } } },
                 style: { accent: "#526059", emphasis: "normal" },
-                presentation: { surface: "naked", layer: "overlay", align: "left" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
               },
               {
                 id: "minimal_weather_high",
@@ -2050,7 +2050,7 @@
                 frame: { x: 9.5, y: 54, w: 18, h: 5 },
                 responsive: { mobile: { frame: { x: 9.5, y: 55, w: 22, h: 8 } } },
                 style: { accent: "#17201c", emphasis: "high" },
-                presentation: { surface: "naked", layer: "overlay", align: "left" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
               },
               {
                 id: "minimal_weather_low",
@@ -2060,7 +2060,7 @@
                 frame: { x: 27.5, y: 54, w: 18, h: 5 },
                 responsive: { mobile: { frame: { x: 31, y: 55, w: 22, h: 8 } } },
                 style: { accent: "#526059", emphasis: "normal" },
-                presentation: { surface: "naked", layer: "overlay", align: "left" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
               },
               {
                 id: "minimal_forecast_label",
@@ -2070,7 +2070,7 @@
                 frame: { x: 9, y: 65.1, w: 34, h: 4 },
                 responsive: { mobile: { frame: { x: 9, y: 62.5, w: 40, h: 7 } } },
                 style: { accent: "#526059", emphasis: "normal" },
-                presentation: { surface: "naked", layer: "overlay", align: "left" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
               },
               {
                 id: "minimal_forecast_day_1",

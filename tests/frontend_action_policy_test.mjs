@@ -5,9 +5,16 @@ import { pathToFileURL } from "node:url";
 const manifest = JSON.parse(
   await readFile(new URL("../custom_components/urdash/frontend/action-manifest.json", import.meta.url), "utf8"),
 );
+const cardSchema = JSON.parse(
+  await readFile(new URL("../custom_components/urdash/frontend/card-schema-v2.json", import.meta.url), "utf8"),
+);
 const registry = new Map();
 
-globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => manifest });
+globalThis.fetch = async (url) => ({
+  ok: true,
+  status: 200,
+  json: async () => String(url).includes("card-schema-v2.json") ? cardSchema : manifest,
+});
 globalThis.HTMLElement = class {
   attachShadow() {
     this.shadowRoot = {};
@@ -47,6 +54,35 @@ const UrDashCard = registry.get("urdash-card");
 assert.ok(UrDashCard, "custom card module should register urdash-card");
 
 const card = new UrDashCard();
+const validConfig = {
+  type: "custom:urdash-card",
+  urdash_schema: 2,
+  height_mode: "auto",
+  card: {
+    intent: {
+      goal: "sensor_summary",
+      title: "Test",
+      summary: "Frontend schema fixture",
+      risk_level: "low",
+      primary_entities: [],
+      primary_actions: [],
+    },
+    layout: {
+      type: "grid",
+      blocks: [{ id: "text", kind: "text", text: "Safe" }],
+    },
+  },
+};
+assert.equal(card._normalizeConfig(validConfig).urdash_schema_minor, 0);
+assert.throws(
+  () => card._normalizeConfig({ ...validConfig, raw_html: "<script>alert(1)</script>" }),
+  (error) => error.diagnostics?.[0]?.code === "schema.additional_property",
+);
+assert.throws(
+  () => card._normalizeConfig({ ...validConfig, urdash_schema_minor: 1 }),
+  (error) => error.diagnostics?.[0]?.code === "schema.maximum",
+);
+
 let serviceCalls = 0;
 card._hass = {
   states: {

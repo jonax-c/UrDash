@@ -10,6 +10,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .action_policy import ACTION_SCHEMA
+from .card_validator import (
+    build_strict_provider_schema,
+    format_diagnostics,
+    has_errors,
+    migrate_card_config,
+    strip_provider_nulls,
+    validate_card_config,
+)
 from .capabilities import CAPABILITY_DESCRIPTOR_VERSION, build_entity_capability_descriptors
 from .const import DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL
 
@@ -711,6 +719,9 @@ CARD_V2_SCHEMA: dict[str, Any] = {
     "properties": {
         "type": {"type": "string", "enum": ["custom:urdash-card"]},
         "urdash_schema": {"type": "integer", "enum": [2]},
+        "urdash_schema_minor": {"type": "integer", "minimum": 0, "maximum": 0},
+        "preview": {"type": "boolean"},
+        "preview_mode": {"type": "boolean"},
         "height_mode": {"type": "string", "enum": ["auto", "viewport", "fixed"]},
         "height": {"type": "integer", "minimum": 240, "maximum": 1200},
         "card": {
@@ -732,6 +743,7 @@ CARD_V2_SCHEMA: dict[str, Any] = {
                                 "climate_control",
                                 "security",
                                 "energy",
+                                "hero_visual",
                                 "scene_launcher",
                                 "media_control",
                                 "multi_device_control",
@@ -755,6 +767,7 @@ CARD_V2_SCHEMA: dict[str, Any] = {
                         "density": {"type": "string", "enum": ["compact", "comfortable", "spacious"]},
                         "theme": {"type": "string", "enum": ["aurora", "quiet", "graphite", "calm", "sunrise"]},
                         "aspect_ratio": {"type": "string"},
+                        "mobile_aspect_ratio": {"type": "string"},
                         "responsive": LAYOUT_RESPONSIVE_SCHEMA,
                         "blocks": {"type": "array", "items": BLOCK_SCHEMA},
                     },
@@ -774,6 +787,7 @@ GENERATION_SCHEMA: dict[str, Any] = {
         "notes": {"type": "array", "items": {"type": "string"}},
     },
 }
+STRICT_GENERATION_SCHEMA = build_strict_provider_schema(GENERATION_SCHEMA)
 
 
 class AiGenerationError(Exception):
@@ -791,6 +805,7 @@ async def async_generate_with_openai(
     available_services: set[str] | None,
     theme: str,
     height_mode: str,
+    _repair_attempt: bool = False,
 ) -> dict[str, Any]:
     """Generate a v2 UrDash card with the OpenAI Responses API."""
     if not api_key:
@@ -824,8 +839,8 @@ async def async_generate_with_openai(
             "format": {
                 "type": "json_schema",
                 "name": "urdash_card_v2",
-                "schema": GENERATION_SCHEMA,
-                "strict": False,
+                "schema": STRICT_GENERATION_SCHEMA,
+                "strict": True,
             }
         },
     }
@@ -853,13 +868,44 @@ async def async_generate_with_openai(
     try:
         response_json = json.loads(response_text)
         output_text = _extract_output_text(response_json)
-        generated = json.loads(output_text)
+        generated = strip_provider_nulls(json.loads(output_text))
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as err:
         raise AiGenerationError("AI provider returned an unexpected response.") from err
 
     card_config = generated.get("card_config")
     if not isinstance(card_config, dict) or card_config.get("urdash_schema") != 2:
         raise AiGenerationError("AI provider returned an invalid UrDash v2 card.")
+    card_config = migrate_card_config(card_config)
+
+    diagnostics = validate_card_config(
+        card_config,
+        CARD_V2_SCHEMA,
+        entities=entities,
+        available_services=available_services,
+    )
+    if has_errors(diagnostics):
+        if not _repair_attempt:
+            repaired = await async_generate_with_openai(
+                hass,
+                api_key=api_key,
+                base_url=base_url,
+                model=model,
+                request=(
+                    f"{request}\n\nThe previous card failed UrDash validation. "
+                    "Generate a corrected replacement that resolves every diagnostic: "
+                    f"{json.dumps(diagnostics[:12], ensure_ascii=False)}"
+                ),
+                entities=entities,
+                available_services=available_services,
+                theme=theme,
+                height_mode=height_mode,
+                _repair_attempt=True,
+            )
+            repaired["repaired"] = True
+            return repaired
+        raise AiGenerationError(
+            f"AI provider returned an invalid UrDash card: {format_diagnostics(diagnostics)}"
+        )
 
     card_config["type"] = "custom:urdash-card"
     card_config["height_mode"] = height_mode if height_mode in {"auto", "viewport", "fixed"} else "auto"
@@ -877,6 +923,7 @@ async def async_generate_with_openai(
         "engine": "ai",
         "schema": 2,
         "model": model or DEFAULT_OPENAI_MODEL,
+        "diagnostics": diagnostics,
     }
 
 

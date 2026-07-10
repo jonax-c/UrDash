@@ -1,14 +1,69 @@
-const ACTION_MANIFEST = await loadActionManifest();
+const [ACTION_MANIFEST, CARD_SCHEMA] = await Promise.all([
+  loadModuleJson("./action-manifest.json", "action manifest"),
+  loadModuleJson("./card-schema-v2.json", "card schema"),
+]);
 
-async function loadActionManifest() {
+async function loadModuleJson(relativePath, label) {
   const moduleUrl = new URL(import.meta.url);
-  const manifestUrl = new URL("./action-manifest.json", moduleUrl);
-  manifestUrl.search = moduleUrl.search;
-  const response = await fetch(manifestUrl, { credentials: "same-origin" });
-  if (!response.ok) throw new Error(`UrDash action manifest failed to load (${response.status}).`);
-  const manifest = await response.json();
-  if (manifest?.version !== 1 || !manifest?.domains) throw new Error("UrDash action manifest is invalid.");
-  return manifest;
+  const resourceUrl = new URL(relativePath, moduleUrl);
+  resourceUrl.search = moduleUrl.search;
+  const response = await fetch(resourceUrl, { credentials: "same-origin" });
+  if (!response.ok) throw new Error(`UrDash ${label} failed to load (${response.status}).`);
+  return response.json();
+}
+
+function validateSchema(value, schema, path = "$", diagnostics = []) {
+  if (diagnostics.length >= 64) return diagnostics;
+  if (schema.anyOf) {
+    const matches = schema.anyOf.some((option) => validateSchema(value, option, path, []).length === 0);
+    if (!matches) diagnostics.push(schemaDiagnostic(path, "schema.any_of", "Value does not match any allowed schema variant."));
+    return diagnostics;
+  }
+  if (schema.type && !matchesSchemaType(value, schema.type)) {
+    diagnostics.push(schemaDiagnostic(path, "schema.type", `Expected ${schema.type}.`));
+    return diagnostics;
+  }
+  if (schema.enum && !schema.enum.includes(value)) {
+    diagnostics.push(schemaDiagnostic(path, "schema.enum", `Value ${JSON.stringify(value)} is not allowed.`));
+    return diagnostics;
+  }
+  if (schema.type === "object") {
+    const properties = schema.properties || {};
+    for (const name of schema.required || []) {
+      if (!(name in value)) diagnostics.push(schemaDiagnostic(`${path}.${name}`, "schema.required", `Required key ${name} is missing.`));
+    }
+    if (schema.additionalProperties === false) {
+      for (const name of Object.keys(value)) {
+        if (!(name in properties)) diagnostics.push(schemaDiagnostic(`${path}.${name}`, "schema.additional_property", `Unknown key ${name} is not allowed.`));
+      }
+    }
+    for (const [name, child] of Object.entries(value)) {
+      if (properties[name]) validateSchema(child, properties[name], `${path}.${name}`, diagnostics);
+    }
+  } else if (schema.type === "array") {
+    if (schema.minItems != null && value.length < schema.minItems) diagnostics.push(schemaDiagnostic(path, "schema.min_items", "Array has too few items."));
+    if (schema.maxItems != null && value.length > schema.maxItems) diagnostics.push(schemaDiagnostic(path, "schema.max_items", "Array exceeds its item limit."));
+    value.forEach((child, index) => validateSchema(child, schema.items || {}, `${path}[${index}]`, diagnostics));
+  } else if (["number", "integer"].includes(schema.type)) {
+    if (schema.minimum != null && value < schema.minimum) diagnostics.push(schemaDiagnostic(path, "schema.minimum", `Value is below ${schema.minimum}.`));
+    if (schema.maximum != null && value > schema.maximum) diagnostics.push(schemaDiagnostic(path, "schema.maximum", `Value exceeds ${schema.maximum}.`));
+  }
+  return diagnostics;
+}
+
+function matchesSchemaType(value, expected) {
+  if (Array.isArray(expected)) return expected.some((item) => matchesSchemaType(value, item));
+  if (expected === "object") return value !== null && typeof value === "object" && !Array.isArray(value);
+  if (expected === "array") return Array.isArray(value);
+  if (expected === "integer") return Number.isInteger(value);
+  if (expected === "number") return typeof value === "number" && Number.isFinite(value);
+  if (expected === "boolean") return typeof value === "boolean";
+  if (expected === "string") return typeof value === "string";
+  return true;
+}
+
+function schemaDiagnostic(path, code, message) {
+  return { path, code, message, severity: "error", suggestion: "Use the UrDash v2 schema contract." };
 }
 
 class UrDashCard extends HTMLElement {
@@ -38,9 +93,14 @@ class UrDashCard extends HTMLElement {
   }
 
   _normalizeConfig(config) {
-    if (config.urdash_schema !== 2) throw new Error("UrDash card requires urdash_schema: 2.");
-    if (!config.card?.layout?.blocks) throw new Error("UrDash v2 card requires card.layout.blocks.");
-    return config;
+    const normalized = { ...config, urdash_schema_minor: config.urdash_schema_minor ?? 0 };
+    const diagnostics = validateSchema(normalized, CARD_SCHEMA);
+    if (diagnostics.length) {
+      const error = new Error(`UrDash config invalid at ${diagnostics[0].path}: ${diagnostics[0].message}`);
+      error.diagnostics = diagnostics;
+      throw error;
+    }
+    return normalized;
   }
 
   _render() {

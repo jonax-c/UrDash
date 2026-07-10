@@ -77,20 +77,20 @@ Primary implementation area: `custom_components/urdash/ai_client.py` and
 
 ## P0: Schema Validation And Compilation
 
-- [ ] Make the AI response schema strict after all schema definitions are valid.
-- [ ] Validate generated configurations server-side before returning YAML.
-- [ ] Validate manually pasted configurations in the frontend runtime.
-- [ ] Use one canonical schema source for generation, backend validation, demo,
+- [x] Make the AI response schema strict after all schema definitions are valid.
+- [x] Validate generated configurations server-side before returning YAML.
+- [x] Validate manually pasted configurations in the frontend runtime.
+- [x] Use one canonical schema source for generation, backend validation, demo,
   preview, and production rendering.
-- [ ] Add semantic validation for entity references, actions, bindings, layout
+- [x] Add semantic validation for entity references, actions, bindings, layout
   bounds, unique IDs, and feature availability.
-- [ ] Return diagnostics with a JSON path, error code, and suggested correction.
-- [ ] Add an AI repair pass for invalid generated configurations.
-- [ ] Add resource and complexity budgets for blocks, SVG shapes, filters,
+- [x] Return diagnostics with a JSON path, error code, and suggested correction.
+- [x] Add an AI repair pass for invalid generated configurations.
+- [x] Add resource and complexity budgets for blocks, SVG shapes, filters,
   gradients, animations, nodes, links, and expression depth.
-- [ ] Add schema minor versions and renderer feature negotiation.
-- [ ] Add migrations for future non-breaking schema revisions.
-- [ ] Add invalid-config and adversarial-config test suites.
+- [x] Add schema minor versions and renderer feature negotiation.
+- [x] Add migrations for future non-breaking schema revisions.
+- [x] Add invalid-config and adversarial-config test suites.
 
 ## P0: Safe Data And Expression Engine
 
@@ -270,3 +270,6 @@ Add dated entries here when a milestone is started or completed.
 - 2026-07-10: Added action manifest v1, manifest-generated AI action schema,
   capability-aware frontend enforcement, risk confirmation, and duplicate-call
   protection.
+- 2026-07-10: Added strict structured output, canonical frontend schema artifact,
+  backend semantic compilation, diagnostic repair, schema minor negotiation, and
+  adversarial validation tests.
