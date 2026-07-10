@@ -9,6 +9,7 @@ import yaml
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from .capabilities import CAPABILITY_DESCRIPTOR_VERSION, build_entity_capability_descriptors
 from .const import DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL
 
 SYSTEM_PROMPT = """You are UrDash v2, a Home Assistant custom-card designer.
@@ -16,6 +17,7 @@ Create one safe, declarative UrDash card spec for a Lovelace custom card.
 Return only structured JSON matching the requested schema.
 Do not generate JavaScript, HTML, CSS, markdown, or ordinary Lovelace cards.
 Use only entity IDs from the provided entity list.
+Each entity includes a versioned capability descriptor. Use it to understand the device, current values, supported operations, parameter ranges, options, and risk. Never invent a capability. An operation must also be permitted by the output action schema before it can be used as an action.
 Design the card before composing blocks: choose the user's task, visible state, one-tap actions, secondary context, risky actions, and a layout that makes the card useful.
 Cards may combine multiple device functions when it helps the user's goal.
 Design expressive card experiences, not just block grids. Use canvas layout, floating primitives, hero values, ambient layers, orbit/constellation compositions, visual maps, strips, and unframed surfaces when they improve the card.
@@ -838,6 +840,7 @@ async def async_generate_with_openai(
     model: str,
     request: str,
     entities: list[dict[str, Any]],
+    available_services: set[str] | None,
     theme: str,
     height_mode: str,
 ) -> dict[str, Any]:
@@ -859,7 +862,8 @@ async def async_generate_with_openai(
                                 "request": request,
                                 "preferred_theme": theme,
                                 "height_mode": height_mode,
-                                "entities": _compact_entities(entities),
+                                "entity_capability_schema": CAPABILITY_DESCRIPTOR_VERSION,
+                                "entities": _compact_entities(entities, available_services),
                                 "requirements": _requirements(),
                             },
                             separators=(",", ":"),
@@ -951,30 +955,16 @@ def _requirements() -> list[str]:
         "Use button, button_group, segmented_control, slider, climate_control, cover_control, scene_strip, toggle_group, value, value_cluster, timeline, chip_group, hero_value, entity_orbit, constellation, radial_scene, visual_map, vector_icon, or ambient as needed.",
         "Keep blocks focused. Prefer 4 to 12 blocks unless the user requests a dense card.",
         "Do not invent entity IDs.",
+        "Use each entity's capabilities for device-aware design. Do not create controls for operations missing from that entity, and only emit actions permitted by the output action schema.",
         "Use declarative animation presets or vector keyframes only; no CSS, HTML, raw SVG, raw filters, or JavaScript.",
     ]
 
 
-def _compact_entities(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    compact = []
-    for entity in entities[:250]:
-        attributes = entity.get("attributes") or {}
-        compact.append(
-            {
-                "entity_id": entity.get("entity_id"),
-                "state": entity.get("state"),
-                "name": entity.get("name") or attributes.get("friendly_name"),
-                "domain": entity.get("domain") or str(entity.get("entity_id", "")).split(".", 1)[0],
-                "area": entity.get("area_name"),
-                "device": entity.get("device_name"),
-                "device_class": attributes.get("device_class"),
-                "unit": attributes.get("unit_of_measurement"),
-                "current_temperature": attributes.get("current_temperature"),
-                "target_temperature": attributes.get("temperature"),
-                "hvac_modes": attributes.get("hvac_modes"),
-            }
-        )
-    return compact
+def _compact_entities(
+    entities: list[dict[str, Any]],
+    available_services: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    return build_entity_capability_descriptors(entities, available_services)
 
 
 def _extract_output_text(response_json: dict[str, Any]) -> str:

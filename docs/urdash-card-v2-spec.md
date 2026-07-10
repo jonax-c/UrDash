@@ -122,6 +122,45 @@ Recommended `goal` values:
 
 High-risk cards can render normally, but high-risk actions must require confirmation.
 
+## Entity Capability Context
+
+Before generation, UrDash normalizes every selected Home Assistant entity into a
+versioned `EntityCapabilityDescriptor`. This is generation context, not card YAML.
+
+```json
+{
+  "capability_schema": 1,
+  "entity_id": "light.lounge",
+  "domain": "light",
+  "name": "Lounge",
+  "state": "on",
+  "available": true,
+  "device_id": "device-1",
+  "area_id": "living_room",
+  "supported_features": 0,
+  "display": { "brightness": 180 },
+  "capabilities": [
+    {
+      "id": "turn_on",
+      "service": "light.turn_on",
+      "risk": "low",
+      "parameters": {
+        "brightness_pct": { "type": "number", "min": 0, "max": 100, "step": 1, "unit": "%" }
+      }
+    }
+  ]
+}
+```
+
+Descriptors are derived from entity state, attributes, `supported_features`,
+registry metadata, and the currently registered Home Assistant services. They let
+AI design controls from actual device capabilities instead of guessing from an
+entity domain.
+
+The capability list describes what a device can do. The Action Policy separately
+defines which of those operations the current UrDash runtime may execute. An AI
+generated action must satisfy both layers.
+
 ## Layout Models
 
 v2 supports two safe layout models.

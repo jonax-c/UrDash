@@ -30,24 +30,24 @@ UrDash v2 is architecture-complete when:
 
 ## P0: Capability Model
 
-- [ ] Define a versioned `EntityCapabilityDescriptor` schema.
-- [ ] Include entity, device, area, domain, device class, state, availability, and
+- [x] Define a versioned `EntityCapabilityDescriptor` schema.
+- [x] Include entity, device, area, domain, device class, state, availability, and
   unit metadata.
-- [ ] Derive capabilities from `supported_features`, entity attributes, and the
+- [x] Derive capabilities from `supported_features`, entity attributes, and the
   Home Assistant service registry.
-- [ ] Describe supported action parameters, types, ranges, steps, options, and
+- [x] Describe supported action parameters, types, ranges, steps, options, and
   units for each entity.
-- [ ] Cover light brightness, color temperature, RGB color, and effects.
-- [ ] Cover fan percentage, direction, oscillation, and presets.
+- [x] Cover light brightness, color temperature, RGB color, and effects.
+- [x] Cover fan percentage, direction, oscillation, and presets.
 - [ ] Cover climate temperature ranges, humidity, fan, swing, presets, and
   auxiliary heat.
-- [ ] Cover cover position, tilt, and device-class-specific behavior.
+- [x] Cover cover position, tilt, and device-class-specific behavior.
 - [ ] Cover media playback, volume, mute, seek, source, and media selection.
-- [ ] Cover alarm, vacuum, lock, valve, siren, humidifier, water heater, remote,
+- [x] Cover alarm, vacuum, lock, valve, siren, humidifier, water heater, remote,
   lawn mower, update, timer, button, number, and select domains.
-- [ ] Replace the fixed 250-entity truncation with explicit selection, grouping,
+- [x] Replace the fixed 250-entity truncation with explicit selection, grouping,
   pagination, or token-aware summarization.
-- [ ] Preserve `device_id` and `area_id` in AI context.
+- [x] Preserve `device_id` and `area_id` in AI context.
 - [ ] Add fixtures and tests for representative devices in every supported domain.
 
 Primary implementation area: `custom_components/urdash/ai_client.py` and
@@ -265,3 +265,5 @@ Primary implementation area: `custom_components/urdash/ai_client.py` and
 Add dated entries here when a milestone is started or completed.
 
 - 2026-07-10: Initial architecture audit converted into a trackable roadmap.
+- 2026-07-10: Added capability descriptor v1, service-registry filtering, core
+  smart-home domain normalization, and explicit selected-entity preservation.

@@ -234,6 +234,7 @@ async def _async_generate_from_hass(
             model=settings[CONF_MODEL],
             request=request,
             entities=entities,
+            available_services=_available_services(hass),
             theme=theme,
             height_mode=height_mode,
         )
@@ -302,6 +303,15 @@ def _serialize_state(state: Any) -> dict[str, Any]:
         "entity_id": state.entity_id,
         "state": state.state,
         "attributes": dict(state.attributes),
+    }
+
+
+def _available_services(hass: HomeAssistant) -> set[str]:
+    """Return currently registered Home Assistant service IDs."""
+    return {
+        f"{domain}.{service}"
+        for domain, services in hass.services.async_services().items()
+        for service in services
     }
 
 
