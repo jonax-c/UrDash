@@ -1,9 +1,24 @@
+const ACTION_MANIFEST = await loadActionManifest();
+
+async function loadActionManifest() {
+  const moduleUrl = new URL(import.meta.url);
+  const manifestUrl = new URL("./action-manifest.json", moduleUrl);
+  manifestUrl.search = moduleUrl.search;
+  const response = await fetch(manifestUrl, { credentials: "same-origin" });
+  if (!response.ok) throw new Error(`UrDash action manifest failed to load (${response.status}).`);
+  const manifest = await response.json();
+  if (manifest?.version !== 1 || !manifest?.domains) throw new Error("UrDash action manifest is invalid.");
+  return manifest;
+}
+
 class UrDashCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
     this._config = {};
     this._card = null;
+    this._pendingActions = new Set();
+    this._actionTimeoutMs = 15000;
   }
 
   setConfig(config) {
@@ -813,7 +828,11 @@ class UrDashCard extends HTMLElement {
       button.type = "button";
       button.className = state?.state === option.value ? "active" : "";
       button.textContent = option.label;
-      button.addEventListener("click", () => this._runAction(config.action, { selected: option.value, current: state?.state }));
+      button.addEventListener("click", () => this._runAction(config.action, {
+        selected: option.value,
+        current: state?.state,
+        element: button,
+      }));
       wrap.appendChild(button);
     }
     if (!wrap.children.length) wrap.appendChild(this._empty("No options configured."));
@@ -829,7 +848,11 @@ class UrDashCard extends HTMLElement {
     input.max = String(config.range?.max ?? 100);
     input.step = String(config.range?.step ?? 1);
     input.value = String(Number(this._boundValue(state, config.bind?.value || "state")) || Number(input.min));
-    input.addEventListener("change", () => this._runAction(config.action, { value: Number(input.value), current: Number(state?.state) }));
+    input.addEventListener("change", () => this._runAction(config.action, {
+      value: Number(input.value),
+      current: Number(state?.state),
+      element: input,
+    }));
     return input;
   }
 
@@ -847,9 +870,9 @@ class UrDashCard extends HTMLElement {
     const targetBox = document.createElement("div");
     targetBox.className = "climate-target";
     targetBox.append(
-      this._smallButton("-", () => this._callService("climate", "set_temperature", { entity_id: entityId, temperature: Number(target) - 1 })),
+      this._smallButton("-", (element) => this._callService("climate", "set_temperature", { entity_id: entityId, temperature: Number(target) - 1 }, element)),
       this._label(`Target ${target}${unit}`),
-      this._smallButton("+", () => this._callService("climate", "set_temperature", { entity_id: entityId, temperature: Number(target) + 1 })),
+      this._smallButton("+", (element) => this._callService("climate", "set_temperature", { entity_id: entityId, temperature: Number(target) + 1 }, element)),
     );
     const modes = document.createElement("div");
     modes.className = "segmented-control";
@@ -858,7 +881,7 @@ class UrDashCard extends HTMLElement {
       button.type = "button";
       button.className = mode === state.state ? "active" : "";
       button.textContent = this._humanize(mode);
-      button.addEventListener("click", () => this._callService("climate", "set_hvac_mode", { entity_id: entityId, hvac_mode: mode }));
+      button.addEventListener("click", () => this._callService("climate", "set_hvac_mode", { entity_id: entityId, hvac_mode: mode }, button));
       modes.appendChild(button);
     }
     wrap.append(readout, targetBox, modes);
@@ -1169,7 +1192,10 @@ class UrDashCard extends HTMLElement {
       element.style.setProperty("--node-accent", this._safeAccent(node.style?.accent || config.style?.accent));
       if (element.tagName === "BUTTON") {
         element.type = "button";
-        element.addEventListener("click", () => this._runAction(node.action || { type: "more_info", entity_id: node.entity }));
+        element.addEventListener("click", () => this._runAction(
+          node.action || { type: "more_info", entity_id: node.entity },
+          { element },
+        ));
       }
       if (node.vector_icon) {
         const icon = this._vectorSvg(
@@ -1336,56 +1362,247 @@ class UrDashCard extends HTMLElement {
     text.textContent = label || "Action";
     button.appendChild(text);
     button.disabled = !this._actionAllowed(action);
-    button.addEventListener("click", () => this._runAction(action));
+    if (button.disabled) button.title = "Action unavailable or denied by UrDash policy.";
+    button.addEventListener("click", () => this._runAction(action, { element: button }));
     return button;
   }
 
-  _runAction(action, context = {}) {
+  async _runAction(action, context = {}) {
     if (!this._actionAllowed(action)) return;
     if (this._requiresConfirmation(action) && !window.confirm(action.confirmation?.text || "Run this action?")) return;
     if (action.type === "more_info") {
       this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: action.entity_id } }));
       return;
     }
-    if (action.type === "navigate" && action.navigation_path?.startsWith("/")) {
+    if (action.type === "navigate" && this._navigationAllowed(action.navigation_path)) {
       history.pushState(null, "", action.navigation_path);
       window.dispatchEvent(new CustomEvent("location-changed"));
       return;
     }
     if (action.type !== "service") return;
     const data = this._resolveActionData(action.data || {}, context);
-    this._callService(action.domain, action.service, { ...data, entity_id: action.entity_id });
+    const policy = this._servicePolicy(action.domain, action.service);
+    if (!this._actionDataAllowed(action, policy, data, false)) return;
+    await this._executeService(action, { ...data, entity_id: action.entity_id }, context.element);
   }
 
-  _callService(domain, service, data) {
-    if (!this._hass || !this._serviceAllowed(domain, service)) return;
-    this._hass.callService(domain, service, data);
+  async _callService(domain, service, data, element = null) {
+    const entityId = data?.entity_id;
+    const actionData = { ...(data || {}) };
+    delete actionData.entity_id;
+    await this._runAction(
+      { type: "service", domain, service, entity_id: entityId, data: actionData },
+      { element },
+    );
   }
 
   _actionAllowed(action) {
     if (!action || action.type === "none") return false;
-    if (action.type === "more_info") return Boolean(action.entity_id);
-    if (action.type === "navigate") return String(action.navigation_path || "").startsWith("/");
-    return action.type === "service" && this._serviceAllowed(action.domain, action.service) && Boolean(action.entity_id);
+    if (action.type === "more_info") return Boolean(this._state(action.entity_id));
+    if (action.type === "navigate") return this._navigationAllowed(action.navigation_path);
+    if (action.type !== "service" || !this._hass) return false;
+    const entity = this._state(action.entity_id);
+    if (
+      !entity
+      || ["unknown", "unavailable"].includes(entity.state)
+      || action.entity_id.split(".", 1)[0] !== action.domain
+    ) return false;
+    if (this._hass.services && !this._hass.services[action.domain]?.[action.service]) return false;
+    const policy = this._servicePolicy(action.domain, action.service);
+    return Boolean(policy)
+      && this._entitySupportsPolicy(entity, policy)
+      && this._actionDataAllowed(action, policy, action.data || {}, true);
   }
 
   _serviceAllowed(domain, service) {
-    const allow = {
-      light: ["turn_on", "turn_off", "toggle"],
-      switch: ["turn_on", "turn_off", "toggle"],
-      fan: ["turn_on", "turn_off", "toggle"],
-      climate: ["set_temperature", "set_hvac_mode"],
-      cover: ["open_cover", "close_cover", "stop_cover"],
-      lock: ["lock", "unlock"],
-      scene: ["turn_on"],
-      script: ["turn_on"],
-      media_player: ["media_play_pause", "volume_set"],
-    };
-    return allow[domain]?.includes(service);
+    return Boolean(this._servicePolicy(domain, service));
   }
 
   _requiresConfirmation(action) {
-    return action?.confirmation?.required || (action?.domain === "lock" && action?.service === "unlock");
+    return action?.confirmation?.required || this._actionRisk(action) === "high";
+  }
+
+  _servicePolicy(domain, service) {
+    return ACTION_MANIFEST.domains?.[domain]?.services?.[service] || null;
+  }
+
+  _navigationAllowed(path) {
+    const value = String(path || "");
+    return /^\/(?!\/)[A-Za-z0-9_~!$&'()*+,;=:@%./?-]*$/.test(value) && !value.includes("\\");
+  }
+
+  _entitySupportsPolicy(entity, policy) {
+    const features = Number(entity?.attributes?.supported_features || 0);
+    if (policy.required_attribute && entity?.attributes?.[policy.required_attribute] == null) return false;
+    if (features === 0 && policy.allow_zero_features === true) return true;
+    if (policy.supported_feature != null && !(features & Number(policy.supported_feature))) return false;
+    if (
+      Array.isArray(policy.supported_features_any)
+      && policy.supported_features_any.length
+      && !policy.supported_features_any.some((flag) => features & Number(flag))
+    ) return false;
+    if (
+      Array.isArray(policy.supported_features_all)
+      && policy.supported_features_all.some((flag) => !(features & Number(flag)))
+    ) return false;
+    return true;
+  }
+
+  _actionRisk(action) {
+    const policy = this._servicePolicy(action?.domain, action?.service);
+    let risk = this._safeEnum(policy?.risk, ["low", "medium", "high"], "low");
+    const state = this._state(action?.entity_id);
+    const deviceClass = state?.attributes?.device_class;
+    if (
+      action?.domain === "cover"
+      && ["open_cover", "set_cover_position"].includes(action?.service)
+      && ["door", "garage", "gate"].includes(deviceClass)
+    ) risk = "high";
+    if (
+      action?.domain === "valve"
+      && ["open_valve", "set_valve_position"].includes(action?.service)
+      && ["gas", "water"].includes(deviceClass)
+    ) risk = "high";
+    return risk;
+  }
+
+  _actionDataAllowed(action, policy, data, allowTemplates) {
+    if (!policy || !data || typeof data !== "object" || Array.isArray(data)) return false;
+    const parameters = policy.parameters || {};
+    const required = policy.required || [];
+    if (required.some((name) => !(name in data))) return false;
+    if ((policy.required_any || []).some((group) => !group.some((name) => name in data))) return false;
+    for (const [name, value] of Object.entries(data)) {
+      const parameter = parameters[name];
+      if (!parameter || !this._parameterAllowed(parameter, value, allowTemplates)) return false;
+      if (!allowTemplates && !this._entityParameterAllowed(action, name, value)) return false;
+    }
+    return true;
+  }
+
+  _parameterAllowed(parameter, value, allowTemplates) {
+    if (allowTemplates && this._isActionTemplate(value)) return true;
+    if (typeof value === "string" && value.startsWith("$")) return false;
+    if (parameter.type === "number" || parameter.type === "integer") {
+      if (typeof value !== "number" || !Number.isFinite(value)) return false;
+      if (parameter.type === "integer" && !Number.isInteger(value)) return false;
+      if (parameter.min != null && value < Number(parameter.min)) return false;
+      if (parameter.max != null && value > Number(parameter.max)) return false;
+      return true;
+    }
+    if (parameter.type === "boolean") return typeof value === "boolean";
+    if (parameter.type === "rgb") {
+      return Array.isArray(value)
+        && value.length === 3
+        && value.every((part) => Number.isInteger(part) && part >= 0 && part <= 255);
+    }
+    if (parameter.type === "string_list") {
+      return Array.isArray(value)
+        && value.length <= Number(parameter.max_items || 16)
+        && value.every((part) => typeof part === "string" && part.length <= Number(parameter.max_length || 256));
+    }
+    if (typeof value !== "string" || value.length > Number(parameter.max_length || 256)) return false;
+    if (parameter.type === "duration" && !/^\d{1,3}:\d{2}(?::\d{2})?$/.test(value)) return false;
+    return parameter.type !== "enum" || (parameter.options || []).includes(value);
+  }
+
+  _entityParameterAllowed(action, name, value) {
+    const state = this._state(action.entity_id);
+    if (!state) return false;
+    const attributes = state.attributes || {};
+    const optionAttributes = {
+      activity: "activity_list",
+      effect: "effect_list",
+      fan_mode: "fan_modes",
+      fan_speed: "fan_speed_list",
+      hvac_mode: "hvac_modes",
+      mode: "available_modes",
+      operation_mode: "operation_list",
+      option: "options",
+      preset_mode: "preset_modes",
+      sound_mode: "sound_mode_list",
+      source: "source_list",
+      swing_horizontal_mode: "swing_horizontal_modes",
+      swing_mode: "swing_modes",
+      tone: "available_tones",
+    };
+    const options = attributes[optionAttributes[name]];
+    if (Array.isArray(options) && options.length && !options.includes(value)) return false;
+
+    const ranges = {
+      brightness: [0, 255],
+      brightness_pct: [0, 100],
+      color_temp_kelvin: [attributes.min_color_temp_kelvin, attributes.max_color_temp_kelvin],
+      humidity: [attributes.min_humidity, attributes.max_humidity],
+      percentage: [0, 100],
+      position: [0, 100],
+      temperature: [attributes.min_temp, attributes.max_temp],
+      target_temp_low: [attributes.min_temp, attributes.max_temp],
+      target_temp_high: [attributes.min_temp, attributes.max_temp],
+      tilt_position: [0, 100],
+      value: [attributes.min, attributes.max],
+      volume_level: [0, 1],
+    };
+    const range = ranges[name];
+    if (range && typeof value === "number") {
+      if (range[0] != null && value < Number(range[0])) return false;
+      if (range[1] != null && value > Number(range[1])) return false;
+    }
+    return true;
+  }
+
+  _isActionTemplate(value) {
+    return typeof value === "string"
+      && /^\$(selected|value|current)(?:\s*[+-]\s*\d+(?:\.\d+)?)?$/.test(value);
+  }
+
+  async _executeService(action, data, element = null) {
+    if (!this._hass) return;
+    const key = `${action.domain}.${action.service}:${action.entity_id}`;
+    if (this._pendingActions.has(key)) return;
+    this._pendingActions.add(key);
+    if (element) {
+      element.disabled = true;
+      element.classList.add("action-pending");
+      element.setAttribute("aria-busy", "true");
+    }
+    let timeoutId;
+    try {
+      const timeout = new Promise((_, reject) => {
+        timeoutId = window.setTimeout(
+          () => reject(new Error("Home Assistant action timed out.")),
+          this._actionTimeoutMs,
+        );
+      });
+      await Promise.race([
+        Promise.resolve(this._hass.callService(action.domain, action.service, data)),
+        timeout,
+      ]);
+      if (element?.isConnected) {
+        element.classList.remove("action-error");
+        element.classList.add("action-success");
+        element.title = "Action completed.";
+        window.setTimeout(() => element.classList.remove("action-success"), 1200);
+      }
+    } catch (error) {
+      if (element) {
+        element.classList.add("action-error");
+        element.title = error?.message || "Home Assistant rejected this action.";
+      }
+      this.dispatchEvent(new CustomEvent("urdash-action-error", {
+        bubbles: true,
+        composed: true,
+        detail: { action, message: error?.message || "Action failed." },
+      }));
+    } finally {
+      if (timeoutId) window.clearTimeout(timeoutId);
+      this._pendingActions.delete(key);
+      if (element?.isConnected) {
+        element.disabled = !this._actionAllowed(action);
+        element.classList.remove("action-pending");
+        element.removeAttribute("aria-busy");
+      }
+    }
   }
 
   _resolveActionData(data, context) {
@@ -1501,7 +1718,7 @@ class UrDashCard extends HTMLElement {
     button.className = "small-button";
     button.type = "button";
     button.textContent = label;
-    button.addEventListener("click", handler);
+    button.addEventListener("click", () => handler(button));
     return button;
   }
 
@@ -2229,6 +2446,21 @@ const styles = `
   .action-button:disabled {
     cursor: default;
     opacity: 0.55;
+  }
+
+  .action-pending {
+    cursor: progress !important;
+    opacity: 0.72 !important;
+  }
+
+  .action-error {
+    outline: 2px solid rgba(180, 52, 48, 0.72);
+    outline-offset: 2px;
+  }
+
+  .action-success {
+    outline: 2px solid rgba(31, 138, 112, 0.62);
+    outline-offset: 2px;
   }
 
   .action-button ha-icon {

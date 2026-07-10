@@ -55,22 +55,22 @@ Primary implementation area: `custom_components/urdash/ai_client.py` and
 
 ## P0: Action Manifest And Policy
 
-- [ ] Create one shared, versioned action manifest instead of separate Python and
+- [x] Create one shared, versioned action manifest instead of separate Python and
   JavaScript allowlists.
-- [ ] Generate the AI action schema and frontend executor policy from the manifest.
-- [ ] Validate entity existence and entity/service domain compatibility.
-- [ ] Validate service data keys, types, enum options, numeric bounds, and units.
-- [ ] Support capability-specific actions instead of exposing arbitrary services.
-- [ ] Add actions for all domains covered by the capability model.
-- [ ] Add parameter support for color, effects, presets, position, tilt, humidity,
+- [x] Generate the AI action schema and frontend executor policy from the manifest.
+- [x] Validate entity existence and entity/service domain compatibility.
+- [x] Validate service data keys, types, enum options, and numeric bounds.
+- [x] Support capability-specific actions instead of exposing arbitrary services.
+- [x] Add actions for all domains covered by the capability model.
+- [x] Add parameter support for color, effects, presets, position, tilt, humidity,
   source, seek, mute, fan percentage, and other capability-specific values.
-- [ ] Define low, medium, and high-risk action categories.
-- [ ] Require confirmation for unlock, alarm disarm, garage/door opening, siren,
+- [x] Define low, medium, and high-risk action categories.
+- [x] Require confirmation for unlock, alarm disarm, garage/door opening, siren,
   destructive scripts, and other configured high-risk operations.
-- [ ] Validate internal navigation paths and reject external or malformed targets.
-- [ ] Add pending, success, error, timeout, and disabled interaction states.
-- [ ] Add action debouncing and prevent unintended duplicate service calls.
-- [ ] Add tests proving denied actions cannot reach `hass.callService`.
+- [x] Validate internal navigation paths and reject external or malformed targets.
+- [x] Add pending, success, error, timeout, and disabled interaction states.
+- [x] Add action debouncing and prevent unintended duplicate service calls.
+- [x] Add tests proving denied actions cannot reach `hass.callService`.
 
 Primary implementation area: `custom_components/urdash/ai_client.py` and
 `custom_components/urdash/frontend/urdash-custom-card.js`.
@@ -267,3 +267,6 @@ Add dated entries here when a milestone is started or completed.
 - 2026-07-10: Initial architecture audit converted into a trackable roadmap.
 - 2026-07-10: Added capability descriptor v1, service-registry filtering, core
   smart-home domain normalization, and explicit selected-entity preservation.
+- 2026-07-10: Added action manifest v1, manifest-generated AI action schema,
+  capability-aware frontend enforcement, risk confirmation, and duplicate-call
+  protection.

@@ -1,0 +1,224 @@
+{
+  "version": 1,
+  "domains": {
+    "light": {
+      "services": {
+        "turn_on": { "risk": "low", "parameters": {
+          "brightness": { "type": "integer", "min": 0, "max": 255 },
+          "brightness_pct": { "type": "number", "min": 0, "max": 100 },
+          "color_temp_kelvin": { "type": "number", "min": 1000, "max": 12000 },
+          "rgb_color": { "type": "rgb" },
+          "effect": { "type": "string", "max_length": 128 }
+        } },
+        "turn_off": { "risk": "low" },
+        "toggle": { "risk": "low" }
+      }
+    },
+    "switch": { "services": {
+      "turn_on": { "risk": "low" }, "turn_off": { "risk": "low" }, "toggle": { "risk": "low" }
+    } },
+    "input_boolean": { "services": {
+      "turn_on": { "risk": "low" }, "turn_off": { "risk": "low" }, "toggle": { "risk": "low" }
+    } },
+    "automation": { "services": {
+      "turn_on": { "risk": "medium" }, "turn_off": { "risk": "medium" }, "toggle": { "risk": "medium" }
+    } },
+    "fan": { "services": {
+      "turn_on": { "risk": "low", "supported_feature": 32, "allow_zero_features": true, "parameters": {
+        "percentage": { "type": "number", "min": 0, "max": 100 },
+        "preset_mode": { "type": "string", "max_length": 128 }
+      } },
+      "turn_off": { "risk": "low", "supported_feature": 16, "allow_zero_features": true },
+      "toggle": { "risk": "low", "supported_features_all": [16, 32], "allow_zero_features": true },
+      "set_percentage": { "risk": "low", "supported_feature": 1, "required": ["percentage"], "parameters": {
+        "percentage": { "type": "number", "min": 0, "max": 100 }
+      } },
+      "set_preset_mode": { "risk": "low", "supported_feature": 8, "required": ["preset_mode"], "parameters": {
+        "preset_mode": { "type": "string", "max_length": 128 }
+      } },
+      "oscillate": { "risk": "low", "supported_feature": 2, "required": ["oscillating"], "parameters": {
+        "oscillating": { "type": "boolean" }
+      } },
+      "set_direction": { "risk": "low", "supported_feature": 4, "required": ["direction"], "parameters": {
+        "direction": { "type": "enum", "options": ["forward", "reverse"] }
+      } }
+    } },
+    "climate": { "services": {
+      "turn_on": { "risk": "low", "supported_feature": 256 },
+      "turn_off": { "risk": "low", "supported_feature": 128 },
+      "set_temperature": { "risk": "low", "supported_features_any": [1, 2], "required_any": [["temperature", "target_temp_low", "target_temp_high"]], "parameters": {
+        "temperature": { "type": "number", "min": -50, "max": 100 },
+        "target_temp_low": { "type": "number", "min": -50, "max": 100 },
+        "target_temp_high": { "type": "number", "min": -50, "max": 100 }
+      } },
+      "set_hvac_mode": { "risk": "low", "required_attribute": "hvac_modes", "required": ["hvac_mode"], "parameters": {
+        "hvac_mode": { "type": "string", "max_length": 128 }
+      } },
+      "set_humidity": { "risk": "low", "supported_feature": 4, "required": ["humidity"], "parameters": {
+        "humidity": { "type": "number", "min": 0, "max": 100 }
+      } },
+      "set_fan_mode": { "risk": "low", "supported_feature": 8, "required": ["fan_mode"], "parameters": {
+        "fan_mode": { "type": "string", "max_length": 128 }
+      } },
+      "set_preset_mode": { "risk": "low", "supported_feature": 16, "required": ["preset_mode"], "parameters": {
+        "preset_mode": { "type": "string", "max_length": 128 }
+      } },
+      "set_swing_mode": { "risk": "low", "supported_feature": 32, "required": ["swing_mode"], "parameters": {
+        "swing_mode": { "type": "string", "max_length": 128 }
+      } },
+      "set_swing_horizontal_mode": { "risk": "low", "supported_feature": 512, "required": ["swing_horizontal_mode"], "parameters": {
+        "swing_horizontal_mode": { "type": "string", "max_length": 128 }
+      } }
+    } },
+    "cover": { "services": {
+      "open_cover": { "risk": "medium", "supported_feature": 1 },
+      "close_cover": { "risk": "low", "supported_feature": 2 },
+      "stop_cover": { "risk": "low", "supported_feature": 8 },
+      "set_cover_position": { "risk": "medium", "supported_feature": 4, "required": ["position"], "parameters": {
+        "position": { "type": "number", "min": 0, "max": 100 }
+      } },
+      "open_cover_tilt": { "risk": "low", "supported_feature": 16 },
+      "close_cover_tilt": { "risk": "low", "supported_feature": 32 },
+      "stop_cover_tilt": { "risk": "low", "supported_feature": 64 },
+      "set_cover_tilt_position": { "risk": "low", "supported_feature": 128, "required": ["tilt_position"], "parameters": {
+        "tilt_position": { "type": "number", "min": 0, "max": 100 }
+      } }
+    } },
+    "media_player": { "services": {
+      "turn_on": { "risk": "low", "supported_feature": 128 }, "turn_off": { "risk": "low", "supported_feature": 256 },
+      "media_play": { "risk": "low", "supported_feature": 16384 }, "media_pause": { "risk": "low", "supported_feature": 1 },
+      "media_play_pause": { "risk": "low", "supported_features_any": [1, 16384] }, "media_stop": { "risk": "low", "supported_feature": 4096 },
+      "media_previous_track": { "risk": "low", "supported_feature": 16 }, "media_next_track": { "risk": "low", "supported_feature": 32 },
+      "volume_set": { "risk": "low", "supported_feature": 4, "required": ["volume_level"], "parameters": {
+        "volume_level": { "type": "number", "min": 0, "max": 1 }
+      } },
+      "volume_mute": { "risk": "low", "supported_feature": 8, "required": ["is_volume_muted"], "parameters": {
+        "is_volume_muted": { "type": "boolean" }
+      } },
+      "media_seek": { "risk": "low", "supported_feature": 2, "required": ["seek_position"], "parameters": {
+        "seek_position": { "type": "number", "min": 0, "max": 86400 }
+      } },
+      "select_source": { "risk": "low", "supported_feature": 2048, "required": ["source"], "parameters": {
+        "source": { "type": "string", "max_length": 256 }
+      } },
+      "select_sound_mode": { "risk": "low", "supported_feature": 65536, "required": ["sound_mode"], "parameters": {
+        "sound_mode": { "type": "string", "max_length": 128 }
+      } },
+      "shuffle_set": { "risk": "low", "supported_feature": 32768, "required": ["shuffle"], "parameters": {
+        "shuffle": { "type": "boolean" }
+      } },
+      "repeat_set": { "risk": "low", "supported_feature": 262144, "required": ["repeat"], "parameters": {
+        "repeat": { "type": "enum", "options": ["off", "one", "all"] }
+      } }
+    } },
+    "lock": { "services": {
+      "lock": { "risk": "low" }, "unlock": { "risk": "high", "confirmation": true }
+    } },
+    "scene": { "services": { "turn_on": { "risk": "low" } } },
+    "script": { "services": { "turn_on": { "risk": "high", "confirmation": true } } },
+    "button": { "services": { "press": { "risk": "low" } } },
+    "input_button": { "services": { "press": { "risk": "low" } } },
+    "select": { "services": {
+      "select_option": { "risk": "low", "required": ["option"], "parameters": {
+        "option": { "type": "string", "max_length": 256 }
+      } },
+      "select_next": { "risk": "low" }, "select_previous": { "risk": "low" }
+    } },
+    "input_select": { "services": {
+      "select_option": { "risk": "low", "required": ["option"], "parameters": {
+        "option": { "type": "string", "max_length": 256 }
+      } },
+      "select_next": { "risk": "low" }, "select_previous": { "risk": "low" }
+    } },
+    "number": { "services": { "set_value": { "risk": "low", "required": ["value"], "parameters": {
+      "value": { "type": "number", "min": -1000000, "max": 1000000 }
+    } } } },
+    "input_number": { "services": { "set_value": { "risk": "low", "required": ["value"], "parameters": {
+      "value": { "type": "number", "min": -1000000, "max": 1000000 }
+    } } } },
+    "alarm_control_panel": { "services": {
+      "alarm_disarm": { "risk": "high", "confirmation": true, "parameters": {
+        "code": { "type": "string", "max_length": 128 }
+      } },
+      "alarm_arm_home": { "risk": "medium", "supported_feature": 1, "parameters": { "code": { "type": "string", "max_length": 128 } } },
+      "alarm_arm_away": { "risk": "medium", "supported_feature": 2, "parameters": { "code": { "type": "string", "max_length": 128 } } },
+      "alarm_arm_night": { "risk": "medium", "supported_feature": 4, "parameters": { "code": { "type": "string", "max_length": 128 } } },
+      "alarm_arm_custom_bypass": { "risk": "medium", "supported_feature": 16, "parameters": { "code": { "type": "string", "max_length": 128 } } },
+      "alarm_arm_vacation": { "risk": "medium", "supported_feature": 32, "parameters": { "code": { "type": "string", "max_length": 128 } } },
+      "alarm_trigger": { "risk": "high", "confirmation": true, "supported_feature": 8, "parameters": {
+        "code": { "type": "string", "max_length": 128 }
+      } }
+    } },
+    "vacuum": { "services": {
+      "start": { "risk": "low", "supported_feature": 8192 }, "pause": { "risk": "low", "supported_feature": 4 }, "stop": { "risk": "low", "supported_feature": 8 },
+      "return_to_base": { "risk": "low", "supported_feature": 16 }, "locate": { "risk": "low", "supported_feature": 512 },
+      "clean_spot": { "risk": "medium", "supported_feature": 1024 },
+      "set_fan_speed": { "risk": "low", "supported_feature": 32, "required": ["fan_speed"], "parameters": {
+        "fan_speed": { "type": "string", "max_length": 128 }
+      } }
+    } },
+    "valve": { "services": {
+      "open_valve": { "risk": "medium", "supported_feature": 1 }, "close_valve": { "risk": "low", "supported_feature": 2 }, "stop_valve": { "risk": "low", "supported_feature": 8 },
+      "set_valve_position": { "risk": "medium", "supported_feature": 4, "required": ["position"], "parameters": {
+        "position": { "type": "number", "min": 0, "max": 100 }
+      } }
+    } },
+    "humidifier": { "services": {
+      "turn_on": { "risk": "low" }, "turn_off": { "risk": "low" },
+      "set_humidity": { "risk": "low", "required": ["humidity"], "parameters": {
+        "humidity": { "type": "number", "min": 0, "max": 100 }
+      } },
+      "set_mode": { "risk": "low", "supported_feature": 1, "required": ["mode"], "parameters": {
+        "mode": { "type": "string", "max_length": 128 }
+      } }
+    } },
+    "water_heater": { "services": {
+      "turn_on": { "risk": "low" }, "turn_off": { "risk": "low" },
+      "set_temperature": { "risk": "low", "required": ["temperature"], "parameters": {
+        "temperature": { "type": "number", "min": 0, "max": 100 }
+      } },
+      "set_operation_mode": { "risk": "low", "required": ["operation_mode"], "parameters": {
+        "operation_mode": { "type": "string", "max_length": 128 }
+      } }
+    } },
+    "remote": { "services": {
+      "turn_on": { "risk": "low", "parameters": { "activity": { "type": "string", "max_length": 256 } } },
+      "turn_off": { "risk": "low", "parameters": { "activity": { "type": "string", "max_length": 256 } } },
+      "toggle": { "risk": "low", "parameters": { "activity": { "type": "string", "max_length": 256 } } },
+      "send_command": { "risk": "medium", "required": ["command"], "parameters": {
+        "command": { "type": "string_list", "max_items": 16, "max_length": 128 },
+        "device": { "type": "string", "max_length": 128 },
+        "num_repeats": { "type": "integer", "min": 1, "max": 20 },
+        "delay_secs": { "type": "number", "min": 0, "max": 10 },
+        "hold_secs": { "type": "number", "min": 0, "max": 10 }
+      } }
+    } },
+    "siren": { "services": {
+      "turn_on": { "risk": "high", "confirmation": true, "parameters": {
+        "duration": { "type": "number", "min": 1, "max": 3600 },
+        "volume_level": { "type": "number", "min": 0, "max": 1 },
+        "tone": { "type": "string", "max_length": 128 }
+      } },
+      "turn_off": { "risk": "low" }
+    } },
+    "timer": { "services": {
+      "start": { "risk": "low", "parameters": { "duration": { "type": "duration", "max_length": 32 } } },
+      "pause": { "risk": "low" }, "cancel": { "risk": "low" }, "finish": { "risk": "low" }
+    } },
+    "update": { "services": {
+      "install": { "risk": "high", "confirmation": true, "supported_feature": 1, "parameters": {
+        "version": { "type": "string", "max_length": 128 }, "backup": { "type": "boolean" }
+      } },
+      "skip": { "risk": "medium" }, "clear_skipped": { "risk": "low" }
+    } },
+    "lawn_mower": { "services": {
+      "start_mowing": { "risk": "medium", "supported_feature": 1 }, "pause": { "risk": "low", "supported_feature": 2 }, "dock": { "risk": "low", "supported_feature": 4 }
+    } },
+    "counter": { "services": {
+      "increment": { "risk": "low" }, "decrement": { "risk": "low" }, "reset": { "risk": "low" },
+      "set_value": { "risk": "low", "required": ["value"], "parameters": {
+        "value": { "type": "integer", "min": -1000000, "max": 1000000 }
+      } }
+    } }
+  }
+}

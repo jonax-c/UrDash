@@ -9,6 +9,7 @@ import yaml
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from .action_policy import ACTION_SCHEMA
 from .capabilities import CAPABILITY_DESCRIPTOR_VERSION, build_entity_capability_descriptors
 from .const import DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL
 
@@ -29,59 +30,6 @@ For premium glow, prefer layered radial gradients with userSpaceOnUse or numeric
 Prefer direct, usable controls over decorative blocks, but make the interface visually distinctive.
 Use declarative animation presets only when they improve clarity.
 """
-
-ACTION_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["type"],
-    "properties": {
-        "type": {"type": "string", "enum": ["service", "more_info", "navigate", "none"]},
-        "domain": {
-            "type": "string",
-            "enum": ["light", "switch", "fan", "climate", "cover", "lock", "scene", "script", "media_player"],
-        },
-        "service": {
-            "type": "string",
-            "enum": [
-                "turn_on",
-                "turn_off",
-                "toggle",
-                "set_temperature",
-                "set_hvac_mode",
-                "open_cover",
-                "close_cover",
-                "stop_cover",
-                "lock",
-                "unlock",
-                "media_play_pause",
-                "volume_set",
-            ],
-        },
-        "entity_id": {"type": "string"},
-        "navigation_path": {"type": "string"},
-        "data": {
-            "type": "object",
-            "additionalProperties": False,
-            "properties": {
-                "temperature": {"type": ["number", "string"]},
-                "hvac_mode": {"type": "string"},
-                "brightness": {"type": ["number", "string"]},
-                "brightness_pct": {"type": ["number", "string"]},
-                "position": {"type": ["number", "string"]},
-                "volume_level": {"type": ["number", "string"]},
-            },
-        },
-        "confirmation": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["required", "text"],
-            "properties": {
-                "required": {"type": "boolean"},
-                "text": {"type": "string"},
-            },
-        },
-    },
-}
 
 STYLE_SCHEMA: dict[str, Any] = {
     "type": "object",

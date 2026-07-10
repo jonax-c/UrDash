@@ -1002,41 +1002,34 @@ Allowed action types:
 
 `navigate` must target internal Home Assistant paths only.
 
-### Service Allowlist
+### Action Manifest
 
-Initial safe allowlist:
+The versioned `frontend/action-manifest.json` file is the canonical action
+allowlist. Python builds the AI response schema from it, and the custom-card
+renderer loads the same file before registering the card.
 
-```yaml
-light:
-  - turn_on
-  - turn_off
-  - toggle
-switch:
-  - turn_on
-  - turn_off
-  - toggle
-fan:
-  - turn_on
-  - turn_off
-  - toggle
-climate:
-  - set_temperature
-  - set_hvac_mode
-cover:
-  - open_cover
-  - close_cover
-  - stop_cover
-lock:
-  - lock
-  - unlock
-scene:
-  - turn_on
-script:
-  - turn_on
-media_player:
-  - media_play_pause
-  - volume_set
-```
+Each service policy can declare:
+
+- Risk and mandatory confirmation.
+- Allowed and required data parameters.
+- Parameter types, enum options, lengths, and numeric bounds.
+- Required Home Assistant `supported_features` bits.
+- Required entity attributes.
+
+The manifest covers lights, switches, fans, climate, covers, locks, scenes,
+scripts, media players, selects, numbers, alarms, vacuums, valves, humidifiers,
+water heaters, remotes, sirens, timers, updates, lawn mowers, counters, and input
+helpers. Adding a Home Assistant service to the registry does not automatically
+allow UrDash to invoke it.
+
+Before execution the renderer verifies:
+
+1. The entity exists and is available.
+2. The action domain matches the entity domain.
+3. The service exists in both the manifest and HA frontend service registry.
+4. The entity supports required feature bits and attributes.
+5. Every data key, value type, range, and entity-specific option is valid.
+6. The action satisfies the effective confirmation policy.
 
 ### Risk Levels
 
@@ -1058,6 +1051,10 @@ High-risk actions must confirm:
 - Unlock lock.
 - Open garage.
 - Disarm alarm.
+- Trigger siren or alarm.
+- Run a script with unknown side effects.
+- Install an update.
+- Open a gas or water valve.
 
 Example:
 
@@ -1068,6 +1065,10 @@ confirmation:
 ```
 
 Renderer can force confirmation even if AI omits it.
+
+In-flight actions are keyed by domain, service, and entity. Duplicate calls are
+collapsed until the first call completes. Controls expose pending, disabled, and
+error states, and action errors emit an `urdash-action-error` event.
 
 ## Safe Data Expressions
 

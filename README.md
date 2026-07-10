@@ -51,7 +51,7 @@ The base URL can be changed for OpenAI-compatible providers. If the AI request f
 Before using generated YAML in Lovelace, add the UrDash card resource:
 
 ```text
-/urdash/static/urdash-custom-card.js?v=20260709.4
+/urdash/static/urdash-custom-card.js?v=20260710.1
 ```
 
 Set the resource type to `JavaScript module`.
