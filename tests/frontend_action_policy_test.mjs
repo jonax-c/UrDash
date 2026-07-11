@@ -231,6 +231,12 @@ assert.deepEqual(card._resolveActionData({ percentage: {
   min: 0,
   max: 100,
 } }, { selected: 120 }), { percentage: 100 });
+assert.equal(card._rgbToHex([15, 160, 255]), "#0fa0ff");
+assert.deepEqual(card._hexToRgb("#0fa0ff"), [15, 160, 255]);
+assert.deepEqual(card._resolveActionData({ rgb_color: {
+  op: "local",
+  name: "value",
+} }, { value: [15, 160, 255] }), { rgb_color: [15, 160, 255] });
 
 const dependencies = card._collectEntityDependencies(validConfig);
 assert.deepEqual([...dependencies], []);

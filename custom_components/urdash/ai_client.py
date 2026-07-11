@@ -31,6 +31,8 @@ Design the card before composing blocks: choose the user's task, visible state, 
 Cards may combine multiple device functions when it helps the user's goal.
 Design expressive card experiences, not just block grids. Use canvas layout, floating primitives, hero values, ambient layers, orbit/constellation compositions, visual maps, strips, and unframed surfaces when they improve the card.
 Use component_tree when the user asks for a Bubble-style control, a compound device control, or a freely composed interactive surface. Build it from nested row, column, stack, wrap, and surface containers with text, icon, value, toggle, slider, button, progress, divider, and spacer components. A component tree is not a predefined layout: design its hierarchy, emphasis, actions, and responsive wrapping for the user's task.
+For light controls, compose only controls advertised by that light's capabilities. Use toggle for power, slider with brightness_pct for dimming, slider with color_temp_kelvin and the advertised Kelvin range for white temperature, color_picker with rgb_color for RGB-capable lights, and select with effect for the advertised effect options. Bind brightness from attributes.brightness as a percentage when needed. Do not show unsupported color, temperature, brightness, or effect controls.
+Keep long light-control labels and values in a separate row above a full-width slider so the composition remains readable around 350px wide.
 Use visual_map when the user asks for flows, relationships, topology, spatial control, power movement, irrigation paths, security perimeters, HVAC air movement, or any card that benefits from AI-designed nodes and links. Do not use predefined layouts; choose node positions and link paths based on the user's goal and the available entities.
 For polished smart-home topology cards, visual_map can use ring nodes, node stats, connection anchors, manual path points, flow dots, and hidden link labels. Use these to create clear energy, water, HVAC, network, security, and appliance-flow displays without hardcoded templates.
 Design cards for both desktop and mobile. Canvas cards should remain readable around 350px wide; use layout.responsive.mobile.aspect_ratio and block responsive.mobile.frame when the mobile composition needs different spacing.
@@ -548,7 +550,8 @@ COMPONENT_DEFINITION: dict[str, Any] = {
             "type": "string",
             "enum": [
                 "row", "column", "stack", "wrap", "surface", "text", "icon",
-                "value", "toggle", "slider", "button", "progress", "divider", "spacer",
+                "value", "toggle", "slider", "color_picker", "select", "button",
+                "progress", "divider", "spacer",
             ],
         },
         "children": {"type": "array", "maxItems": 16, "items": COMPONENT_REF},
@@ -575,6 +578,19 @@ COMPONENT_DEFINITION: dict[str, Any] = {
                 "min": {"type": "number"},
                 "max": {"type": "number"},
                 "step": {"type": "number"},
+            },
+        },
+        "options": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["label", "value"],
+                "properties": {
+                    "label": {"type": "string"},
+                    "value": {"type": "string"},
+                },
             },
         },
         "style": COMPONENT_STYLE_SCHEMA,
@@ -1157,6 +1173,7 @@ def _requirements() -> list[str]:
         "Use presentation.surface to vary the visual treatment: naked, ghost, hero, floating, orb, strip, rail, panel, or glass.",
         "Use hero_value, ambient, entity_orbit, constellation, radial_scene, and visual_map for expressive visual structure when appropriate.",
         "Use component_tree for Bubble-style switches and compound controls. Compose safe containers and controls instead of flattening the design into unrelated blocks.",
+        "For lights, include only capability-advertised controls: toggle power, brightness_pct slider, Kelvin slider, RGB color_picker, and effect select. Use advertised ranges/options and local value expressions in actions.",
         "Use vector_icon for custom decorative or semantic symbols; only safe declarative path/circle/ellipse/rect/line/polyline/group shapes, gradients, focal points, numeric coordinate_mode, ordered transform stacks, blend modes, safe filter presets, glow/neon/blur/color effects, and preset or keyframe shape animations are allowed.",
         "Use visual_map for relationship or flow cards. AI owns node positions, node sizes, labels, icons, link routing style, and animation choices; UrDash only renders the safe declarative map.",
         "Define reusable MDI or declarative vector variants in card.assets.icon_sets when several blocks share a visual language. Reference them with icon_ref set and a literal or expression key instead of duplicating artwork.",

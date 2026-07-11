@@ -441,6 +441,51 @@ class CardValidatorTests(unittest.TestCase):
         card = base_card([{"id": "deep", "kind": "component_tree", "component": node}])
         self.assertIn("budget.component_depth", {item["code"] for item in errors(card)})
 
+    def test_component_tree_supports_complete_light_controls(self):
+        local_value = {"op": "local", "name": "value"}
+        selected_value = {"op": "local", "name": "selected"}
+        card = base_card(
+            [{
+                "id": "light-controls",
+                "kind": "component_tree",
+                "component": {
+                    "type": "column",
+                    "children": [
+                        {
+                            "type": "slider",
+                            "entity": "light.desk",
+                            "label": "Brightness",
+                            "range": {"min": 0, "max": 100, "step": 1},
+                            "action": {"type": "service", "domain": "light", "service": "turn_on", "entity_id": "light.desk", "data": {"brightness_pct": local_value}},
+                        },
+                        {
+                            "type": "slider",
+                            "entity": "light.desk",
+                            "label": "Temperature",
+                            "range": {"min": 2200, "max": 6500, "step": 50},
+                            "action": {"type": "service", "domain": "light", "service": "turn_on", "entity_id": "light.desk", "data": {"color_temp_kelvin": local_value}},
+                        },
+                        {
+                            "type": "color_picker",
+                            "entity": "light.desk",
+                            "label": "Color",
+                            "bind": {"value": "attributes.rgb_color"},
+                            "action": {"type": "service", "domain": "light", "service": "turn_on", "entity_id": "light.desk", "data": {"rgb_color": local_value}},
+                        },
+                        {
+                            "type": "select",
+                            "entity": "light.desk",
+                            "label": "Effect",
+                            "bind": {"value": "attributes.effect"},
+                            "options": [{"label": "None", "value": "none"}, {"label": "Pulse", "value": "pulse"}],
+                            "action": {"type": "service", "domain": "light", "service": "turn_on", "entity_id": "light.desk", "data": {"effect": selected_value}},
+                        },
+                    ],
+                },
+            }]
+        )
+        self.assertEqual(errors(card, {"light.turn_on"}), [])
+
 
 if __name__ == "__main__":
     unittest.main()

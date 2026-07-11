@@ -175,7 +175,7 @@ Implemented foundation:
 
 - [ ] Replace fixed climate UI behavior with capability-composed controls.
 - [ ] Replace fixed cover UI behavior with capability-composed controls.
-- [ ] Add light controls for brightness, color, temperature, and effects.
+- [x] Add light controls for brightness, color, temperature, and effects.
 - [ ] Add fan controls for speed, oscillation, direction, and presets.
 - [ ] Add media transport, volume, mute, seek, source, and browsing controls.
 - [ ] Add security, alarm, lock, camera, and siren controls with risk policy.

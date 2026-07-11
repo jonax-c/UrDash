@@ -153,7 +153,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.3");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.6");
 
       const hass = {
         config: {
@@ -165,7 +165,17 @@
           "sensor.living_room_temperature": state("sensor.living_room_temperature", "24", "Living Room Temperature", { unit_of_measurement: "°C", device_class: "temperature" }),
           "sensor.living_room_humidity": state("sensor.living_room_humidity", "57", "Living Room Humidity", { unit_of_measurement: "%", device_class: "humidity" }),
           "sensor.living_room_air_quality": state("sensor.living_room_air_quality", "Good", "Air Quality"),
-          "light.living_room_main": state("light.living_room_main", "on", "Main Lights", { brightness: 184, supported_color_modes: ["brightness"] }),
+          "light.living_room_main": state("light.living_room_main", "on", "Main Lights", {
+            brightness: 184,
+            color_mode: "rgb",
+            rgb_color: [255, 176, 92],
+            color_temp_kelvin: 3200,
+            min_color_temp_kelvin: 2200,
+            max_color_temp_kelvin: 6500,
+            effect: "none",
+            effect_list: ["none", "candle", "prism"],
+            supported_color_modes: ["color_temp", "rgb"],
+          }),
           "light.living_room_lamp": state("light.living_room_lamp", "off", "Reading Lamp"),
           "climate.living_room_ac": state("climate.living_room_ac", "cool", "Living Room AC", {
             current_temperature: 24,
@@ -242,13 +252,15 @@
           },
         },
         callService(domain, service, data) {
+          window.demoServiceCalls ||= [];
+          window.demoServiceCalls.push({ domain, service, data });
           console.log("mock callService", { domain, service, data });
         },
       };
 
       const samples = [
         {
-          title: "Adaptive Bubble Control",
+          title: "Capability-driven Light Studio",
           config: adaptiveBubbleControlCard(),
         },
         {
@@ -673,6 +685,74 @@
                         },
                       },
                       { type: "value", value: brightness, unit: "%", label: "Brightness", style: { size: "sm", emphasis: "high" } },
+                    ],
+                  },
+                  {
+                    type: "column",
+                    layout: { width: "fill", gap: "xs", align: "stretch" },
+                    children: [
+                      {
+                        type: "row",
+                        layout: { width: "fill", justify: "between", align: "center" },
+                        children: [
+                          { type: "text", text: "White temperature", style: { size: "sm", emphasis: "low" } },
+                          { type: "value", entity: "light.living_room_main", bind: { value: "attributes.color_temp_kelvin" }, unit: "K", style: { size: "sm", emphasis: "high" } },
+                        ],
+                      },
+                      {
+                        type: "slider",
+                        entity: "light.living_room_main",
+                        bind: { value: "attributes.color_temp_kelvin" },
+                        range: { min: 2200, max: 6500, step: 50 },
+                        label: "White temperature",
+                        layout: { width: "fill" },
+                        style: { accent: "#efb45d" },
+                        action: {
+                          type: "service",
+                          domain: "light",
+                          service: "turn_on",
+                          entity_id: "light.living_room_main",
+                          data: { color_temp_kelvin: { op: "local", name: "value" } },
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    type: "wrap",
+                    layout: { width: "fill", gap: "md", align: "center" },
+                    children: [
+                      {
+                        type: "color_picker",
+                        entity: "light.living_room_main",
+                        label: "Light color",
+                        bind: { value: "attributes.rgb_color" },
+                        action: {
+                          type: "service",
+                          domain: "light",
+                          service: "turn_on",
+                          entity_id: "light.living_room_main",
+                          data: { rgb_color: { op: "local", name: "value" } },
+                        },
+                      },
+                      {
+                        type: "select",
+                        entity: "light.living_room_main",
+                        label: "Light effect",
+                        bind: { value: "attributes.effect" },
+                        options: [
+                          { label: "No effect", value: "none" },
+                          { label: "Candle", value: "candle" },
+                          { label: "Prism", value: "prism" },
+                        ],
+                        layout: { grow: 1 },
+                        action: {
+                          type: "service",
+                          domain: "light",
+                          service: "turn_on",
+                          entity_id: "light.living_room_main",
+                          data: { effect: { op: "local", name: "selected" } },
+                        },
+                      },
                     ],
                   },
                   {

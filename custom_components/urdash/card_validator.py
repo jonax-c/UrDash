@@ -570,7 +570,10 @@ def _validate_component_tree(
         _diagnostic(diagnostics, path, "component.missing_root", "Component-tree blocks require a root component.", "Add a safe component object.")
         return
     container_types = {"row", "column", "stack", "wrap", "surface"}
-    leaf_types = {"text", "icon", "value", "toggle", "slider", "button", "progress", "divider", "spacer"}
+    leaf_types = {
+        "text", "icon", "value", "toggle", "slider", "color_picker", "select",
+        "button", "progress", "divider", "spacer",
+    }
     state = {"nodes": 0, "ids": set()}
 
     def visit(node: Any, node_path: str, depth: int) -> None:
@@ -596,8 +599,14 @@ def _validate_component_tree(
             if node_id in state["ids"]:
                 _diagnostic(diagnostics, f"{node_path}.id", "component.duplicate_id", f"Component ID {node_id!r} is duplicated.", "Use a unique component ID within the tree.")
             state["ids"].add(node_id)
-        if node_type == "slider" and not isinstance(node.get("action"), dict):
-            _diagnostic(diagnostics, f"{node_path}.action", "component.missing_action", "Slider components require an explicit safe action.", "Add an allowlisted service action using the local value.")
+        if node_type in {"slider", "color_picker", "select"} and not isinstance(node.get("action"), dict):
+            _diagnostic(
+                diagnostics,
+                f"{node_path}.action",
+                "component.missing_action",
+                f"{node_type.replace('_', ' ').title()} components require an explicit safe action.",
+                "Add an allowlisted service action using the local value.",
+            )
         range_config = node.get("range")
         if isinstance(range_config, dict):
             minimum = range_config.get("min")

@@ -419,7 +419,7 @@ class UrDashCard extends HTMLElement {
     if (!config || typeof config !== "object" || depth > 6 || !this._componentVisible(config)) return null;
     const type = this._safeEnum(config.type, [
       "row", "column", "stack", "wrap", "surface", "text", "icon", "value",
-      "toggle", "slider", "button", "progress", "divider", "spacer",
+      "toggle", "slider", "color_picker", "select", "button", "progress", "divider", "spacer",
     ], "spacer");
     if (["row", "column", "stack", "wrap", "surface"].includes(type)) {
       const container = document.createElement("div");
@@ -457,6 +457,8 @@ class UrDashCard extends HTMLElement {
     }
     if (type === "toggle") return this._componentToggle(config);
     if (type === "slider") return this._componentSlider(config);
+    if (type === "color_picker") return this._componentColorPicker(config);
+    if (type === "select") return this._componentSelect(config);
     if (type === "button") {
       const button = this._actionButton(config.label || config.text || "Action", config.icon, config.action, config.icon_ref);
       this._configureComponentElement(button, config, type);
@@ -565,6 +567,56 @@ class UrDashCard extends HTMLElement {
       element: input,
     }));
     return input;
+  }
+
+  _componentColorPicker(config) {
+    const state = this._state(config.entity);
+    const input = document.createElement("input");
+    input.type = "color";
+    this._configureComponentElement(input, config, "color-picker");
+    input.value = this._rgbToHex(this._componentValue(config) || state?.attributes?.rgb_color);
+    input.disabled = this._componentDisabled(config) || !this._actionAllowed(config.action);
+    input.setAttribute("aria-label", this._resolveDisplay(config.label) || this._stateName(state) || "Light color");
+    input.addEventListener("change", () => this._runAction(config.action, {
+      value: this._hexToRgb(input.value),
+      current: state?.attributes?.rgb_color,
+      element: input,
+    }));
+    return input;
+  }
+
+  _componentSelect(config) {
+    const state = this._state(config.entity);
+    const select = document.createElement("select");
+    this._configureComponentElement(select, config, "select");
+    const current = this._componentValue(config);
+    for (const option of (config.options || []).slice(0, 32)) {
+      const element = document.createElement("option");
+      element.value = String(option.value);
+      element.textContent = String(option.label);
+      element.selected = String(current ?? "") === element.value;
+      select.appendChild(element);
+    }
+    select.disabled = this._componentDisabled(config) || !select.options.length || !this._actionAllowed(config.action);
+    select.setAttribute("aria-label", this._resolveDisplay(config.label) || this._stateName(state) || "Select option");
+    select.addEventListener("change", () => this._runAction(config.action, {
+      selected: select.value,
+      value: select.value,
+      current,
+      element: select,
+    }));
+    return select;
+  }
+
+  _rgbToHex(value) {
+    const rgb = Array.isArray(value) ? value : [255, 255, 255];
+    return `#${rgb.slice(0, 3).map((part) => this._clampInt(part, 0, 255, 255).toString(16).padStart(2, "0")).join("")}`;
+  }
+
+  _hexToRgb(value) {
+    const match = String(value || "").match(/^#([0-9a-f]{6})$/i);
+    if (!match) return [255, 255, 255];
+    return [0, 2, 4].map((offset) => Number.parseInt(match[1].slice(offset, offset + 2), 16));
   }
 
   _makeComponentActionable(element, config) {
@@ -2756,8 +2808,31 @@ const styles = `
   }
   .component-toggle.active { background: var(--component-accent); }
   .component-toggle.active span { transform: translateX(20px); }
-  .component-toggle:disabled, .component-slider:disabled, .component-button:disabled { cursor: not-allowed; opacity: 0.48 !important; }
+  .component-toggle:disabled, .component-slider:disabled, .component-color-picker:disabled, .component-select:disabled, .component-button:disabled { cursor: not-allowed; opacity: 0.48 !important; }
   .component-slider { width: 100%; min-width: 90px; accent-color: var(--component-accent); }
+  .component-color-picker {
+    width: 44px;
+    height: 34px;
+    flex: 0 0 auto;
+    border: 1px solid color-mix(in srgb, var(--component-accent) 34%, var(--urdash-line));
+    border-radius: 8px;
+    padding: 3px;
+    background: var(--urdash-panel);
+    cursor: pointer;
+  }
+  .component-color-picker::-webkit-color-swatch-wrapper { padding: 0; }
+  .component-color-picker::-webkit-color-swatch { border: 0; border-radius: 5px; }
+  .component-select {
+    min-width: 120px;
+    min-height: 38px;
+    border: 1px solid color-mix(in srgb, var(--component-accent) 26%, var(--urdash-line));
+    border-radius: 8px;
+    padding: 0 34px 0 10px;
+    background: var(--urdash-panel);
+    color: var(--urdash-fg);
+    font: inherit;
+    cursor: pointer;
+  }
   .component-progress { width: 100%; height: 7px; accent-color: var(--component-accent); }
   .component-divider { width: 100%; border: 0; border-top: 1px solid color-mix(in srgb, var(--component-accent) 22%, transparent); }
   .component-spacer { min-width: 8px; min-height: 8px; }
