@@ -445,6 +445,22 @@ assert.deepEqual(weatherCard._resolveIconAsset({
 }), { icon: "mdi:weather-sunny" });
 assert.deepEqual(weatherCard._resolveIconAsset({ icon_ref: { set: "weather_icons", key: "unknown" } }), { icon: "mdi:weather-cloudy-alert" });
 assert.ok(weatherCard._resolveIconAsset({ icon_ref: { set: "weather_icons", key: "rainy" } }).vector_icon);
+const originalDocument = globalThis.document;
+let appendedVectorConfig;
+globalThis.document = { createElement: () => ({ className: "" }) };
+weatherCard._appendResolvedIcon = (_container, config) => {
+  appendedVectorConfig = config;
+  return true;
+};
+const reusableVectorConfig = {
+  kind: "vector_icon",
+  icon_ref: { set: "weather_icons", key: "rainy" },
+  style: { accent: "#476776" },
+};
+weatherCard._vectorIcon(reusableVectorConfig);
+assert.equal(appendedVectorConfig, reusableVectorConfig);
+if (originalDocument === undefined) delete globalThis.document;
+else globalThis.document = originalDocument;
 weatherCard.disconnectedCallback();
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(forecastUnsubscribed, true);

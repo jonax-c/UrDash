@@ -674,6 +674,16 @@ class UrDashCard extends HTMLElement {
   _vectorIcon(config) {
     const wrap = document.createElement("div");
     wrap.className = "vector-icon";
+    if (config.icon_ref || config.icon || config.vector_icon) {
+      const resolved = this._appendResolvedIcon(
+        wrap,
+        config,
+        this._resolveDisplay(config.label || config.title) || "UrDash vector icon",
+        "vector-block-asset",
+        this._resolveDisplay(config.style?.accent),
+      );
+      if (resolved) return wrap;
+    }
     wrap.appendChild(this._vectorSvg(config, config.label || config.title || "UrDash vector icon"));
     return wrap;
   }
