@@ -131,6 +131,18 @@ card._hass = {
       state: "locked",
       attributes: { supported_features: 0 },
     },
+    "climate.bedroom": {
+      entity_id: "climate.bedroom",
+      state: "heat_cool",
+      attributes: {
+        supported_features: 2,
+        target_temp_low: 21,
+        target_temp_high: 25,
+        min_temp: 16,
+        max_temp: 30,
+        target_temp_step: 0.5,
+      },
+    },
   },
   services: {
     light: { turn_on: {} },
@@ -237,6 +249,16 @@ assert.deepEqual(card._resolveActionData({ rgb_color: {
   op: "local",
   name: "value",
 } }, { value: [15, 160, 255] }), { rgb_color: [15, 160, 255] });
+assert.deepEqual(card._resolveActionData({
+  target_temp_low: {
+    op: "min",
+    args: [
+      { op: "local", name: "value" },
+      { op: "entity", entity_id: "climate.bedroom", path: "attributes.target_temp_high" },
+    ],
+  },
+  target_temp_high: { op: "entity", entity_id: "climate.bedroom", path: "attributes.target_temp_high" },
+}, { value: 28 }), { target_temp_low: 25, target_temp_high: 25 });
 
 const dependencies = card._collectEntityDependencies(validConfig);
 assert.deepEqual([...dependencies], []);

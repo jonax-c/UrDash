@@ -153,7 +153,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.6");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.7");
 
       const hass = {
         config: {
@@ -181,6 +181,30 @@
             current_temperature: 24,
             temperature: 25,
             hvac_modes: ["cool", "dry", "fan_only", "off"],
+          }),
+          "climate.bedroom_suite": state("climate.bedroom_suite", "heat_cool", "Bedroom Climate", {
+            supported_features: 958,
+            current_temperature: 23.4,
+            current_humidity: 51,
+            target_temp_low: 21,
+            target_temp_high: 25,
+            min_temp: 16,
+            max_temp: 30,
+            target_temp_step: 0.5,
+            humidity: 50,
+            min_humidity: 35,
+            max_humidity: 70,
+            target_humidity_step: 5,
+            hvac_action: "idle",
+            hvac_modes: ["heat_cool", "heat", "cool", "dry", "fan_only", "off"],
+            fan_mode: "auto",
+            fan_modes: ["auto", "low", "medium", "high"],
+            preset_mode: "sleep",
+            preset_modes: ["none", "eco", "comfort", "sleep"],
+            swing_mode: "vertical",
+            swing_modes: ["off", "vertical", "both"],
+            swing_horizontal_mode: "off",
+            swing_horizontal_modes: ["off", "on"],
           }),
           "cover.living_room_curtain": state("cover.living_room_curtain", "closed", "Curtain"),
           "binary_sensor.front_door": state("binary_sensor.front_door", "off", "Front Door"),
@@ -262,6 +286,10 @@
         {
           title: "Capability-driven Light Studio",
           config: adaptiveBubbleControlCard(),
+        },
+        {
+          title: "Capability-driven Climate Studio",
+          config: capabilityClimateCard(),
         },
         {
           title: "Live Weather Forecast",
@@ -777,6 +805,37 @@
                   },
                 ],
               },
+            }],
+          },
+        });
+      }
+
+      function capabilityClimateCard() {
+        return baseCard({
+          intent: {
+            goal: "climate_control",
+            title: "Bedroom Climate",
+            summary: "A capability-composed climate surface with temperature range, humidity, fan, preset, and two-axis swing controls.",
+            risk_level: "low",
+            primary_entities: ["climate.bedroom_suite"],
+            primary_actions: [
+              "climate.set_temperature", "climate.set_humidity", "climate.set_hvac_mode",
+              "climate.set_fan_mode", "climate.set_preset_mode", "climate.set_swing_mode",
+              "climate.set_swing_horizontal_mode",
+            ],
+          },
+          layout: {
+            type: "grid",
+            columns: 12,
+            density: "comfortable",
+            theme: "calm",
+            blocks: [{
+              id: "bedroom-climate",
+              kind: "climate_control",
+              entity: "climate.bedroom_suite",
+              grid: { col: 1, row: 1, w: 12, h: 8 },
+              presentation: { surface: "glass", align: "stretch", scale: "normal" },
+              style: { accent: "#4c8f91", tone: "cool", emphasis: "high" },
             }],
           },
         });

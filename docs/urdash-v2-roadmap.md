@@ -39,8 +39,8 @@ UrDash v2 is architecture-complete when:
   units for each entity.
 - [x] Cover light brightness, color temperature, RGB color, and effects.
 - [x] Cover fan percentage, direction, oscillation, and presets.
-- [ ] Cover climate temperature ranges, humidity, fan, swing, presets, and
-  auxiliary heat.
+- [x] Cover current Home Assistant climate capabilities: temperature ranges,
+  humidity, fan, preset, vertical swing, and horizontal swing.
 - [x] Cover cover position, tilt, and device-class-specific behavior.
 - [ ] Cover media playback, volume, mute, seek, source, and media selection.
 - [x] Cover alarm, vacuum, lock, valve, siren, humidifier, water heater, remote,
@@ -173,7 +173,7 @@ Implemented foundation:
 
 ## P1: Device Interaction Coverage
 
-- [ ] Replace fixed climate UI behavior with capability-composed controls.
+- [x] Replace fixed climate UI behavior with capability-composed controls.
 - [ ] Replace fixed cover UI behavior with capability-composed controls.
 - [x] Add light controls for brightness, color, temperature, and effects.
 - [ ] Add fan controls for speed, oscillation, direction, and presets.

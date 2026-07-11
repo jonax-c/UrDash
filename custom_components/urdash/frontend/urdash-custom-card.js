@@ -587,8 +587,12 @@ class UrDashCard extends HTMLElement {
 
   _componentSelect(config) {
     const state = this._state(config.entity);
+    const wrap = document.createElement("label");
+    this._configureComponentElement(wrap, config, "select-field");
+    const visibleLabel = document.createElement("span");
+    visibleLabel.textContent = this._resolveDisplay(config.label) || this._stateName(state) || "Select option";
     const select = document.createElement("select");
-    this._configureComponentElement(select, config, "select");
+    select.className = "component-select";
     const current = this._componentValue(config);
     for (const option of (config.options || []).slice(0, 32)) {
       const element = document.createElement("option");
@@ -598,14 +602,15 @@ class UrDashCard extends HTMLElement {
       select.appendChild(element);
     }
     select.disabled = this._componentDisabled(config) || !select.options.length || !this._actionAllowed(config.action);
-    select.setAttribute("aria-label", this._resolveDisplay(config.label) || this._stateName(state) || "Select option");
+    select.setAttribute("aria-label", visibleLabel.textContent);
     select.addEventListener("change", () => this._runAction(config.action, {
       selected: select.value,
       value: select.value,
       current,
       element: select,
     }));
-    return select;
+    wrap.append(visibleLabel, select);
+    return wrap;
   }
 
   _rgbToHex(value) {
@@ -1292,32 +1297,125 @@ class UrDashCard extends HTMLElement {
   _climateControl(entityId) {
     const state = this._state(entityId);
     if (!state) return this._missing(entityId);
-    const current = state.attributes?.current_temperature ?? state.attributes?.temperature ?? state.state;
-    const target = state.attributes?.temperature ?? current;
-    const unit = this._hass?.config?.unit_system?.temperature || state.attributes?.unit_of_measurement || "";
-    const wrap = document.createElement("div");
-    wrap.className = "climate-control";
-    const readout = document.createElement("div");
-    readout.className = "climate-readout";
-    readout.innerHTML = `<strong>${escapeHtml(current)}${escapeHtml(unit)}</strong><span>${escapeHtml(this._humanize(state.state))} mode</span>`;
-    const targetBox = document.createElement("div");
-    targetBox.className = "climate-target";
-    targetBox.append(
-      this._smallButton("-", (element) => this._callService("climate", "set_temperature", { entity_id: entityId, temperature: Number(target) - 1 }, element)),
-      this._label(`Target ${target}${unit}`),
-      this._smallButton("+", (element) => this._callService("climate", "set_temperature", { entity_id: entityId, temperature: Number(target) + 1 }, element)),
-    );
-    const modes = document.createElement("div");
-    modes.className = "segmented-control";
-    for (const mode of (state.attributes?.hvac_modes || []).slice(0, 6)) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = mode === state.state ? "active" : "";
-      button.textContent = this._humanize(mode);
-      button.addEventListener("click", () => this._callService("climate", "set_hvac_mode", { entity_id: entityId, hvac_mode: mode }, button));
-      modes.appendChild(button);
+    const attributes = state.attributes || {};
+    const features = Number(attributes.supported_features || 0);
+    const unit = this._hass?.config?.unit_system?.temperature || attributes.unit_of_measurement || "";
+    const minimum = Number(attributes.min_temp ?? 7);
+    const maximum = Number(attributes.max_temp ?? 35);
+    const step = Number(attributes.target_temp_step ?? 1);
+    const localValue = { op: "local", name: "value" };
+    const children = [
+      {
+        type: "row",
+        layout: { width: "fill", justify: "between", align: "center", gap: "md" },
+        children: [
+          {
+            type: "value",
+            entity: entityId,
+            label: "Current temperature",
+            bind: { value: "attributes.current_temperature" },
+            unit,
+            style: { size: "xl", emphasis: "high" },
+          },
+          {
+            type: "value",
+            entity: entityId,
+            label: this._humanize(attributes.hvac_action || "Mode"),
+            bind: { value: "state" },
+            style: { size: "sm", emphasis: "normal" },
+          },
+        ],
+      },
+    ];
+
+    const addSelect = (label, valuePath, options, service, parameter) => {
+      if (!Array.isArray(options) || !options.length) return;
+      children.push({
+        type: "select",
+        entity: entityId,
+        label,
+        bind: { value: valuePath },
+        options: options.slice(0, 32).map((value) => ({ label: this._humanize(value), value })),
+        layout: { width: "fill" },
+        action: {
+          type: "service", domain: "climate", service, entity_id: entityId,
+          data: { [parameter]: { op: "local", name: "selected" } },
+        },
+      });
+    };
+    const addSlider = (label, valuePath, range, data) => children.push({
+      type: "column",
+      layout: { width: "fill", gap: "xs", align: "stretch" },
+      children: [
+        {
+          type: "row",
+          layout: { width: "fill", justify: "between", align: "center" },
+          children: [
+            { type: "text", text: label, style: { size: "sm", emphasis: "low" } },
+            { type: "value", entity: entityId, bind: { value: valuePath }, unit: range.unit, style: { size: "sm", emphasis: "high" } },
+          ],
+        },
+        {
+          type: "slider",
+          entity: entityId,
+          label,
+          bind: { value: valuePath },
+          range: { min: range.min, max: range.max, step: range.step },
+          layout: { width: "fill" },
+          action: { type: "service", domain: "climate", service: data.service, entity_id: entityId, data: data.parameters },
+        },
+      ],
+    });
+
+    addSelect("HVAC mode", "state", attributes.hvac_modes, "set_hvac_mode", "hvac_mode");
+    if (features & 1) {
+      addSlider("Target temperature", "attributes.temperature", { min: minimum, max: maximum, step, unit }, {
+        service: "set_temperature", parameters: { temperature: localValue },
+      });
     }
-    wrap.append(readout, targetBox, modes);
+    if (features & 2) {
+      addSlider("Minimum target", "attributes.target_temp_low", { min: minimum, max: maximum, step, unit }, {
+        service: "set_temperature",
+        parameters: {
+          target_temp_low: {
+            op: "min",
+            args: [localValue, { op: "entity", entity_id: entityId, path: "attributes.target_temp_high" }],
+          },
+          target_temp_high: { op: "entity", entity_id: entityId, path: "attributes.target_temp_high" },
+        },
+      });
+      addSlider("Maximum target", "attributes.target_temp_high", { min: minimum, max: maximum, step, unit }, {
+        service: "set_temperature",
+        parameters: {
+          target_temp_low: { op: "entity", entity_id: entityId, path: "attributes.target_temp_low" },
+          target_temp_high: {
+            op: "max",
+            args: [localValue, { op: "entity", entity_id: entityId, path: "attributes.target_temp_low" }],
+          },
+        },
+      });
+    }
+    if (features & 4) {
+      addSlider("Target humidity", "attributes.humidity", {
+        min: Number(attributes.min_humidity ?? 30),
+        max: Number(attributes.max_humidity ?? 99),
+        step: Number(attributes.target_humidity_step ?? 1),
+        unit: "%",
+      }, { service: "set_humidity", parameters: { humidity: localValue } });
+    }
+    if (features & 8) addSelect("Fan mode", "attributes.fan_mode", attributes.fan_modes, "set_fan_mode", "fan_mode");
+    if (features & 16) addSelect("Preset", "attributes.preset_mode", attributes.preset_modes, "set_preset_mode", "preset_mode");
+    if (features & 32) addSelect("Vertical swing", "attributes.swing_mode", attributes.swing_modes, "set_swing_mode", "swing_mode");
+    if (features & 512) addSelect("Horizontal swing", "attributes.swing_horizontal_mode", attributes.swing_horizontal_modes, "set_swing_horizontal_mode", "swing_horizontal_mode");
+
+    const wrap = document.createElement("div");
+    wrap.className = "climate-control climate-control-composed";
+    const component = this._componentNode({
+      type: "column",
+      layout: { width: "fill", gap: "md", align: "stretch" },
+      children,
+    }, 1);
+    if (component) wrap.appendChild(component);
     return wrap;
   }
 
@@ -2833,6 +2931,9 @@ const styles = `
     font: inherit;
     cursor: pointer;
   }
+  .component-select-field { display: grid; gap: 5px; }
+  .component-select-field > span { color: var(--urdash-muted); font-size: 11px; font-weight: 750; }
+  .component-select-field.component-width-fill .component-select { width: 100%; }
   .component-progress { width: 100%; height: 7px; accent-color: var(--component-accent); }
   .component-divider { width: 100%; border: 0; border-top: 1px solid color-mix(in srgb, var(--component-accent) 22%, transparent); }
   .component-spacer { min-width: 8px; min-height: 8px; }
