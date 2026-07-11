@@ -2967,7 +2967,56 @@
       }
 
       function minimalWeatherCard() {
+        const literal = (value) => ({ op: "literal", value });
+        const entity = (path) => ({ op: "entity", entity_id: "weather.home", path });
+        const forecast = (index, field) => ({ op: "source", source_id: "minimal_daily", path: `forecast.${index}.${field}` });
+        const number = (value) => ({ op: "format_number", args: [value], decimals: 0 });
+        const temperature = (value) => ({ op: "concat", args: [number(value), literal("°")] });
+        const conditionLabel = (value) => ({
+          op: "map",
+          args: [value],
+          cases: [
+            ["clear-night", "Clear night"], ["cloudy", "Cloudy"], ["fog", "Fog"],
+            ["hail", "Hail"], ["lightning", "Lightning"], ["lightning-rainy", "Thunderstorms"],
+            ["partlycloudy", "Partly cloudy"], ["pouring", "Heavy rain"], ["rainy", "Rain"],
+            ["snowy", "Snow"], ["snowy-rainy", "Sleet"], ["sunny", "Sunny"],
+            ["windy", "Windy"], ["windy-variant", "Windy"],
+          ].map(([when, label]) => ({ when, value: literal(label) })),
+          default: value,
+        });
+        const iconRef = (condition) => ({ set: "minimal_weather", key: condition });
+        const weatherIconSet = {
+          id: "minimal_weather",
+          variants: [
+            { key: "sunny", vector_icon: weatherVectorIcon("sun", "#d3b33f") },
+            { key: "partlycloudy", vector_icon: weatherVectorIcon("partly", "#26332e") },
+            { key: "cloudy", vector_icon: weatherVectorIcon("cloud", "#526059") },
+            { key: "rainy", vector_icon: weatherVectorIcon("rain", "#476776") },
+            { key: "pouring", vector_icon: weatherVectorIcon("rain", "#294f61") },
+            { key: "clear-night", icon: "mdi:weather-night" },
+            { key: "lightning", icon: "mdi:weather-lightning" },
+            { key: "lightning-rainy", icon: "mdi:weather-lightning-rainy" },
+            { key: "fog", icon: "mdi:weather-fog" },
+            { key: "hail", icon: "mdi:weather-hail" },
+            { key: "snowy", icon: "mdi:weather-snowy" },
+            { key: "snowy-rainy", icon: "mdi:weather-snowy-rainy" },
+            { key: "windy", icon: "mdi:weather-windy" },
+            { key: "windy-variant", icon: "mdi:weather-windy-variant" },
+          ],
+          fallback: { icon: "mdi:weather-cloudy-alert" },
+        };
+        const forecastIconBlocks = Array.from({ length: 5 }, (_, index) => ({
+          id: `minimal_forecast_icon_${index + 1}`,
+          kind: "vector_icon",
+          icon_ref: iconRef(forecast(index, "condition")),
+          frame: { x: 10.2 + index * 16.8, y: 76.4, w: 12.6, h: 9 },
+          responsive: { mobile: { frame: { x: 10.2 + index * 16.8, y: 76.2, w: 12.6, h: 8.5 } } },
+          style: { accent: "#26332e" },
+          presentation: { surface: "naked", layer: "overlay", align: "center", scale: "full" },
+        }));
         return baseCard({
+          assets: { icon_sets: [weatherIconSet] },
+          dataSources: [{ id: "minimal_daily", type: "weather_forecast", entity: "weather.home", forecast_type: "daily", limit: 5 }],
           intent: {
             goal: "weather",
             title: "Minimal Weather",
@@ -3010,14 +3059,6 @@
                   { type: "line", x1: 78, y1: 164, x2: 822, y2: 164, stroke: "#17201c", stroke_width: 1.25, opacity: 0.11 },
                   { type: "line", x1: 78, y1: 690, x2: 822, y2: 690, stroke: "#17201c", stroke_width: 1.25, opacity: 0.11 },
 
-                  { type: "circle", cx: 700, cy: 324, r: 116, fill: "gradient:minimal_sun", stroke: "none", opacity: 0.48, animation: { property: "opacity", duration: 7.2, repeat: true, easing: "ease_in_out", keyframes: [{ offset: 0, opacity: 0.34 }, { offset: 0.5, opacity: 0.58 }, { offset: 1, opacity: 0.34 }] } },
-                  { type: "circle", cx: 700, cy: 324, r: 68, fill: "#f2cd59", stroke: "#17201c", stroke_width: 3.2, opacity: 0.96 },
-                  { type: "circle", cx: 700, cy: 324, r: 92, fill: "none", stroke: "#17201c", stroke_width: 2, stroke_dasharray: "2 13", stroke_linecap: "round", opacity: 0.34, animation: { property: "rotate", duration: 20, repeat: true, easing: "linear", origin: { x: 700, y: 324 }, keyframes: [{ offset: 0, rotate: 0 }, { offset: 1, rotate: 360 }] } },
-                  { type: "group", animation: { property: "translate", duration: 8.8, repeat: true, easing: "ease_in_out", keyframes: [{ offset: 0, x: -3, y: 0 }, { offset: 0.5, x: 4, y: -1.5 }, { offset: 1, x: -3, y: 0 }] }, shapes: [
-                    { type: "path", d: "M 555 438 C 579 372 639 356 687 390 C 713 352 779 360 803 412 C 839 414 861 439 861 469 C 861 501 835 523 797 523 L 585 523 C 541 523 513 499 513 467 C 513 444 529 425 555 438 Z", fill: "#fbfbf7", stroke: "#17201c", stroke_width: 4.8, stroke_linecap: "round", stroke_linejoin: "round" },
-                    { type: "path", d: "M 551 523 C 587 510 631 510 667 523", fill: "none", stroke: "#17201c", stroke_width: 2, stroke_linecap: "round", opacity: 0.16 },
-                  ] },
-
                   { type: "rect", x: 72, y: 770, width: 756, height: 264, rx: 34, fill: "gradient:minimal_rail", stroke: "#17201c", stroke_width: 1.2, opacity: 0.94 },
                   { type: "rect", x: 92, y: 1014, width: 112, height: 4, rx: 2, fill: "#d9e85f", stroke: "none" },
                   { type: "line", x1: 223, y1: 802, x2: 223, y2: 1002, stroke: "#17201c", stroke_width: 1, opacity: 0.09 },
@@ -3025,23 +3066,6 @@
                   { type: "line", x1: 525, y1: 802, x2: 525, y2: 1002, stroke: "#17201c", stroke_width: 1, opacity: 0.09 },
                   { type: "line", x1: 676, y1: 802, x2: 676, y2: 1002, stroke: "#17201c", stroke_width: 1, opacity: 0.09 },
 
-                  { type: "circle", cx: 148, cy: 888, r: 27, fill: "#f2cd59", stroke: "#17201c", stroke_width: 2.5 },
-                  { type: "circle", cx: 148, cy: 888, r: 43, fill: "none", stroke: "#17201c", stroke_width: 2.2, stroke_dasharray: "1 10", stroke_linecap: "round", opacity: 0.3 },
-
-                  { type: "circle", cx: 292, cy: 872, r: 22, fill: "#f2cd59", stroke: "#17201c", stroke_width: 2.3 },
-                  { type: "path", d: "M 267 908 C 275 881 309 878 324 900 C 333 890 352 895 356 910 C 356 925 344 934 326 934 L 274 934 C 258 934 249 924 249 913 C 249 904 257 899 267 908 Z", fill: "#f8f9f5", stroke: "#17201c", stroke_width: 2.8, stroke_linejoin: "round" },
-
-                  { type: "path", d: "M 408 900 C 418 870 454 866 471 890 C 482 879 503 884 508 902 C 508 920 494 930 474 930 L 416 930 C 398 930 388 920 388 907 C 388 897 397 891 408 900 Z", fill: "#f8f9f5", stroke: "#17201c", stroke_width: 2.8, stroke_linejoin: "round" },
-                  { type: "line", x1: 422, y1: 944, x2: 415, y2: 968, stroke: "gradient:minimal_rain", stroke_width: 3, stroke_linecap: "round", animation: { preset: "rain_drop", delay: 0, speed: "slow", intensity: "subtle" } },
-                  { type: "line", x1: 449, y1: 944, x2: 442, y2: 968, stroke: "gradient:minimal_rain", stroke_width: 3, stroke_linecap: "round", animation: { preset: "rain_drop", delay: 0.3, speed: "slow", intensity: "subtle" } },
-                  { type: "line", x1: 476, y1: 944, x2: 469, y2: 968, stroke: "gradient:minimal_rain", stroke_width: 3, stroke_linecap: "round", animation: { preset: "rain_drop", delay: 0.6, speed: "slow", intensity: "subtle" } },
-
-                  { type: "path", d: "M 563 891 C 574 864 607 862 622 884 C 633 873 654 878 659 896 C 659 913 646 923 626 923 L 572 923 C 554 923 544 914 544 901 C 544 892 552 886 563 891 Z", fill: "#f8f9f5", stroke: "#17201c", stroke_width: 2.8, stroke_linejoin: "round" },
-                  { type: "path", d: "M 581 914 C 592 894 620 894 632 914", fill: "none", stroke: "#17201c", stroke_width: 2.2, stroke_linecap: "round", opacity: 0.28 },
-
-                  { type: "circle", cx: 755, cy: 892, r: 34, fill: "#d9deda", stroke: "#17201c", stroke_width: 2.6, opacity: 0.95 },
-                  { type: "circle", cx: 770, cy: 877, r: 35, fill: "#ebeee9", stroke: "none" },
-                  { type: "path", d: "M 713 856 L 716 863 L 723 866 L 716 869 L 713 876 L 710 869 L 703 866 L 710 863 Z", fill: "#d9e85f", stroke: "#17201c", stroke_width: 1.5, stroke_linejoin: "round" },
                 ],
                 frame: { x: 0, y: 0, w: 100, h: 100 },
                 responsive: { mobile: { frame: { x: 0, y: 0, w: 100, h: 100 } } },
@@ -3049,9 +3073,25 @@
                 presentation: { surface: "naked", layer: "backdrop", align: "stretch", scale: "full" },
               },
               {
+                id: "minimal_weather_current_icon",
+                kind: "vector_icon",
+                icon_ref: iconRef(entity("state")),
+                frame: { x: 56, y: 19, w: 39, h: 31 },
+                responsive: { mobile: { frame: { x: 56, y: 19, w: 39, h: 31 } } },
+                style: { accent: "#26332e" },
+                presentation: { surface: "naked", layer: "overlay", align: "center", scale: "full" },
+              },
+              {
                 id: "minimal_weather_kicker",
                 kind: "text",
-                text: "TAIPEI / FRI 10 JUL",
+                text: {
+                  op: "concat",
+                  args: [
+                    entity("attributes.friendly_name"),
+                    literal(" / "),
+                    { op: "format_datetime", args: [forecast(0, "datetime")], style: "medium", locale: "en-US" },
+                  ],
+                },
                 variant: "label",
                 frame: { x: 10, y: 7.2, w: 38, h: 4 },
                 responsive: { mobile: { frame: { x: 10, y: 7.2, w: 48, h: 7 } } },
@@ -3061,7 +3101,7 @@
               {
                 id: "minimal_weather_temperature",
                 kind: "text",
-                text: "27°",
+                text: temperature(entity("attributes.temperature")),
                 variant: "display",
                 frame: { x: 8.5, y: 18, w: 39, h: 15 },
                 responsive: { mobile: { frame: { x: 8.5, y: 18, w: 46, h: 15 } } },
@@ -3071,7 +3111,7 @@
               {
                 id: "minimal_weather_title",
                 kind: "text",
-                text: "Partly sunny",
+                text: conditionLabel(entity("state")),
                 variant: "title",
                 frame: { x: 9.5, y: 36.5, w: 42, h: 7 },
                 responsive: { mobile: { frame: { x: 9.5, y: 37, w: 56, h: 10 } } },
@@ -3081,7 +3121,10 @@
               {
                 id: "minimal_weather_condition",
                 kind: "text",
-                text: "Feels like 28°",
+                text: {
+                  op: "concat",
+                  args: [literal("Feels like "), number({ op: "coalesce", args: [entity("attributes.apparent_temperature"), entity("attributes.temperature")] }), literal("°")],
+                },
                 variant: "body",
                 frame: { x: 9.5, y: 44, w: 38, h: 5 },
                 responsive: { mobile: { frame: { x: 9.5, y: 45, w: 44, h: 8 } } },
@@ -3091,7 +3134,7 @@
               {
                 id: "minimal_weather_high",
                 kind: "text",
-                text: "H 29°",
+                text: { op: "concat", args: [literal("H "), temperature(forecast(0, "temperature"))] },
                 variant: "body",
                 frame: { x: 9.5, y: 54, w: 18, h: 5 },
                 responsive: { mobile: { frame: { x: 9.5, y: 55, w: 22, h: 8 } } },
@@ -3101,7 +3144,7 @@
               {
                 id: "minimal_weather_low",
                 kind: "text",
-                text: "L 24°",
+                text: { op: "concat", args: [literal("L "), temperature(forecast(0, "templow"))] },
                 variant: "body",
                 frame: { x: 27.5, y: 54, w: 18, h: 5 },
                 responsive: { mobile: { frame: { x: 31, y: 55, w: 22, h: 8 } } },
@@ -3121,7 +3164,7 @@
               {
                 id: "minimal_forecast_day_1",
                 kind: "text",
-                text: "MON",
+                text: { op: "format_datetime", args: [forecast(0, "datetime")], style: "weekday_short", locale: "en-US" },
                 variant: "caption",
                 frame: { x: 8, y: 72.5, w: 17, h: 4 },
                 responsive: { mobile: { frame: { x: 7.5, y: 69.8, w: 18, h: 7 } } },
@@ -3131,7 +3174,7 @@
               {
                 id: "minimal_forecast_day_2",
                 kind: "text",
-                text: "TUE",
+                text: { op: "format_datetime", args: [forecast(1, "datetime")], style: "weekday_short", locale: "en-US" },
                 variant: "caption",
                 frame: { x: 24.8, y: 72.5, w: 17, h: 4 },
                 responsive: { mobile: { frame: { x: 24.3, y: 69.8, w: 18, h: 7 } } },
@@ -3141,7 +3184,7 @@
               {
                 id: "minimal_forecast_day_3",
                 kind: "text",
-                text: "WED",
+                text: { op: "format_datetime", args: [forecast(2, "datetime")], style: "weekday_short", locale: "en-US" },
                 variant: "caption",
                 frame: { x: 41.6, y: 72.5, w: 17, h: 4 },
                 responsive: { mobile: { frame: { x: 41.1, y: 69.8, w: 18, h: 7 } } },
@@ -3151,7 +3194,7 @@
               {
                 id: "minimal_forecast_day_4",
                 kind: "text",
-                text: "THU",
+                text: { op: "format_datetime", args: [forecast(3, "datetime")], style: "weekday_short", locale: "en-US" },
                 variant: "caption",
                 frame: { x: 58.4, y: 72.5, w: 17, h: 4 },
                 responsive: { mobile: { frame: { x: 57.9, y: 69.8, w: 18, h: 7 } } },
@@ -3161,7 +3204,7 @@
               {
                 id: "minimal_forecast_day_5",
                 kind: "text",
-                text: "FRI",
+                text: { op: "format_datetime", args: [forecast(4, "datetime")], style: "weekday_short", locale: "en-US" },
                 variant: "caption",
                 frame: { x: 75.2, y: 72.5, w: 17, h: 4 },
                 responsive: { mobile: { frame: { x: 74.7, y: 69.8, w: 18, h: 7 } } },
@@ -3171,7 +3214,7 @@
               {
                 id: "minimal_forecast_temp_1",
                 kind: "text",
-                text: "29°/24°",
+                text: { op: "concat", args: [temperature(forecast(0, "temperature")), literal("/"), temperature(forecast(0, "templow"))] },
                 variant: "caption",
                 frame: { x: 8, y: 85.8, w: 17, h: 4 },
                 responsive: { mobile: { frame: { x: 7.5, y: 83.4, w: 18, h: 7.5 } } },
@@ -3181,7 +3224,7 @@
               {
                 id: "minimal_forecast_temp_2",
                 kind: "text",
-                text: "30°/25°",
+                text: { op: "concat", args: [temperature(forecast(1, "temperature")), literal("/"), temperature(forecast(1, "templow"))] },
                 variant: "caption",
                 frame: { x: 24.8, y: 85.8, w: 17, h: 4 },
                 responsive: { mobile: { frame: { x: 24.3, y: 83.4, w: 18, h: 7.5 } } },
@@ -3191,7 +3234,7 @@
               {
                 id: "minimal_forecast_temp_3",
                 kind: "text",
-                text: "28°/23°",
+                text: { op: "concat", args: [temperature(forecast(2, "temperature")), literal("/"), temperature(forecast(2, "templow"))] },
                 variant: "caption",
                 frame: { x: 41.6, y: 85.8, w: 17, h: 4 },
                 responsive: { mobile: { frame: { x: 41.1, y: 83.4, w: 18, h: 7.5 } } },
@@ -3201,7 +3244,7 @@
               {
                 id: "minimal_forecast_temp_4",
                 kind: "text",
-                text: "27°/22°",
+                text: { op: "concat", args: [temperature(forecast(3, "temperature")), literal("/"), temperature(forecast(3, "templow"))] },
                 variant: "caption",
                 frame: { x: 58.4, y: 85.8, w: 17, h: 4 },
                 responsive: { mobile: { frame: { x: 57.9, y: 83.4, w: 18, h: 7.5 } } },
@@ -3211,13 +3254,14 @@
               {
                 id: "minimal_forecast_temp_5",
                 kind: "text",
-                text: "26°/21°",
+                text: { op: "concat", args: [temperature(forecast(4, "temperature")), literal("/"), temperature(forecast(4, "templow"))] },
                 variant: "caption",
                 frame: { x: 75.2, y: 85.8, w: 17, h: 4 },
                 responsive: { mobile: { frame: { x: 74.7, y: 83.4, w: 18, h: 7.5 } } },
                 style: { accent: "#17201c", emphasis: "high" },
                 presentation: { surface: "naked", layer: "overlay", align: "center" },
               },
+              ...forecastIconBlocks,
             ],
           },
         });
