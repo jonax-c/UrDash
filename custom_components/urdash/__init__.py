@@ -38,6 +38,7 @@ from .const import (
     PANEL_URL,
     STATIC_URL,
 )
+from .style_presets import STYLES, STYLE_PRESETS, resolve_style
 
 PLATFORMS: list[str] = []
 
@@ -48,6 +49,7 @@ HEIGHT_MODES = ["auto", "viewport", "fixed"]
 GENERATE_SERVICE_SCHEMA = vol.Schema(
     {
         vol.Required("request"): cv.string,
+        vol.Optional("style", default="auto"): vol.In(STYLES),
         vol.Optional("theme", default=DEFAULT_THEME): vol.In(THEMES),
         vol.Optional("height_mode", default=DEFAULT_HEIGHT_MODE): vol.In(HEIGHT_MODES),
         vol.Optional("entity_ids"): vol.All(cv.ensure_list, [cv.entity_id]),
@@ -125,6 +127,7 @@ def _register_services(hass: HomeAssistant) -> None:
         result = await _async_generate_from_hass(
             hass,
             request=call.data["request"],
+            style=call.data["style"],
             theme=call.data["theme"],
             height_mode=call.data["height_mode"],
             selected_entity_ids=call.data.get("entity_ids"),
@@ -173,6 +176,10 @@ async def websocket_settings(
             "model": settings[CONF_MODEL],
             "default_theme": settings[CONF_DEFAULT_THEME],
             "default_height_mode": settings[CONF_DEFAULT_HEIGHT_MODE],
+            "style_presets": [
+                {"id": style_id, **preset}
+                for style_id, preset in STYLE_PRESETS.items()
+            ],
             "schema": 2,
         },
     )
@@ -182,6 +189,7 @@ async def websocket_settings(
     {
         vol.Required("type"): "urdash/generate",
         vol.Required("request"): cv.string,
+        vol.Optional("style", default="auto"): vol.In(STYLES),
         vol.Optional("theme", default=DEFAULT_THEME): vol.In(THEMES),
         vol.Optional("height_mode", default=DEFAULT_HEIGHT_MODE): vol.In(HEIGHT_MODES),
         vol.Optional("selected_entity_ids"): [cv.entity_id],
@@ -197,6 +205,7 @@ async def websocket_generate(
     result = await _async_generate_from_hass(
         hass,
         request=msg["request"],
+        style=msg["style"],
         theme=msg["theme"],
         height_mode=msg["height_mode"],
         selected_entity_ids=msg.get("selected_entity_ids"),
@@ -208,6 +217,7 @@ async def _async_generate_from_hass(
     hass: HomeAssistant,
     *,
     request: str,
+    style: str,
     theme: str,
     height_mode: str,
     selected_entity_ids: list[str] | None = None,
@@ -227,6 +237,7 @@ async def _async_generate_from_hass(
         }
 
     try:
+        preferred_theme, style_guidance = resolve_style(style, theme)
         return await async_generate_with_openai(
             hass,
             api_key=settings[CONF_API_KEY],
@@ -235,7 +246,9 @@ async def _async_generate_from_hass(
             request=request,
             entities=entities,
             available_services=_available_services(hass),
-            theme=theme,
+            theme=preferred_theme,
+            style=style,
+            style_guidance=style_guidance,
             height_mode=height_mode,
         )
     except AiGenerationError as err:

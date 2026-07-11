@@ -51,7 +51,7 @@ The base URL can be changed for OpenAI-compatible providers. If the AI request f
 Before using generated YAML in Lovelace, add the UrDash card resource:
 
 ```text
-/urdash/static/urdash-custom-card.js?v=20260711.3
+/urdash/static/urdash-custom-card.js?v=20260711.4
 ```
 
 Set the resource type to `JavaScript module`.
@@ -82,13 +82,17 @@ Paste the YAML into a manual Lovelace card editor.
 
 ## Device And Entity Selection
 
-UrDash defaults to using all available Home Assistant entities. Before generation, users can narrow the scope in the **Generation context** panel:
+UrDash defaults to using all available Home Assistant entities. Before generation, users can narrow the scope in the **Choose devices** panel:
 
 - All entities are selected by default.
 - Entities are grouped by Home Assistant device when registry metadata is available.
 - Entities without a device are grouped by domain.
-- Users can filter, select all, clear all, toggle a whole device group, or toggle individual entities.
+- Users can search, filter by area, show only selected entities, toggle a whole device group, or toggle individual entities.
 - Unselected entities are not sent to the AI provider and should not appear in generated card output.
+
+## Visual Style Direction
+
+The generation console defaults to **AI decides**, which lets the model select the visual language from the prompt and device capabilities. Users can optionally choose Minimal, Aurora, Glassmorphism, Bento, Editorial, Material, Neo-brutalist, Futuristic, Organic, Monochrome, Luxury, or Playful. These choices guide composition, typography, color, depth, and motion; they do not select a predefined card layout.
 
 ## v2 Renderer
 
@@ -152,6 +156,7 @@ UrDash exposes `urdash.generate_card`. The service generates a v2 UrDash card fr
 Service fields:
 
 - `request`: natural-language card request.
+- `style`: optional visual direction. Use `auto` to let the AI decide.
 - `theme`: `aurora`, `quiet`, `graphite`, `calm`, or `sunrise`.
 - `height_mode`: `auto`, `viewport`, or `fixed`.
 - `entity_ids`: optional list of entities UrDash may use. Leave empty to allow all entities.

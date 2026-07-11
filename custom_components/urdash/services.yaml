@@ -9,9 +9,30 @@ generate_card:
       selector:
         text:
           multiline: true
+    style:
+      name: Visual style
+      description: Optional design direction. AI decides does not constrain the visual language or layout.
+      required: false
+      default: auto
+      selector:
+        select:
+          options:
+            - auto
+            - minimal
+            - aurora
+            - glassmorphism
+            - bento
+            - editorial
+            - material
+            - neobrutalist
+            - futuristic
+            - organic
+            - monochrome
+            - luxury
+            - playful
     theme:
       name: Theme
-      description: Preferred UrDash v2 visual theme.
+      description: Renderer theme fallback used when visual style is set to AI decides.
       required: false
       default: aurora
       selector:

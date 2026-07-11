@@ -1,3 +1,19 @@
+const DEFAULT_STYLE_PRESETS = [
+  ["auto", "AI decides", "Choose the visual language from the request and device context."],
+  ["minimal", "Minimal", "Restrained typography, generous space, and essential controls."],
+  ["aurora", "Aurora", "Luminous color, atmospheric depth, and refined motion."],
+  ["glassmorphism", "Glassmorphism", "Translucent layers, subtle borders, and dimensional light."],
+  ["bento", "Bento", "Clear modular hierarchy with varied scale and strong scanning."],
+  ["editorial", "Editorial", "Expressive type, asymmetric rhythm, and information-led composition."],
+  ["material", "Material", "Familiar surfaces, clear elevation, and direct interaction states."],
+  ["neobrutalist", "Neo-brutalist", "Bold contrast, decisive outlines, and intentionally direct controls."],
+  ["futuristic", "Futuristic", "Technical precision, dark depth, telemetry, and controlled glow."],
+  ["organic", "Organic", "Soft geometry, natural color, and calm spatial flow."],
+  ["monochrome", "Monochrome", "Tonal hierarchy, graphic contrast, and minimal color dependence."],
+  ["luxury", "Luxury", "Quiet drama, polished detail, and premium restrained accents."],
+  ["playful", "Playful", "Friendly color, expressive shapes, and lively purposeful motion."],
+].map(([id, label, description]) => ({ id, label, description }));
+
 class UrDashPanel extends HTMLElement {
   constructor() {
     super();
@@ -9,12 +25,22 @@ class UrDashPanel extends HTMLElement {
       model: "",
       default_theme: "aurora",
       default_height_mode: "auto",
+      style_presets: [],
     };
+    this._style = "auto";
     this._theme = "aurora";
     this._heightMode = "auto";
     this._result = null;
+    this._requestDraft = "Create a beautiful and useful room control card that combines lights, climate, covers, and key sensors.";
+    this._generating = false;
+    this._generationError = "";
     this._selectedEntityIds = new Set();
     this._entityFilter = "";
+    this._areaFilter = "all";
+    this._selectedOnly = false;
+    this._previewSize = "wide";
+    this._previewMountId = 0;
+    this._showConfig = false;
     this._loaded = false;
   }
 
@@ -49,34 +75,35 @@ class UrDashPanel extends HTMLElement {
   }
 
   async _generate() {
-    const request = this.shadowRoot.querySelector("#request")?.value.trim();
+    this._captureDraft();
+    const request = this._requestDraft.trim();
     if (!request || !this._selectedEntityCount()) return;
 
-    const button = this.shadowRoot.querySelector("#generate");
-    button.disabled = true;
-    button.innerHTML = '<span class="spin"></span> Generating';
+    this._generating = true;
+    this._generationError = "";
+    this._render();
 
     try {
       this._result = await this._hass.connection.sendMessagePromise({
         type: "urdash/generate",
         request,
+        style: this._style,
         theme: this._theme,
         height_mode: this._heightMode,
         selected_entity_ids: this._selectedEntityIdsList(),
       });
+      if (this._result?.error) this._generationError = this._result.error;
       this._render();
       if (this._result?.card_config) {
         await this._nextFrame();
         await this._mountPreview();
       }
     } catch (error) {
-      this._renderError(error);
+      this._generationError = error?.message || String(error);
     } finally {
-      const currentButton = this.shadowRoot.querySelector("#generate");
-      if (currentButton) {
-        currentButton.disabled = false;
-        currentButton.innerHTML = "<span></span> Generate v2 card";
-      }
+      this._generating = false;
+      this._render();
+      if (this._result?.card_config) await this._mountPreview();
     }
   }
 
@@ -106,6 +133,7 @@ class UrDashPanel extends HTMLElement {
   }
 
   async _mountPreview() {
+    const mountId = ++this._previewMountId;
     const host = this.shadowRoot.querySelector("#previewHost");
     if (!host) return;
     host.innerHTML = "";
@@ -114,6 +142,7 @@ class UrDashPanel extends HTMLElement {
       return;
     }
     await this._loadUrDashCard();
+    if (mountId !== this._previewMountId) return;
     const card = document.createElement("urdash-card");
     card.setConfig({ ...this._result.card_config, preview: true });
     card.hass = this._hass;
@@ -122,7 +151,7 @@ class UrDashPanel extends HTMLElement {
 
   async _loadUrDashCard() {
     if (customElements.get("urdash-card")) return;
-    await import("/urdash/static/urdash-custom-card.js?v=20260711.3");
+    await import("/urdash/static/urdash-custom-card.js?v=20260711.4");
   }
 
   _refreshPreviewHass() {
@@ -130,13 +159,33 @@ class UrDashPanel extends HTMLElement {
     if (card) card.hass = this._hass;
   }
 
-  _setTheme(theme) {
-    this._theme = theme;
+  _setStyle(style) {
+    this._captureDraft();
+    this._style = style;
     this._render();
   }
 
   _setHeightMode(heightMode) {
+    this._captureDraft();
     this._heightMode = heightMode;
+    this._render();
+  }
+
+  _setAreaFilter(area) {
+    this._captureDraft();
+    this._areaFilter = area;
+    this._render();
+  }
+
+  _setSelectedOnly(selectedOnly) {
+    this._captureDraft();
+    this._selectedOnly = selectedOnly;
+    this._render();
+  }
+
+  _setPreviewSize(size) {
+    this._captureDraft();
+    this._previewSize = size;
     this._render();
   }
 
@@ -146,12 +195,14 @@ class UrDashPanel extends HTMLElement {
   }
 
   _toggleEntity(entityId, checked) {
+    this._captureDraft();
     if (checked) this._selectedEntityIds.add(entityId);
     else this._selectedEntityIds.delete(entityId);
     this._render();
   }
 
   _toggleEntityGroup(groupId, checked) {
+    this._captureDraft();
     const group = this._entityGroups().find((item) => item.id === groupId);
     if (!group) return;
     for (const entity of group.entities) {
@@ -162,11 +213,13 @@ class UrDashPanel extends HTMLElement {
   }
 
   _selectAllEntities() {
+    this._captureDraft();
     this._selectedEntityIds = new Set(this._entities.map((entity) => entity.entity_id).filter(Boolean));
     this._render();
   }
 
   _selectNoEntities() {
+    this._captureDraft();
     this._selectedEntityIds = new Set();
     this._render();
   }
@@ -185,6 +238,8 @@ class UrDashPanel extends HTMLElement {
     const filter = this._entityFilter.trim().toLowerCase();
     const groups = new Map();
     for (const entity of this._entities) {
+      if (this._areaFilter !== "all" && (entity.area_name || "No area") !== this._areaFilter) continue;
+      if (this._selectedOnly && !this._selectedEntityIds.has(entity.entity_id)) continue;
       const groupId = entity.device_id || `domain:${entity.domain || entity.entity_id?.split(".")[0] || "other"}`;
       const groupTitle = entity.device_name || this._domainTitle(entity.domain || entity.entity_id?.split(".")[0]);
       const area = entity.area_name || "No area";
@@ -229,139 +284,180 @@ class UrDashPanel extends HTMLElement {
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
   }
 
+  _areas() {
+    return [...new Set(this._entities.map((entity) => entity.area_name || "No area"))]
+      .sort((a, b) => a.localeCompare(b));
+  }
+
+  _stylePresets() {
+    return this._settings.style_presets?.length ? this._settings.style_presets : DEFAULT_STYLE_PRESETS;
+  }
+
+  _selectedStyle() {
+    return this._stylePresets().find((preset) => preset.id === this._style) || this._stylePresets()[0];
+  }
+
+  _captureDraft() {
+    const request = this.shadowRoot?.querySelector("#request");
+    if (request) this._requestDraft = request.value;
+  }
+
   _refreshEntitySelectionMarkup() {
     const groups = this.shadowRoot.querySelector(".entity-groups");
     if (groups) groups.innerHTML = this._entitySelectionMarkup();
   }
 
   _render() {
+    const hasResult = Boolean(this._result?.card_config);
+    const canGenerate = Boolean(this._requestDraft.trim() && this._selectedEntityCount() && !this._generating);
+    const style = this._selectedStyle();
     this.shadowRoot.innerHTML = `
       <style>${styles}</style>
       <main class="studio">
         <aside class="composer">
           <header class="brand">
-            <div class="brand-mark">U2</div>
+            <div class="brand-mark"><ha-icon icon="mdi:creation-outline"></ha-icon></div>
             <div>
-              <h1>UrDash v2</h1>
-              <p>AI card composer</p>
+              <h1>Card Studio</h1>
+              <p>UrDash generation console</p>
             </div>
+            <span class="ready-state ${this._settings.ai_enabled ? "ready" : ""}">
+              ${this._settings.ai_enabled ? "AI ready" : "API key required"}
+            </span>
           </header>
 
-          <label class="field">
-            <span>Card request</span>
-            <textarea id="request" rows="7">${escapeHtml(this._currentRequest())}</textarea>
-          </label>
-
-          <section class="choice-grid">
-            <div class="field">
-              <span>Theme</span>
-              <div class="segmented" id="themeButtons">
-                ${["aurora", "quiet", "graphite", "calm", "sunrise"].map((theme) => `
-                  <button class="${this._theme === theme ? "active" : ""}" data-theme="${theme}" type="button">${theme}</button>
-                `).join("")}
-              </div>
-            </div>
-            <div class="field">
-              <span>Height</span>
-              <div class="segmented three" id="heightButtons">
-                ${["auto", "viewport", "fixed"].map((mode) => `
-                  <button class="${this._heightMode === mode ? "active" : ""}" data-height-mode="${mode}" type="button">${mode}</button>
-                `).join("")}
-              </div>
-            </div>
-          </section>
-
-          <section class="entity-panel">
+          <section class="composer-section devices-section">
             <div class="panel-title">
               <div>
-                <span>Entities</span>
-                <h2>Generation context</h2>
+                <span>01</span>
+                <h2>Choose devices</h2>
               </div>
-              <strong>${this._selectedEntityCount()} / ${this._entities.length}</strong>
+              <strong>${this._selectedEntityCount()} of ${this._entities.length}</strong>
             </div>
             <div class="entity-actions">
-              <input id="entityFilter" type="search" value="${escapeHtml(this._entityFilter)}" placeholder="Filter devices or entities" />
+              <label class="search-control">
+                <ha-icon icon="mdi:magnify"></ha-icon>
+                <input id="entityFilter" type="search" value="${escapeHtml(this._entityFilter)}" placeholder="Search devices, areas, entities" />
+              </label>
               <div>
-                <button id="selectAllEntities" type="button">All</button>
-                <button id="selectNoEntities" type="button">None</button>
+                <button id="selectAllEntities" title="Select all entities" type="button">All</button>
+                <button id="selectNoEntities" title="Clear selection" type="button">Clear</button>
               </div>
+            </div>
+            <div class="entity-filters">
+              <label>
+                <span>Area</span>
+                <select id="areaFilter">
+                  <option value="all">All areas</option>
+                  ${this._areas().map((area) => `<option value="${escapeHtml(area)}" ${this._areaFilter === area ? "selected" : ""}>${escapeHtml(area)}</option>`).join("")}
+                </select>
+              </label>
+              <label class="selected-toggle">
+                <input id="selectedOnly" type="checkbox" ${this._selectedOnly ? "checked" : ""} />
+                <span>Selected only</span>
+              </label>
             </div>
             <div class="entity-groups">
               ${this._entitySelectionMarkup()}
             </div>
           </section>
 
-          <button class="primary-action" id="generate" ${this._selectedEntityCount() ? "" : "disabled"} type="button">
-            <span></span>
-            Generate v2 card
+          <section class="composer-section direction-section">
+            <div class="panel-title">
+              <div>
+                <span>02</span>
+                <h2>Set the direction</h2>
+              </div>
+            </div>
+            <label class="field">
+              <span>Visual style <em>Optional</em></span>
+              <select id="styleSelect">
+                ${this._stylePresets().map((preset) => `<option value="${escapeHtml(preset.id)}" ${this._style === preset.id ? "selected" : ""}>${escapeHtml(preset.label)}</option>`).join("")}
+              </select>
+            </label>
+            <div class="style-summary" data-style="${escapeHtml(style.id)}">
+              <span class="style-swatch"></span>
+              <p>${escapeHtml(style.description)}</p>
+            </div>
+            <label class="field prompt-field">
+              <span>What should this card do?</span>
+              <textarea id="request" rows="6" placeholder="Describe the information, controls, priorities, and feeling of the card.">${escapeHtml(this._requestDraft)}</textarea>
+            </label>
+            <details class="advanced-options">
+              <summary>Advanced</summary>
+              <div class="field">
+                <span>Card height</span>
+                <div class="segmented three" id="heightButtons">
+                  ${["auto", "viewport", "fixed"].map((mode) => `
+                    <button class="${this._heightMode === mode ? "active" : ""}" data-height-mode="${mode}" type="button">${mode}</button>
+                  `).join("")}
+                </div>
+              </div>
+            </details>
+          </section>
+
+          ${this._generationError ? `<div class="generation-error" role="alert"><ha-icon icon="mdi:alert-circle-outline"></ha-icon><span>${escapeHtml(this._generationError)}</span></div>` : ""}
+          <button class="primary-action" id="generate" ${canGenerate ? "" : "disabled"} type="button">
+            <ha-icon icon="${this._generating ? "mdi:loading" : "mdi:creation-outline"}" class="${this._generating ? "spin" : ""}"></ha-icon>
+            ${this._generating ? "Designing card" : hasResult ? "Generate another" : "Generate card"}
           </button>
           ${this._selectedEntityCount() ? "" : '<p class="warning">Select at least one entity before generating.</p>'}
-
-          <section class="system-card">
-            <div class="ai-status">
-              <strong>${this._settings.ai_enabled ? "AI ready" : "API key required"}</strong>
-              <span>${escapeHtml(this._settings.ai_enabled ? this._settings.model : "Add an OpenAI API key in integration options")}</span>
-            </div>
-            <div class="domain-list">
-              ${this._domainStats().map(([domain, count]) => `<span>${escapeHtml(domain)} ${count}</span>`).join("")}
-            </div>
-          </section>
+          <p class="model-caption">${escapeHtml(this._settings.ai_enabled ? this._settings.model : "Configure the OpenAI API key in integration options")}</p>
         </aside>
 
         <section class="workspace">
           <header class="workspace-header">
             <div>
-              <span>Schema v2</span>
-              <h2>${escapeHtml(this._result?.card_config?.card?.intent?.title || "Card preview")}</h2>
-              <p>${escapeHtml(this._result?.summary || "Generate a v2 UrDash card from selected Home Assistant entities.")}</p>
-              ${this._result?.error ? `<p class="error-text">${escapeHtml(this._result.error)}</p>` : ""}
+              <span>03 · Live preview</span>
+              <h2>${escapeHtml(this._result?.card_config?.card?.intent?.title || "Your card will appear here")}</h2>
+              <p>${escapeHtml(this._result?.summary || "Preview uses your current Home Assistant state and real card controls.")}</p>
             </div>
             <div class="toolbar">
-              <button id="copyYaml" ${this._result?.yaml ? "" : "disabled"} type="button">Copy YAML</button>
-              <button id="copyJson" ${this._result?.json ? "" : "disabled"} type="button">Copy JSON</button>
+              <div class="preview-sizes" aria-label="Preview width">
+                ${[
+                  ["narrow", "mdi:cellphone", "Narrow"],
+                  ["medium", "mdi:tablet", "Medium"],
+                  ["wide", "mdi:monitor", "Wide"],
+                ].map(([size, icon, label]) => `<button class="${this._previewSize === size ? "active" : ""}" data-preview-size="${size}" title="${label} preview" type="button"><ha-icon icon="${icon}"></ha-icon></button>`).join("")}
+              </div>
+              <span class="live-indicator"><i></i>Live controls</span>
             </div>
           </header>
 
-          <section class="preview-card">
-            <div id="previewHost" class="preview-host">
+          <section class="preview-stage">
+            <div id="previewHost" class="preview-host ${this._previewSize}">
               ${this._result?.card_config ? "" : this._emptyPreviewMarkup("Generate a card to see the real UrDash v2 renderer.")}
             </div>
           </section>
 
-          <section class="output-grid">
-            <article class="output-panel">
-              <div class="panel-title">
-                <div>
-                  <span>Lovelace</span>
-                  <h2>YAML</h2>
-                </div>
-              </div>
-              <pre>${escapeHtml(this._result?.yaml || "type: custom:urdash-card\nurdash_schema: 2\nheight_mode: auto\ncard:\n  intent:\n    ...")}</pre>
-            </article>
-            <article class="output-panel">
-              <div class="panel-title">
-                <div>
-                  <span>Raw</span>
-                  <h2>JSON</h2>
-                </div>
-              </div>
-              <pre>${escapeHtml(this._result?.json || "{\n  \"urdash_schema\": 2\n}")}</pre>
-            </article>
-          </section>
+          <footer class="result-actions">
+            <button class="secondary-action" id="toggleConfig" ${hasResult ? "" : "disabled"} type="button"><ha-icon icon="mdi:code-json"></ha-icon>Configuration</button>
+            <button class="secondary-action" id="copyYaml" ${this._result?.yaml ? "" : "disabled"} type="button"><ha-icon icon="mdi:content-copy"></ha-icon>Copy YAML</button>
+            <button class="install-action" disabled title="Dashboard installation is planned for the next phase" type="button"><ha-icon icon="mdi:view-dashboard-plus-outline"></ha-icon>Add to dashboard</button>
+          </footer>
+
+          ${this._showConfig && hasResult ? `<section class="config-drawer">
+            <div class="config-header"><h2>Generated configuration</h2><button id="copyJson" type="button">Copy JSON</button></div>
+            <pre>${escapeHtml(this._result.json || this._result.yaml)}</pre>
+          </section>` : ""}
         </section>
       </main>
     `;
 
     this.shadowRoot.querySelector("#generate").addEventListener("click", () => this._generate());
     this.shadowRoot.querySelector("#copyYaml").addEventListener("click", () => this._copyYaml());
-    this.shadowRoot.querySelector("#copyJson").addEventListener("click", () => this._copyJson());
+    this.shadowRoot.querySelector("#copyJson")?.addEventListener("click", () => this._copyJson());
+    this.shadowRoot.querySelector("#toggleConfig").addEventListener("click", () => {
+      this._captureDraft();
+      this._showConfig = !this._showConfig;
+      this._render();
+    });
     this.shadowRoot.querySelector("#entityFilter").addEventListener("input", (event) => this._setEntityFilter(event.target.value));
+    this.shadowRoot.querySelector("#areaFilter").addEventListener("change", (event) => this._setAreaFilter(event.target.value));
+    this.shadowRoot.querySelector("#selectedOnly").addEventListener("change", (event) => this._setSelectedOnly(event.target.checked));
     this.shadowRoot.querySelector("#selectAllEntities").addEventListener("click", () => this._selectAllEntities());
     this.shadowRoot.querySelector("#selectNoEntities").addEventListener("click", () => this._selectNoEntities());
-    this.shadowRoot.querySelector("#themeButtons").addEventListener("click", (event) => {
-      const button = event.target.closest("button[data-theme]");
-      if (button) this._setTheme(button.dataset.theme);
-    });
+    this.shadowRoot.querySelector("#styleSelect").addEventListener("change", (event) => this._setStyle(event.target.value));
     this.shadowRoot.querySelector("#heightButtons").addEventListener("click", (event) => {
       const button = event.target.closest("button[data-height-mode]");
       if (button) this._setHeightMode(button.dataset.heightMode);
@@ -371,12 +467,11 @@ class UrDashPanel extends HTMLElement {
       if (target.matches("input[data-entity-id]")) this._toggleEntity(target.dataset.entityId, target.checked);
       if (target.matches("input[data-group-id]")) this._toggleEntityGroup(target.dataset.groupId, target.checked);
     });
+    this.shadowRoot.querySelector(".preview-sizes").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-preview-size]");
+      if (button) this._setPreviewSize(button.dataset.previewSize);
+    });
     if (this._result?.card_config) this._mountPreview();
-  }
-
-  _currentRequest() {
-    const existing = this.shadowRoot.querySelector("#request")?.value;
-    return existing || "Create a beautiful and useful room control card that combines lights, climate, covers, and key sensors.";
   }
 
   _entitySelectionMarkup() {
@@ -918,15 +1013,312 @@ const styles = `
     to { opacity: 1; transform: scale(1); }
   }
 
+  /* Generation console */
+  :host {
+    --console-ink: #17272a;
+    --console-muted: #657477;
+    --console-line: #d7e0df;
+    --console-surface: #ffffff;
+    --console-soft: #f2f6f5;
+    --console-accent: #176b61;
+    --console-warm: #df6f45;
+  }
+
+  .studio {
+    grid-template-columns: minmax(350px, 410px) minmax(0, 1fr);
+    gap: 0;
+    padding: 0;
+    background: #e9efed;
+  }
+
+  .composer, .workspace {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .composer {
+    max-height: 100vh;
+    gap: 0;
+    overflow-y: auto;
+    padding: 0;
+    background: var(--console-surface);
+    border-right: 1px solid var(--console-line);
+  }
+
+  .brand {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    min-height: 72px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--console-line);
+    background: rgba(255,255,255,0.96);
+    backdrop-filter: blur(14px);
+  }
+
+  .brand-mark { background: #173b39; }
+  .brand-mark ha-icon { --mdc-icon-size: 21px; }
+  .brand h1 { font-size: 18px; letter-spacing: 0; }
+
+  .ready-state {
+    margin-left: auto;
+    color: #9b3d32;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .ready-state::before {
+    content: "";
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .ready-state.ready { color: #16806c; }
+
+  .composer-section {
+    display: grid;
+    gap: 12px;
+    padding: 18px;
+    border-bottom: 1px solid var(--console-line);
+  }
+
+  .composer-section .panel-title span { color: var(--console-warm); }
+  .composer-section .panel-title h2 { margin-top: 2px; font-size: 15px; }
+
+  select {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid #c8d4d3;
+    border-radius: 7px;
+    padding: 0 36px 0 11px;
+    color: var(--console-ink);
+    background: #fff;
+    font: inherit;
+  }
+
+  textarea:focus, input:focus, select:focus, button:focus-visible {
+    outline: 3px solid rgba(23,107,97,0.2);
+    outline-offset: 1px;
+    border-color: var(--console-accent);
+  }
+
+  .search-control {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    border: 1px solid #c8d4d3;
+    border-radius: 7px;
+    padding-left: 10px;
+    background: #fff;
+  }
+
+  .search-control ha-icon { --mdc-icon-size: 18px; color: var(--console-muted); }
+  .search-control input { min-width: 0; border: 0; padding: 10px 8px; background: transparent; }
+  .search-control input:focus { outline: 0; }
+
+  .entity-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+  }
+
+  .entity-filters > label:first-child { display: grid; gap: 5px; }
+  .entity-filters label > span { color: var(--console-muted); font-size: 11px; font-weight: 800; }
+  .entity-filters select { min-height: 38px; }
+
+  .selected-toggle {
+    min-height: 38px;
+    display: flex;
+    gap: 7px;
+    align-items: center;
+    padding: 0 9px;
+    border: 1px solid var(--console-line);
+    border-radius: 7px;
+    background: var(--console-soft);
+  }
+
+  .entity-groups { max-height: 310px; padding-right: 3px; }
+  .entity-panel, .system-card { border: 0; }
+
+  .style-summary {
+    display: grid;
+    grid-template-columns: 50px minmax(0, 1fr);
+    gap: 11px;
+    align-items: center;
+    min-height: 58px;
+    padding: 8px;
+    border: 1px solid var(--console-line);
+    border-radius: 7px;
+    background: var(--console-soft);
+  }
+
+  .style-summary p { color: #526366; font-size: 12px; line-height: 1.4; }
+  .style-swatch { height: 40px; border-radius: 5px; background: linear-gradient(145deg, #173b39, #d8ebe4 65%, #df6f45); }
+  .style-summary[data-style="minimal"] .style-swatch { background: linear-gradient(145deg, #fafafa 0 48%, #1c292b 49% 54%, #dfe5e4 55%); }
+  .style-summary[data-style="glassmorphism"] .style-swatch { background: linear-gradient(145deg, #63b9b0, #d7d2f2 50%, #f4ae8c); }
+  .style-summary[data-style="bento"] .style-swatch { background: conic-gradient(from 90deg, #dce9e6, #176b61, #f1b867, #dce9e6); }
+  .style-summary[data-style="editorial"] .style-swatch { background: linear-gradient(90deg, #f4efe6 0 58%, #1d292b 58% 69%, #b64736 69%); }
+  .style-summary[data-style="material"] .style-swatch { background: linear-gradient(145deg, #1976d2, #e3f2fd 52%, #ffb300); }
+  .style-summary[data-style="neobrutalist"] .style-swatch { background: linear-gradient(145deg, #f7df47 0 45%, #111 46% 53%, #f07167 54%); }
+  .style-summary[data-style="futuristic"] .style-swatch { background: radial-gradient(circle, #55e9d0, #15373e 45%, #071315 70%); }
+  .style-summary[data-style="organic"] .style-swatch { background: radial-gradient(circle at 30% 30%, #eef0d6, #7ca982 45%, #28433c); }
+  .style-summary[data-style="monochrome"] .style-swatch { background: linear-gradient(145deg, #fff, #777 50%, #111); }
+  .style-summary[data-style="luxury"] .style-swatch { background: linear-gradient(145deg, #111818, #bf9b58 50%, #f3e7ca); }
+  .style-summary[data-style="playful"] .style-swatch { background: conic-gradient(#ef6f6c, #ffd166, #4ecdc4, #6c63ff, #ef6f6c); }
+
+  .field > span em {
+    margin-left: 6px;
+    color: #879395;
+    font-size: 10px;
+    font-style: normal;
+    font-weight: 700;
+  }
+
+  .prompt-field textarea { min-height: 130px; }
+
+  .advanced-options {
+    border-top: 1px solid var(--console-line);
+    padding-top: 10px;
+  }
+
+  .advanced-options summary { cursor: pointer; color: #526366; font-size: 12px; font-weight: 800; }
+  .advanced-options .field { margin-top: 10px; }
+
+  .primary-action {
+    min-height: 48px;
+    margin: 16px 18px 5px;
+    background: var(--console-accent);
+  }
+
+  .primary-action ha-icon { --mdc-icon-size: 19px; }
+  .primary-action .spin { width: auto; height: auto; animation: rotate 1s linear infinite; background: transparent; }
+  .model-caption { padding: 0 18px 18px; color: #7c898b; font-size: 11px; text-align: center; }
+  .warning { padding: 3px 18px 0; }
+
+  .generation-error {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
+    margin: 14px 18px 0;
+    border-left: 3px solid #b84c3f;
+    padding: 10px;
+    background: #fff2ef;
+    color: #87382e;
+    font-size: 12px;
+  }
+
+  .generation-error ha-icon { --mdc-icon-size: 18px; }
+
+  .workspace {
+    min-height: 100vh;
+    padding: 22px clamp(16px, 3vw, 42px) 28px;
+    background: #e9efed;
+  }
+
+  .workspace-header { min-height: 66px; }
+  .workspace-header h2 { font-size: 22px; letter-spacing: 0; }
+  .workspace-header p { max-width: 640px; margin-top: 4px; }
+
+  .toolbar { flex-wrap: wrap; justify-content: flex-end; }
+  .preview-sizes { display: flex; gap: 3px; padding: 3px; border: 1px solid #cbd6d5; border-radius: 7px; background: #f7f9f8; }
+  .preview-sizes button { width: 36px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; color: #5f6e71; cursor: pointer; }
+  .preview-sizes button.active { background: #fff; color: var(--console-accent); box-shadow: 0 1px 4px rgba(24,48,48,0.18); }
+  .preview-sizes ha-icon { --mdc-icon-size: 18px; }
+
+  .live-indicator { color: #506265; font-size: 11px; font-weight: 800; white-space: nowrap; }
+  .live-indicator i { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #1a9b76; box-shadow: 0 0 0 3px rgba(26,155,118,0.12); }
+
+  .preview-stage {
+    min-height: 540px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    overflow: auto;
+    padding: clamp(16px, 3vw, 42px);
+    border: 1px solid #d1dbda;
+    border-radius: 8px;
+    background-color: #f7f9f8;
+    background-image: linear-gradient(#e7eceb 1px, transparent 1px), linear-gradient(90deg, #e7eceb 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .preview-host { width: 100%; transition: width 180ms ease; }
+  .preview-host.narrow { width: min(100%, 390px); }
+  .preview-host.medium { width: min(100%, 680px); }
+  .preview-host.wide { width: min(100%, 1040px); }
+  .empty-preview { min-height: 460px; border-color: #b4c3c1; background: rgba(255,255,255,0.72); }
+
+  .result-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .result-actions button, .config-header button {
+    min-height: 42px;
+    display: inline-flex;
+    gap: 7px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #c8d4d3;
+    border-radius: 7px;
+    padding: 0 13px;
+    background: #fff;
+    color: #2e494c;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .result-actions ha-icon { --mdc-icon-size: 18px; }
+  .result-actions .install-action { border-color: #173b39; background: #173b39; color: #fff; }
+  .result-actions button:disabled { cursor: not-allowed; opacity: 0.45; }
+
+  .config-drawer { display: grid; gap: 10px; border-top: 1px solid #ccd7d5; padding-top: 16px; }
+  .config-header { display: flex; justify-content: space-between; align-items: center; }
+  .config-header h2 { font-size: 15px; }
+
+  @keyframes rotate { to { transform: rotate(360deg); } }
+
   @media (max-width: 980px) {
     .studio {
       grid-template-columns: 1fr;
-      padding: 12px;
+      padding: 0;
     }
+
+    .composer { max-height: none; border-right: 0; border-bottom: 1px solid var(--console-line); }
+    .workspace { min-height: auto; }
+    .preview-stage { min-height: 420px; padding: 14px; }
+    .empty-preview { min-height: 350px; }
 
     .output-grid {
       grid-template-columns: 1fr;
     }
+  }
+
+  @media (max-width: 560px) {
+    .brand { min-height: 64px; padding: 10px 12px; }
+    .brand-mark { width: 38px; height: 38px; }
+    .brand p { display: none; }
+    .composer-section { padding: 15px 12px; }
+    .entity-actions, .entity-filters { grid-template-columns: 1fr; }
+    .entity-actions > div { justify-content: flex-end; }
+    .selected-toggle { justify-content: center; }
+    .primary-action { margin-inline: 12px; }
+    .model-caption { padding-inline: 12px; }
+    .workspace { padding: 14px 10px 20px; }
+    .workspace-header { align-items: flex-start; flex-direction: column; }
+    .toolbar { width: 100%; justify-content: space-between; }
+    .preview-stage { min-height: 360px; padding: 8px; }
+    .empty-preview { min-height: 300px; padding: 18px; }
+    .result-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .result-actions .install-action { grid-column: 1 / -1; }
   }
 `;
 

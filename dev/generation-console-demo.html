@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UrDash Generation Console</title>
+    <style>
+      html, body { margin: 0; min-height: 100%; background: #e9efed; }
+      ha-icon { display: inline-grid; place-items: center; width: 24px; height: 24px; }
+      ha-icon::before { content: "◇"; font-size: 16px; }
+    </style>
+  </head>
+  <body>
+    <urdash-panel></urdash-panel>
+    <script type="module">
+      class DemoUrDashCard extends HTMLElement {
+        setConfig(config) {
+          this.config = config;
+          this.innerHTML = `
+            <div style="min-height:360px;padding:28px;border-radius:8px;background:#102b2c;color:white;box-shadow:0 28px 70px rgba(16,43,44,.24);font:14px system-ui">
+              <div style="display:flex;justify-content:space-between;color:#8fd2c4"><span>Living room</span><span>All systems ready</span></div>
+              <div style="display:grid;grid-template-columns:1.3fr .7fr;gap:18px;margin-top:72px;align-items:end">
+                <div><div style="font-size:52px;font-weight:300">23.5°</div><div style="color:#a9bfbd">Balanced comfort · 48% humidity</div></div>
+                <div style="height:118px;border:1px solid #39716d;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,#2c7770,#102b2c 68%)">Climate<br>Auto</div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:64px">
+                <button style="padding:14px;border:0;border-radius:7px;background:#e7fbf5;color:#173b39">Lights</button>
+                <button style="padding:14px;border:1px solid #416866;border-radius:7px;background:transparent;color:white">Shades</button>
+                <button style="padding:14px;border:1px solid #416866;border-radius:7px;background:transparent;color:white">Scene</button>
+              </div>
+            </div>`;
+        }
+        set hass(value) { this._hass = value; }
+      }
+      customElements.define("urdash-card", DemoUrDashCard);
+
+      await import("/custom_components/urdash/frontend/urdash-panel.js");
+
+      const entities = [
+        ["light.living_room", "Ceiling lights", "Lighting", "Living Room"],
+        ["light.floor_lamp", "Floor lamp", "Lighting", "Living Room"],
+        ["climate.living_room", "Living room climate", "Climate", "Living Room"],
+        ["cover.living_room", "Window shades", "Shades", "Living Room"],
+        ["sensor.living_temperature", "Temperature", "Room sensors", "Living Room"],
+        ["sensor.living_humidity", "Humidity", "Room sensors", "Living Room"],
+        ["media_player.kitchen", "Kitchen speaker", "Kitchen audio", "Kitchen"],
+        ["weather.home", "Home weather", "Weather station", "Home"],
+      ].map(([entity_id, name, device_name, area_name], index) => ({
+        entity_id, name, device_name, area_name, device_id: `device-${device_name}`,
+        domain: entity_id.split(".")[0], state: index % 2 ? "off" : "on", attributes: {},
+      }));
+
+      const stylePresets = [
+        ["auto", "AI decides", "Choose the visual language from the request and device context."],
+        ["minimal", "Minimal", "Restrained typography, generous space, and essential controls."],
+        ["aurora", "Aurora", "Luminous color, atmospheric depth, and refined motion."],
+        ["glassmorphism", "Glassmorphism", "Translucent layers, subtle borders, and dimensional light."],
+        ["bento", "Bento", "Clear modular hierarchy with varied scale and strong scanning."],
+        ["editorial", "Editorial", "Expressive type, asymmetric rhythm, and information-led composition."],
+        ["material", "Material", "Familiar surfaces, clear elevation, and direct interaction states."],
+        ["neobrutalist", "Neo-brutalist", "Bold contrast, decisive outlines, and intentionally direct controls."],
+        ["futuristic", "Futuristic", "Technical precision, dark depth, telemetry, and controlled glow."],
+        ["organic", "Organic", "Soft geometry, natural color, and calm spatial flow."],
+        ["monochrome", "Monochrome", "Tonal hierarchy, graphic contrast, and minimal color dependence."],
+        ["luxury", "Luxury", "Quiet drama, polished detail, and premium restrained accents."],
+        ["playful", "Playful", "Friendly color, expressive shapes, and lively purposeful motion."],
+      ].map(([id, label, description]) => ({ id, label, description, theme: "" }));
+
+      document.querySelector("urdash-panel").hass = {
+        states: Object.fromEntries(entities.map((entity) => [entity.entity_id, entity])),
+        connection: {
+          sendMessagePromise: async ({ type }) => type === "urdash/entities"
+            ? { entities }
+            : { ai_enabled: true, model: "gpt-5.2", default_theme: "aurora", default_height_mode: "auto", style_presets: stylePresets },
+        },
+      };
+    </script>
+  </body>
+</html>

@@ -1013,6 +1013,8 @@ async def async_generate_with_openai(
     available_services: set[str] | None,
     theme: str,
     height_mode: str,
+    style: str = "auto",
+    style_guidance: str = "Choose the most appropriate visual language for this request.",
     _repair_attempt: bool = False,
 ) -> dict[str, Any]:
     """Generate a v2 UrDash card with the OpenAI Responses API."""
@@ -1031,6 +1033,11 @@ async def async_generate_with_openai(
                         "text": json.dumps(
                             {
                                 "request": request,
+                                "visual_style": {
+                                    "id": style,
+                                    "guidance": style_guidance,
+                                    "layout_constraint": "none",
+                                },
                                 "preferred_theme": theme,
                                 "height_mode": height_mode,
                                 "entity_capability_schema": CAPABILITY_DESCRIPTOR_VERSION,
@@ -1106,6 +1113,8 @@ async def async_generate_with_openai(
                 entities=entities,
                 available_services=available_services,
                 theme=theme,
+                style=style,
+                style_guidance=style_guidance,
                 height_mode=height_mode,
                 _repair_attempt=True,
             )
