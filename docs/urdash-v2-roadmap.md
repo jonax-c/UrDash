@@ -181,7 +181,9 @@ Implemented foundation:
 - [x] Add fan controls for speed, oscillation, direction, and presets.
 - [x] Add media transport, volume, mute, seek, source, sound mode, shuffle, and
   repeat controls.
-- [ ] Add security, alarm, lock, camera, and siren controls with risk policy.
+- [x] Add credential-safe security, alarm, lock, and siren controls with risk
+  policy.
+- [ ] Add a bounded Home Assistant-local camera/image primitive.
 - [ ] Add vacuum, valve, humidifier, water heater, remote, and mower controls.
 - [ ] Add generic button, toggle, number, select, text, date, and time controls.
 - [ ] Use Home Assistant min/max/step/options instead of hardcoded values.

@@ -849,6 +849,15 @@ def _validate_action_data(
 ) -> None:
     if not isinstance(data, dict):
         return
+    if "code" in data:
+        _diagnostic(
+            diagnostics,
+            f"{path}.code",
+            "action.embedded_credential",
+            "Alarm codes and credentials cannot be stored in an UrDash card.",
+            "Remove the code and use Home Assistant More Info for credential entry.",
+        )
+        return
     parameters = policy.get("parameters", {})
     for name in policy.get("required", []):
         if name not in data:

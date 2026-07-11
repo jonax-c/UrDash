@@ -168,6 +168,16 @@ card._hass = {
         sound_mode_list: ["Stereo", "Movie", "Night"],
       },
     },
+    "alarm_control_panel.home": {
+      entity_id: "alarm_control_panel.home",
+      state: "disarmed",
+      attributes: { supported_features: 63 },
+    },
+    "siren.house": {
+      entity_id: "siren.house",
+      state: "off",
+      attributes: { available_tones: ["alarm", "warning"] },
+    },
   },
   services: {
     light: { turn_on: {} },
@@ -175,6 +185,8 @@ card._hass = {
     cover: { open_cover: {}, set_cover_position: {}, set_cover_tilt_position: {} },
     lock: { unlock: {} },
     media_player: { media_seek: {}, volume_set: {}, volume_mute: {}, select_source: {} },
+    alarm_control_panel: { alarm_disarm: {}, alarm_arm_home: {}, alarm_trigger: {} },
+    siren: { turn_on: {}, turn_off: {} },
   },
   callService: async () => {
     serviceCalls += 1;
@@ -323,6 +335,24 @@ assert.equal(card._actionAllowed(seekAction), true);
 assert.deepEqual(card._resolveActionData(seekAction.data, { value: 120 }), { seek_position: 120 });
 assert.equal(card._entityParameterAllowed(seekAction, "seek_position", 244), true);
 assert.equal(card._entityParameterAllowed(seekAction, "seek_position", 245), false);
+const disarmAction = {
+  type: "service",
+  domain: "alarm_control_panel",
+  service: "alarm_disarm",
+  entity_id: "alarm_control_panel.home",
+};
+const sirenAction = {
+  type: "service",
+  domain: "siren",
+  service: "turn_on",
+  entity_id: "siren.house",
+  data: { duration: 15, volume_level: 0.5, tone: "alarm" },
+};
+assert.equal(card._actionAllowed(disarmAction), true);
+assert.equal(card._requiresConfirmation(disarmAction), true);
+assert.equal(card._actionAllowed(sirenAction), true);
+assert.equal(card._requiresConfirmation(sirenAction), true);
+assert.equal(card._actionAllowed({ ...disarmAction, data: { code: "1234" } }), false);
 
 const dependencies = card._collectEntityDependencies(validConfig);
 assert.deepEqual([...dependencies], []);

@@ -2096,6 +2096,7 @@ class UrDashCard extends HTMLElement {
 
   _actionDataAllowed(action, policy, data, allowTemplates) {
     if (!policy || !data || typeof data !== "object" || Array.isArray(data)) return false;
+    if (Object.prototype.hasOwnProperty.call(data, "code")) return false;
     const parameters = policy.parameters || {};
     const required = policy.required || [];
     if (required.some((name) => !(name in data))) return false;

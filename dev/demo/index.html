@@ -153,7 +153,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.10");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.11");
 
       const hass = {
         config: {
@@ -218,6 +218,14 @@
           "binary_sensor.kitchen_window": state("binary_sensor.kitchen_window", "off", "Kitchen"),
           "binary_sensor.garage_motion": state("binary_sensor.garage_motion", "on", "Garage Motion"),
           "lock.front_door": state("lock.front_door", "locked", "Front Lock"),
+          "alarm_control_panel.home_security": state("alarm_control_panel.home_security", "disarmed", "Home Security", {
+            supported_features: 63,
+            code_format: null,
+            code_arm_required: false,
+          }),
+          "siren.house": state("siren.house", "off", "House Siren", {
+            available_tones: ["alarm", "warning", "doorbell"],
+          }),
           "lock.garage_entry": state("lock.garage_entry", "locked", "Garage Lock"),
           "weather.home": state("weather.home", "partlycloudy", "Home Weather", { supported_features: 1, temperature: 27, temperature_unit: "°C", humidity: 63 }),
           "sensor.outdoor_humidity": state("sensor.outdoor_humidity", "63", "Outdoor Humidity", { unit_of_measurement: "%" }),
@@ -327,6 +335,10 @@
         {
           title: "Capability-driven Media Studio",
           config: capabilityMediaCard(),
+        },
+        {
+          title: "Capability-driven Security Studio",
+          config: capabilitySecurityCard(),
         },
         {
           title: "Live Weather Forecast",
@@ -1162,6 +1174,117 @@
                           { type: "toggle", entity: mediaEntity, label: "Shuffle", bind: { value: "attributes.shuffle" }, action: action("shuffle_set", { shuffle: localValue }) },
                         ],
                       },
+                    ],
+                  },
+                ],
+              },
+            }],
+          },
+        });
+      }
+
+      function capabilitySecurityCard() {
+        const alarm = "alarm_control_panel.home_security";
+        const lock = "lock.front_door";
+        const siren = "siren.house";
+        const action = (domain, service, entity_id, data = undefined, confirmation = undefined) => ({
+          type: "service", domain, service, entity_id,
+          ...(data ? { data } : {}),
+          ...(confirmation ? { confirmation: { required: true, text: confirmation } } : {}),
+        });
+        const alarmAction = (service, label) => action("alarm_control_panel", service, alarm, undefined, label);
+        return baseCard({
+          intent: {
+            goal: "security",
+            title: "Home Security",
+            summary: "A credential-free security surface with alarm modes, entry lock, and confirmed siren controls.",
+            risk_level: "high",
+            primary_entities: [alarm, lock, siren],
+            primary_actions: [
+              "alarm_control_panel.alarm_arm_home", "alarm_control_panel.alarm_arm_away",
+              "alarm_control_panel.alarm_arm_night", "alarm_control_panel.alarm_disarm",
+              "lock.lock", "lock.unlock", "siren.turn_on", "siren.turn_off",
+            ],
+          },
+          layout: {
+            type: "grid",
+            columns: 12,
+            density: "comfortable",
+            theme: "graphite",
+            blocks: [{
+              id: "security-command",
+              kind: "component_tree",
+              grid: { col: 1, row: 1, w: 12, h: 9 },
+              presentation: { surface: "naked", align: "stretch", scale: "normal" },
+              component: {
+                type: "surface",
+                style: { surface: "solid", shape: "soft", accent: "#d36a5d" },
+                layout: { width: "fill", direction: "column", padding: "md", gap: "md", align: "stretch" },
+                children: [
+                  {
+                    type: "row",
+                    layout: { width: "fill", gap: "md", align: "center" },
+                    children: [
+                      { type: "icon", icon: "mdi:shield-home", style: { surface: "glass", shape: "circle", size: "xl", accent: "#df7d70" }, layout: { padding: "sm" } },
+                      {
+                        type: "column",
+                        layout: { grow: 1, gap: "xs", align: "start" },
+                        children: [
+                          { type: "text", text: "Security command", style: { size: "lg", emphasis: "high" } },
+                          { type: "value", entity: alarm, bind: { value: "state" }, label: "Alarm status", style: { size: "sm", emphasis: "normal" } },
+                        ],
+                      },
+                      { type: "value", entity: lock, bind: { value: "state" }, label: "Front door", style: { size: "md", emphasis: "high" } },
+                    ],
+                  },
+                  {
+                    type: "column",
+                    layout: { width: "fill", gap: "sm", align: "stretch" },
+                    children: [
+                      { type: "text", text: "Arm mode", style: { size: "sm", emphasis: "low" } },
+                      {
+                        type: "wrap",
+                        layout: { width: "fill", gap: "sm", align: "center" },
+                        children: [
+                          { type: "button", label: "Home", icon: "mdi:home-lock", style: { surface: "soft", shape: "pill" }, action: action("alarm_control_panel", "alarm_arm_home", alarm) },
+                          { type: "button", label: "Away", icon: "mdi:shield-lock", style: { surface: "soft", shape: "pill" }, action: action("alarm_control_panel", "alarm_arm_away", alarm) },
+                          { type: "button", label: "Night", icon: "mdi:weather-night", style: { surface: "soft", shape: "pill" }, action: action("alarm_control_panel", "alarm_arm_night", alarm) },
+                          { type: "button", label: "Vacation", icon: "mdi:bag-suitcase", style: { surface: "soft", shape: "pill" }, action: action("alarm_control_panel", "alarm_arm_vacation", alarm) },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    type: "row",
+                    style: { surface: "glass", shape: "soft" },
+                    layout: { width: "fill", gap: "md", padding: "sm", align: "center" },
+                    children: [
+                      { type: "icon", icon: "mdi:lock", style: { size: "lg", accent: "#73bcae" } },
+                      { type: "value", entity: lock, bind: { value: "state" }, label: "Front door lock", layout: { grow: 1 }, style: { emphasis: "high" } },
+                      { type: "button", label: "Lock", icon: "mdi:lock", style: { surface: "soft", shape: "pill" }, action: action("lock", "lock", lock) },
+                      { type: "button", label: "Unlock", icon: "mdi:lock-open", style: { surface: "ghost", shape: "pill", tone: "alert" }, action: action("lock", "unlock", lock, undefined, "Unlock the front door?") },
+                    ],
+                  },
+                  {
+                    type: "row",
+                    style: { surface: "glass", shape: "soft" },
+                    layout: { width: "fill", gap: "md", padding: "sm", align: "center" },
+                    children: [
+                      { type: "icon", icon: "mdi:bullhorn", style: { size: "lg", accent: "#df7d70" } },
+                      { type: "value", entity: siren, bind: { value: "state" }, label: "House siren", layout: { grow: 1 }, style: { emphasis: "high" } },
+                      {
+                        type: "button", label: "Sound siren", icon: "mdi:alarm-light", style: { surface: "solid", shape: "pill", tone: "alert" },
+                        action: action("siren", "turn_on", siren, { duration: 15, volume_level: 0.5, tone: "alarm" }, "Sound the house siren for 15 seconds?"),
+                      },
+                      { type: "button", label: "Stop", icon: "mdi:stop", style: { surface: "soft", shape: "pill" }, action: action("siren", "turn_off", siren) },
+                    ],
+                  },
+                  {
+                    type: "wrap",
+                    layout: { width: "fill", gap: "sm", justify: "end", align: "center" },
+                    children: [
+                      { type: "button", label: "Disarm", icon: "mdi:shield-off", style: { surface: "ghost", shape: "pill", tone: "alert" }, action: alarmAction("alarm_disarm", "Disarm the home security system?") },
+                      { type: "button", label: "Trigger alarm", icon: "mdi:alert-octagon", style: { surface: "ghost", shape: "pill", tone: "alert" }, action: alarmAction("alarm_trigger", "Trigger the home alarm now?") },
                     ],
                   },
                 ],

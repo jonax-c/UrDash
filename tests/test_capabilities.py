@@ -200,6 +200,32 @@ class CapabilityDescriptorTests(unittest.TestCase):
         self.assertEqual(operation(descriptor, "set_position")["parameters"]["position"]["max"], 100)
         self.assertEqual(operation(descriptor, "set_tilt_position")["parameters"]["tilt_position"]["min"], 0)
 
+    def test_alarm_marks_operations_that_require_user_code(self):
+        descriptor = capabilities.build_entity_capability_descriptor(
+            entity(
+                "alarm_control_panel.home",
+                "disarmed",
+                {
+                    "supported_features": sum(capabilities.ALARM_FEATURES.values()),
+                    "code_format": "number",
+                    "code_arm_required": True,
+                },
+            )
+        )
+        self.assertTrue(operation(descriptor, "disarm")["requires_user_code"])
+        self.assertTrue(operation(descriptor, "arm_home")["requires_user_code"])
+        self.assertNotIn("requires_user_code", operation(descriptor, "trigger"))
+        self.assertEqual(operation(descriptor, "disarm")["risk"], "high")
+
+    def test_siren_exposes_bounded_confirmed_parameters(self):
+        descriptor = capabilities.build_entity_capability_descriptor(
+            entity("siren.house", "off", {"available_tones": ["alarm", "warning"]})
+        )
+        activate = operation(descriptor, "turn_on")
+        self.assertEqual(activate["risk"], "high")
+        self.assertEqual(activate["parameters"]["duration"]["max"], 3600)
+        self.assertEqual(activate["parameters"]["tone"]["options"], ["alarm", "warning"])
+
     def test_media_player_uses_feature_flags_and_source_options(self):
         supported = (
             capabilities.MEDIA_PLAYER_FEATURES["pause"]

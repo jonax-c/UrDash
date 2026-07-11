@@ -212,6 +212,7 @@ def build_entity_capability_descriptor(
         *,
         parameters: dict[str, Any] | None = None,
         risk: str = "low",
+        requires_user_code: bool = False,
     ) -> None:
         service_id = f"{domain}.{service}"
         if available_services is not None and service_id not in available_services:
@@ -219,6 +220,8 @@ def build_entity_capability_descriptor(
         capability: dict[str, Any] = {"id": operation, "service": service_id, "risk": risk}
         if parameters:
             capability["parameters"] = parameters
+        if requires_user_code:
+            capability["requires_user_code"] = True
         capabilities.append(capability)
 
     if domain == "light":
@@ -403,7 +406,9 @@ def build_entity_capability_descriptor(
         )})
 
     elif domain == "alarm_control_panel":
-        add("disarm", "alarm_disarm", risk="high")
+        has_code = bool(attributes.get("code_format"))
+        arm_requires_code = has_code and bool(attributes.get("code_arm_required"))
+        add("disarm", "alarm_disarm", risk="high", requires_user_code=has_code)
         for feature, operation, service in (
             ("arm_home", "arm_home", "alarm_arm_home"),
             ("arm_away", "arm_away", "alarm_arm_away"),
@@ -413,7 +418,12 @@ def build_entity_capability_descriptor(
             ("trigger", "trigger", "alarm_trigger"),
         ):
             if _has_feature(supported_features, ALARM_FEATURES[feature]):
-                add(operation, service, risk="high" if feature == "trigger" else "medium")
+                add(
+                    operation,
+                    service,
+                    risk="high" if feature == "trigger" else "medium",
+                    requires_user_code=arm_requires_code and feature != "trigger",
+                )
 
     elif domain == "vacuum":
         for feature, operation, service, risk in (

@@ -591,6 +591,33 @@ class CardValidatorTests(unittest.TestCase):
         finally:
             ENTITIES.pop()
 
+    def test_alarm_credentials_are_rejected_from_card_configuration(self):
+        card = base_card(
+            [{
+                "id": "alarm",
+                "kind": "button",
+                "label": "Disarm",
+                "action": {
+                    "type": "service",
+                    "domain": "alarm_control_panel",
+                    "service": "alarm_disarm",
+                    "entity_id": "alarm_control_panel.home",
+                    "data": {"code": "1234"},
+                },
+            }]
+        )
+        ENTITIES.append({
+            "entity_id": "alarm_control_panel.home",
+            "domain": "alarm_control_panel",
+            "state": "armed_home",
+            "attributes": {"supported_features": 63},
+        })
+        try:
+            diagnostics = errors(card, {"alarm_control_panel.alarm_disarm"})
+            self.assertIn("action.embedded_credential", {item["code"] for item in diagnostics})
+        finally:
+            ENTITIES.pop()
+
 
 if __name__ == "__main__":
     unittest.main()
