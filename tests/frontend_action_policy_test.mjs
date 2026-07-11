@@ -236,6 +236,16 @@ let forecastRenders = 0;
 Object.defineProperty(weatherCard, "isConnected", { value: true, configurable: true });
 weatherCard._render = () => { forecastRenders += 1; };
 weatherCard._card = {
+  assets: {
+    icon_sets: [{
+      id: "weather_icons",
+      variants: [
+        { key: "sunny", icon: "mdi:weather-sunny" },
+        { key: "rainy", vector_icon: { viewBox: "0 0 10 10", shapes: [{ type: "circle", cx: 5, cy: 5, r: 3 }] } },
+      ],
+      fallback: { icon: "mdi:weather-cloudy-alert" },
+    }],
+  },
   data_sources: [{
     id: "home_daily",
     type: "weather_forecast",
@@ -290,6 +300,14 @@ assert.equal(weatherCard._evaluateExpression({
   style: "weekday_short",
   locale: "en-US",
 }), "Sat");
+assert.deepEqual(weatherCard._resolveIconAsset({
+  icon_ref: {
+    set: "weather_icons",
+    key: { op: "source", source_id: "home_daily", path: "forecast.0.condition" },
+  },
+}), { icon: "mdi:weather-sunny" });
+assert.deepEqual(weatherCard._resolveIconAsset({ icon_ref: { set: "weather_icons", key: "unknown" } }), { icon: "mdi:weather-cloudy-alert" });
+assert.ok(weatherCard._resolveIconAsset({ icon_ref: { set: "weather_icons", key: "rainy" } }).vector_icon);
 weatherCard.disconnectedCallback();
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(forecastUnsubscribed, true);

@@ -121,6 +121,15 @@ Primary implementation area: `custom_components/urdash/ai_client.py` and
 - [x] Add deterministic subscription, expression, capability, and validation tests.
 - [x] Add a live forecast demo driven by a mocked Home Assistant subscription.
 
+## P0: Reusable Icon Assets
+
+- [x] Define bounded generic icon sets with MDI and declarative vector variants.
+- [x] Resolve icon variants from literal, entity, or data-source expressions.
+- [x] Support reusable icons in blocks, buttons, chips, scene actions, and maps.
+- [x] Apply vector security and performance budgets to reusable artwork.
+- [x] Add fallback behavior, reference validation, and deterministic tests.
+- [x] Refactor the live weather demo to reuse one complete condition icon set.
+
 ## P1: Generic Scene And Component Tree
 
 - [ ] Replace flat-only composition with safe nested containers.

@@ -153,7 +153,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.1");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.2");
 
       const hass = {
         config: {
@@ -375,12 +375,17 @@
         };
       }
 
-      function baseCard({ heightMode = "auto", dataSources, intent, layout }) {
+      function baseCard({ heightMode = "auto", assets, dataSources, intent, layout }) {
         return {
           type: "custom:urdash-card",
           urdash_schema: 2,
           height_mode: heightMode,
-          card: { ...(dataSources ? { data_sources: dataSources } : {}), intent, layout },
+          card: {
+            ...(assets ? { assets } : {}),
+            ...(dataSources ? { data_sources: dataSources } : {}),
+            intent,
+            layout,
+          },
         };
       }
 
@@ -465,22 +470,27 @@
       function liveWeatherForecastCard() {
         const source = (index, field) => ({ op: "source", source_id: "home_daily", path: `forecast.${index}.${field}` });
         const literal = (value) => ({ op: "literal", value });
-        const conditionIcon = (condition) => ({
-          op: "map",
-          args: [condition],
-          cases: [
-            { when: "sunny", value: literal("mdi:weather-sunny") },
-            { when: "clear-night", value: literal("mdi:weather-night") },
-            { when: "partlycloudy", value: literal("mdi:weather-partly-cloudy") },
-            { when: "cloudy", value: literal("mdi:weather-cloudy") },
-            { when: "rainy", value: literal("mdi:weather-rainy") },
-            { when: "pouring", value: literal("mdi:weather-pouring") },
-            { when: "lightning-rainy", value: literal("mdi:weather-lightning-rainy") },
-            { when: "snowy", value: literal("mdi:weather-snowy") },
-            { when: "fog", value: literal("mdi:weather-fog") },
+        const conditionIconRef = (condition) => ({ set: "aurora_weather", key: condition });
+        const weatherIconSet = {
+          id: "aurora_weather",
+          variants: [
+            { key: "sunny", vector_icon: weatherVectorIcon("sun", "#ffb703") },
+            { key: "partlycloudy", vector_icon: weatherVectorIcon("partly", "#70b7c9") },
+            { key: "cloudy", vector_icon: weatherVectorIcon("cloud", "#91a7b0") },
+            { key: "rainy", vector_icon: weatherVectorIcon("rain", "#4f9fc4") },
+            { key: "pouring", vector_icon: weatherVectorIcon("rain", "#327ea5") },
+            { key: "clear-night", icon: "mdi:weather-night" },
+            { key: "lightning", icon: "mdi:weather-lightning" },
+            { key: "lightning-rainy", icon: "mdi:weather-lightning-rainy" },
+            { key: "fog", icon: "mdi:weather-fog" },
+            { key: "hail", icon: "mdi:weather-hail" },
+            { key: "snowy", icon: "mdi:weather-snowy" },
+            { key: "snowy-rainy", icon: "mdi:weather-snowy-rainy" },
+            { key: "windy", icon: "mdi:weather-windy" },
+            { key: "windy-variant", icon: "mdi:weather-windy-variant" },
           ],
-          default: literal("mdi:weather-cloudy-alert"),
-        });
+          fallback: { icon: "mdi:weather-cloudy-alert" },
+        };
         const forecastBlocks = Array.from({ length: 5 }, (_, index) => ({
           id: `live-day-${index}`,
           kind: "value",
@@ -490,7 +500,7 @@
             style: "weekday_short",
             locale: "en-US",
           },
-          icon: conditionIcon(source(index, "condition")),
+          icon_ref: conditionIconRef(source(index, "condition")),
           entity: "weather.home",
           bind: {
             value: {
@@ -513,6 +523,7 @@
           presentation: { surface: "ghost", layer: "base", align: "center", scale: "small" },
         }));
         return baseCard({
+          assets: { icon_sets: [weatherIconSet] },
           dataSources: [{ id: "home_daily", type: "weather_forecast", entity: "weather.home", forecast_type: "daily", limit: 5 }],
           intent: {
             goal: "weather",
@@ -534,7 +545,7 @@
                 entity: "weather.home",
                 bind: { value: "attributes.temperature", unit: "attributes.temperature_unit" },
                 label: { op: "entity", entity_id: "weather.home", path: "state" },
-                icon: conditionIcon({ op: "entity", entity_id: "weather.home", path: "state" }),
+                icon_ref: conditionIconRef({ op: "entity", entity_id: "weather.home", path: "state" }),
                 grid: { col: 1, row: 1, w: 10, h: 3 },
                 style: { accent: "#2c8c99", emphasis: "hero", shape: "soft" },
                 presentation: { surface: "hero", layer: "raised", align: "center", scale: "xl" },

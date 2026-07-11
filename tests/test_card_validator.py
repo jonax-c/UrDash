@@ -351,6 +351,42 @@ class CardValidatorTests(unittest.TestCase):
         self.assertIn("expression.missing_source", codes)
         self.assertIn("expression.invalid_source_path", codes)
 
+    def test_reusable_icon_sets_support_dynamic_keys_and_validate_assets(self):
+        card = base_card()
+        card["card"]["assets"] = {
+            "icon_sets": [
+                {
+                    "id": "weather_icons",
+                    "variants": [
+                        {"key": "sunny", "icon": "mdi:weather-sunny"},
+                        {
+                            "key": "rainy",
+                            "vector_icon": {
+                                "viewBox": "0 0 100 100",
+                                "shapes": [{"type": "circle", "cx": 50, "cy": 50, "r": 20}],
+                            },
+                        },
+                    ],
+                    "fallback": {"icon": "mdi:weather-cloudy-alert"},
+                }
+            ]
+        }
+        block = card["card"]["layout"]["blocks"][0]
+        block["icon_ref"] = {
+            "set": "weather_icons",
+            "key": {"op": "entity", "entity_id": "weather.home", "path": "state"},
+        }
+        self.assertEqual(errors(card), [])
+
+        block["icon_ref"] = {"set": "missing", "key": "sunny"}
+        self.assertIn("asset.missing_set", {item["code"] for item in errors(card)})
+
+        block["icon_ref"] = {"set": "weather_icons", "key": "sunny"}
+        card["card"]["assets"]["icon_sets"][0]["variants"][0]["vector_icon"] = {
+            "shapes": [{"type": "circle", "cx": 1, "cy": 1, "r": 1}]
+        }
+        self.assertIn("asset.invalid_variant", {item["code"] for item in errors(card)})
+
 
 if __name__ == "__main__":
     unittest.main()

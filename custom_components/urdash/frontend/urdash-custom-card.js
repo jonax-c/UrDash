@@ -310,8 +310,7 @@ class UrDashCard extends HTMLElement {
   _createBlockHeader(config) {
     const header = document.createElement("div");
     header.className = "block-header";
-    const iconValue = this._resolveDisplay(config.icon);
-    if (iconValue) header.appendChild(this._icon(iconValue));
+    this._appendResolvedIcon(header, config, this._resolveDisplay(config.title) || "Block icon", "block-header-icon");
     const text = document.createElement("div");
     const titleValue = this._resolveDisplay(config.title);
     if (titleValue) {
@@ -330,7 +329,7 @@ class UrDashCard extends HTMLElement {
   }
 
   _shouldRenderHeader(config) {
-    if (!(config.title || config.subtitle || config.icon)) return false;
+    if (!(config.title || config.subtitle || config.icon || config.icon_ref)) return false;
     if (["ambient", "hero_value", "entity_orbit", "constellation", "radial_scene"].includes(config.kind)) return false;
     if (["naked", "orb"].includes(config.presentation?.surface)) return false;
     return true;
@@ -408,7 +407,9 @@ class UrDashCard extends HTMLElement {
   _iconBlock(config) {
     const wrap = document.createElement("div");
     wrap.className = "icon-orb";
-    wrap.appendChild(this._icon(this._resolveDisplay(config.icon) || "mdi:view-dashboard"));
+    if (!this._appendResolvedIcon(wrap, config, this._resolveDisplay(config.label) || "Icon", "icon-orb-asset")) {
+      wrap.appendChild(this._icon("mdi:view-dashboard"));
+    }
     return wrap;
   }
 
@@ -997,13 +998,13 @@ class UrDashCard extends HTMLElement {
   }
 
   _button(config) {
-    return this._actionButton(config.label || config.title || "Action", config.icon, config.action);
+    return this._actionButton(config.label || config.title || "Action", config.icon, config.action, config.icon_ref);
   }
 
   _buttonGroup(buttons) {
     const group = document.createElement("div");
     group.className = "action-grid";
-    for (const button of buttons.slice(0, 8)) group.appendChild(this._actionButton(button.label, button.icon, button.action));
+    for (const button of buttons.slice(0, 8)) group.appendChild(this._actionButton(button.label, button.icon, button.action, button.icon_ref));
     if (!group.children.length) group.appendChild(this._empty("No actions configured."));
     return group;
   }
@@ -1170,8 +1171,7 @@ class UrDashCard extends HTMLElement {
     for (const chip of chips.slice(0, 12)) {
       const state = this._state(chip.entity);
       const span = document.createElement("span");
-      const icon = this._resolveDisplay(chip.icon);
-      if (icon) span.appendChild(this._icon(icon));
+      this._appendResolvedIcon(span, chip, this._resolveDisplay(chip.label) || "Chip icon", "chip-asset-icon");
       span.append(document.createTextNode(`${this._resolveDisplay(chip.label)}${state ? ` · ${this._humanize(state.state)}` : ""}`));
       group.appendChild(span);
     }
@@ -1187,8 +1187,7 @@ class UrDashCard extends HTMLElement {
     wrap.className = "hero-value";
     if (String(value ?? "").length > 5) wrap.classList.add("hero-value-long");
     else wrap.classList.add("hero-value-short");
-    const icon = this._resolveDisplay(config.icon);
-    if (icon) wrap.appendChild(this._icon(icon));
+    this._appendResolvedIcon(wrap, config, this._resolveDisplay(config.label) || "Status icon", "hero-asset-icon");
     const valueEl = document.createElement("strong");
     valueEl.textContent = this._formatValue(value, unit);
     const label = document.createElement("span");
@@ -1204,7 +1203,9 @@ class UrDashCard extends HTMLElement {
     wrap.className = "ambient-layer";
     const icon = document.createElement("div");
     icon.className = "ambient-icon";
-    icon.appendChild(this._icon(config.icon || "mdi:creation"));
+    if (!this._appendResolvedIcon(icon, config, this._resolveDisplay(config.title) || "Ambient icon", "ambient-asset-icon")) {
+      icon.appendChild(this._icon("mdi:creation"));
+    }
     const text = document.createElement("div");
     text.className = "ambient-text";
     const title = document.createElement("strong");
@@ -1278,7 +1279,7 @@ class UrDashCard extends HTMLElement {
     wrap.className = "radial-scene";
     const center = document.createElement("div");
     center.className = "radial-scene-center";
-    if (config.icon) center.appendChild(this._icon(config.icon));
+    this._appendResolvedIcon(center, config, this._resolveDisplay(config.title) || "Scene icon", "scene-asset-icon");
     const title = document.createElement("strong");
     title.textContent = config.title || "Scene";
     const subtitle = document.createElement("span");
@@ -1301,7 +1302,7 @@ class UrDashCard extends HTMLElement {
         domain: "scene",
         service: "turn_on",
         entity_id: action.entity_id,
-      });
+      }, action.icon_ref);
       button.classList.add("radial-scene-action");
       button.style.left = `${positions[index][0]}%`;
       button.style.top = `${positions[index][1]}%`;
@@ -1402,16 +1403,7 @@ class UrDashCard extends HTMLElement {
           { element },
         ));
       }
-      if (node.vector_icon) {
-        const icon = this._vectorSvg(
-          { ...node.vector_icon, style: { ...(node.vector_icon.style || {}), accent: this._resolveDisplay(node.vector_icon.style?.accent) || nodeAccent } },
-          this._resolveDisplay(node.label) || node.id || "Vector node icon",
-        );
-        icon.classList.add("visual-node-vector-icon");
-        element.appendChild(icon);
-      } else if (node.icon) {
-        element.appendChild(this._icon(this._resolveDisplay(node.icon)));
-      }
+      this._appendResolvedIcon(element, node, this._resolveDisplay(node.label) || node.id || "Node icon", "visual-node-vector-icon", nodeAccent);
       const value = document.createElement("strong");
       value.textContent = this._visualNodeValue(node, state);
       const label = document.createElement("span");
@@ -1559,12 +1551,11 @@ class UrDashCard extends HTMLElement {
     return label ? `${label} ${value}` : value;
   }
 
-  _actionButton(label, icon, action) {
+  _actionButton(label, icon, action, iconRef = null) {
     const button = document.createElement("button");
     button.className = "action-button";
     button.type = "button";
-    const iconValue = this._resolveDisplay(icon);
-    if (iconValue) button.appendChild(this._icon(iconValue));
+    this._appendResolvedIcon(button, { icon, icon_ref: iconRef }, this._resolveDisplay(label) || "Action icon", "action-asset-icon");
     const text = document.createElement("span");
     text.textContent = this._resolveDisplay(label) || "Action";
     button.appendChild(text);
@@ -2161,6 +2152,45 @@ class UrDashCard extends HTMLElement {
     return span;
   }
 
+  _resolveIconAsset(config = {}) {
+    const reference = config.icon_ref;
+    if (reference && typeof reference === "object") {
+      const iconSet = (this._card?.assets?.icon_sets || []).slice(0, 8).find((item) => item.id === reference.set);
+      if (iconSet) {
+        const key = this._resolveDisplay(reference.key);
+        const variant = (iconSet.variants || []).slice(0, 24).find((item) => item.key === key);
+        const asset = variant || iconSet.fallback;
+        if (asset?.vector_icon) return { vector_icon: asset.vector_icon };
+        if (asset?.icon) return { icon: this._resolveDisplay(asset.icon) };
+      }
+    }
+    if (config.vector_icon) return { vector_icon: config.vector_icon };
+    const icon = this._resolveDisplay(config.icon);
+    return icon ? { icon } : null;
+  }
+
+  _appendResolvedIcon(container, config, label, className = "", accent = "") {
+    const asset = this._resolveIconAsset(config);
+    if (!asset) return false;
+    let element;
+    if (asset.vector_icon) {
+      const vector = {
+        ...asset.vector_icon,
+        style: {
+          ...(asset.vector_icon.style || {}),
+          accent: this._resolveDisplay(asset.vector_icon.style?.accent) || accent || undefined,
+        },
+      };
+      element = this._vectorSvg(vector, label || "Reusable vector icon");
+      element.classList.add("resolved-vector-icon");
+    } else {
+      element = this._icon(asset.icon);
+    }
+    if (className) element.classList.add(className);
+    container.appendChild(element);
+    return true;
+  }
+
   _icon(icon) {
     const element = document.createElement("ha-icon");
     const value = typeof icon === "string" ? icon : "";
@@ -2556,6 +2586,7 @@ const styles = `
     height: 28px;
     color: var(--accent);
   }
+  .block-header .resolved-vector-icon { width: 28px; height: 28px; }
 
   .block-header h4 {
     color: var(--urdash-fg);
@@ -2597,6 +2628,7 @@ const styles = `
     height: 30px;
     color: var(--accent);
   }
+  .hero-value .resolved-vector-icon { width: 30px; height: 30px; }
 
   .hero-value strong {
     color: var(--urdash-fg);
@@ -2666,6 +2698,7 @@ const styles = `
     height: 54px;
     opacity: 0.72;
   }
+  .ambient-icon .resolved-vector-icon { width: 54px; height: 54px; opacity: 0.82; }
 
   .ambient-text {
     display: grid;
@@ -2909,6 +2942,9 @@ const styles = `
     height: 20px;
     color: var(--accent);
   }
+  .action-button .resolved-vector-icon { width: 20px; height: 20px; }
+  .chip-group .resolved-vector-icon { width: 16px; height: 16px; }
+  .icon-orb .resolved-vector-icon { width: 48px; height: 48px; }
 
   .segmented-control {
     display: flex;

@@ -1176,6 +1176,48 @@ templates. `format_datetime` also accepts `weekday_short`, `weekday_long`, and
 `weather/subscribe_forecast`, rerenders on pushed updates, and always
 unsubscribes when the card disconnects or its source configuration changes.
 
+## Reusable Icon Sets
+
+Cards can define reusable icon variants once and resolve them from literal or
+expression keys. Icon sets are generic assets and are not limited to weather.
+
+```yaml
+card:
+  assets:
+    icon_sets:
+      - id: aurora_weather
+        variants:
+          - key: sunny
+            vector_icon:
+              viewBox: 0 0 100 100
+              shapes: [...]
+          - key: rainy
+            icon: mdi:weather-rainy
+        fallback:
+          icon: mdi:weather-cloudy-alert
+```
+
+Any supported icon slot can reference the set:
+
+```yaml
+icon_ref:
+  set: aurora_weather
+  key:
+    op: source
+    source_id: home_daily
+    path: forecast.0.condition
+```
+
+`icon_ref` is supported by blocks, block headers, buttons, chips, scene actions,
+and visual-map nodes. A set may mix MDI names and declarative vector icons. MDI
+assets must use the `mdi:` namespace; vector variants pass through the same
+shape, gradient, animation, path-data, nesting, and performance validation as
+inline vector artwork.
+
+A card may define at most 8 icon sets, 24 variants per set, and 96 variants in
+total. Set IDs and variant keys are bounded safe identifiers. References use the
+declared fallback when a dynamic key is unknown, and never load external assets.
+
 ## Styling
 
 AI can choose style tokens, not raw CSS.

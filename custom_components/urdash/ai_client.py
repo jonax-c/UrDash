@@ -38,7 +38,7 @@ For premium glow, prefer layered radial gradients with userSpaceOnUse or numeric
 Prefer direct, usable controls over decorative blocks, but make the interface visually distinctive.
 Use declarative animation presets only when they improve clarity.
 Use bounded declarative expressions for derived values, labels, icons, colors, visibility, animation state, and action parameters. Expressions are JSON AST objects, never source code. Prefer direct entity bindings for simple values and expressions when they add meaningful aggregation, mapping, formatting, or conditional behavior.
-For a multi-day or hourly weather card, declare card.data_sources with type weather_forecast, the selected weather entity, one advertised forecast_type, and a bounded limit. Read entries with source expressions such as {"op":"source","source_id":"home_daily","path":"forecast.0.temperature"}. Use condition mapping for icons and colors, format_datetime for labels, and concat for high/low temperature or precipitation text. Do not invent forecast sensor entities.
+For a multi-day or hourly weather card, declare card.data_sources with type weather_forecast, the selected weather entity, one advertised forecast_type, and a bounded limit. Read entries with source expressions such as {"op":"source","source_id":"home_daily","path":"forecast.0.temperature"}. Define one reusable card.assets.icon_sets weather icon set and reference it from every day with icon_ref whose key is the condition source expression. Use format_datetime for labels and concat for high/low temperature or precipitation text. Do not duplicate the icon artwork in every forecast block and do not invent forecast sensor entities.
 """
 
 EXPRESSION_REF: dict[str, Any] = {"$ref": "#/$defs/expression"}
@@ -470,6 +470,50 @@ VECTOR_ICON_SCHEMA: dict[str, Any] = {
     },
 }
 
+ICON_ASSET_PROPERTIES: dict[str, Any] = {
+    "icon": {"type": "string"},
+    "vector_icon": VECTOR_ICON_SCHEMA,
+}
+
+ICON_ASSET_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": ICON_ASSET_PROPERTIES,
+}
+
+ICON_VARIANT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["key"],
+    "properties": {"key": {"type": "string"}, **ICON_ASSET_PROPERTIES},
+}
+
+ICON_SET_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "variants"],
+    "properties": {
+        "id": {"type": "string"},
+        "variants": {"type": "array", "minItems": 1, "maxItems": 24, "items": ICON_VARIANT_SCHEMA},
+        "fallback": ICON_ASSET_SCHEMA,
+    },
+}
+
+ICON_REF_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["set", "key"],
+    "properties": {"set": {"type": "string"}, "key": DISPLAY_VALUE_SCHEMA},
+}
+
+ASSETS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "icon_sets": {"type": "array", "maxItems": 8, "items": ICON_SET_SCHEMA},
+    },
+}
+
 VISUAL_BIND_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
@@ -503,6 +547,7 @@ VISUAL_MAP_NODE_SCHEMA: dict[str, Any] = {
         "value": DISPLAY_VALUE_SCHEMA,
         "entity": {"type": "string"},
         "icon": DISPLAY_VALUE_SCHEMA,
+        "icon_ref": ICON_REF_SCHEMA,
         "vector_icon": VECTOR_ICON_SCHEMA,
         "size": {"type": "string", "enum": ["micro", "small", "normal", "large", "hero"]},
         "position": {
@@ -651,6 +696,7 @@ BLOCK_SCHEMA: dict[str, Any] = {
         "variant": {"type": "string", "enum": ["label", "body", "headline", "display", "title", "caption"]},
         "label": DISPLAY_VALUE_SCHEMA,
         "icon": DISPLAY_VALUE_SCHEMA,
+        "icon_ref": ICON_REF_SCHEMA,
         "viewBox": {"type": "string"},
         "coordinate_mode": {"type": "string", "enum": ["percent", "number"]},
         "coordinateMode": {"type": "string", "enum": ["percent", "number"]},
@@ -707,6 +753,7 @@ BLOCK_SCHEMA: dict[str, Any] = {
                 "properties": {
                     "label": DISPLAY_VALUE_SCHEMA,
                     "icon": DISPLAY_VALUE_SCHEMA,
+                    "icon_ref": ICON_REF_SCHEMA,
                     "action": ACTION_SCHEMA,
                 },
             },
@@ -721,6 +768,7 @@ BLOCK_SCHEMA: dict[str, Any] = {
                     "label": DISPLAY_VALUE_SCHEMA,
                     "entity": {"type": "string"},
                     "icon": DISPLAY_VALUE_SCHEMA,
+                    "icon_ref": ICON_REF_SCHEMA,
                 },
             },
         },
@@ -757,6 +805,7 @@ BLOCK_SCHEMA: dict[str, Any] = {
                 "properties": {
                     "label": {"type": "string"},
                     "icon": {"type": "string"},
+                    "icon_ref": ICON_REF_SCHEMA,
                     "entity_id": {"type": "string"},
                 },
             },
@@ -805,6 +854,7 @@ CARD_V2_SCHEMA: dict[str, Any] = {
             "additionalProperties": False,
             "required": ["intent", "layout"],
             "properties": {
+                "assets": ASSETS_SCHEMA,
                 "data_sources": {"type": "array", "maxItems": 4, "items": DATA_SOURCE_SCHEMA},
                 "intent": {
                     "type": "object",
@@ -1019,6 +1069,7 @@ def _requirements() -> list[str]:
         "Use hero_value, ambient, entity_orbit, constellation, radial_scene, and visual_map for expressive visual structure when appropriate.",
         "Use vector_icon for custom decorative or semantic symbols; only safe declarative path/circle/ellipse/rect/line/polyline/group shapes, gradients, focal points, numeric coordinate_mode, ordered transform stacks, blend modes, safe filter presets, glow/neon/blur/color effects, and preset or keyframe shape animations are allowed.",
         "Use visual_map for relationship or flow cards. AI owns node positions, node sizes, labels, icons, link routing style, and animation choices; UrDash only renders the safe declarative map.",
+        "Define reusable MDI or declarative vector variants in card.assets.icon_sets when several blocks share a visual language. Reference them with icon_ref set and a literal or expression key instead of duplicating artwork.",
         "For visual_map, use stats on nodes when a node needs multiple readings, shape ring for dashboard-style circular meters, anchors and path.points for precise routing, and flow_dot for visible movement along a link.",
         "Use ambient as non-interactive visual depth behind useful controls; do not make decoration the only content.",
         "For climate requests, include climate_control and useful mode/temperature controls.",

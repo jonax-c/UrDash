@@ -18,6 +18,8 @@ MAX_EXPRESSION_ARGS = 16
 MAX_EXPRESSION_ENTITIES = 32
 MAX_EXPRESSION_OUTPUT = 1024
 MAX_DATA_SOURCES = 4
+MAX_ICON_SETS = 8
+MAX_ICON_VARIANTS = 96
 CURRENT_SCHEMA_MINOR = 0
 
 BINDING_PATTERN = re.compile(
@@ -25,6 +27,7 @@ BINDING_PATTERN = re.compile(
 )
 SAFE_PATH_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
 SOURCE_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
+MDI_ICON_PATTERN = re.compile(r"^mdi:[a-z0-9][a-z0-9-]{0,95}$")
 UNSAFE_PATH_PARTS = {"__proto__", "prototype", "constructor"}
 EXPRESSION_OPS = {
     "literal", "entity", "local", "add", "subtract", "multiply", "divide",
@@ -317,8 +320,10 @@ def _validate_semantics(
 
     for index, entity_id in enumerate(card["intent"].get("primary_entities", [])):
         _validate_entity(entity_id, f"$.card.intent.primary_entities[{index}]", entities, diagnostics)
+    icon_sets = _validate_assets(card.get("assets", {}), diagnostics)
     data_sources = _validate_data_sources(card.get("data_sources", []), entities, diagnostics)
     _validate_expressions(config, "$", entities, data_sources, diagnostics)
+    _validate_icon_references(config, "$", icon_sets, diagnostics)
 
     seen_ids: dict[str, str] = {}
     action_count = 0
@@ -426,6 +431,82 @@ def _validate_data_sources(
             if required_feature and not features & required_feature:
                 _diagnostic(diagnostics, f"{path}.forecast_type", "data_source.unsupported_forecast", f"Entity {entity_id} does not advertise {forecast_type} forecasts.", "Use one of the entity's supported forecast types.")
     return source_ids
+
+
+def _validate_assets(
+    assets: dict[str, Any], diagnostics: list[dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    icon_sets: dict[str, dict[str, Any]] = {}
+    sets = assets.get("icon_sets", []) if isinstance(assets, dict) else []
+    total_variants = 0
+    if len(sets) > MAX_ICON_SETS:
+        _diagnostic(diagnostics, "$.card.assets.icon_sets", "budget.icon_sets", f"Card has more than {MAX_ICON_SETS} icon sets.", "Reduce reusable icon sets.")
+    for set_index, icon_set in enumerate(sets):
+        path = f"$.card.assets.icon_sets[{set_index}]"
+        set_id = icon_set.get("id")
+        if isinstance(set_id, str):
+            if not SOURCE_ID_PATTERN.fullmatch(set_id):
+                _diagnostic(diagnostics, f"{path}.id", "asset.invalid_id", "Icon set ID is malformed.", "Use 1-64 letters, numbers, underscores, or hyphens, starting with a letter.")
+            if set_id in icon_sets:
+                _diagnostic(diagnostics, f"{path}.id", "asset.duplicate_set", f"Icon set {set_id!r} is duplicated.", "Use a unique icon set ID.")
+        keys: set[str] = set()
+        variants = icon_set.get("variants", [])
+        total_variants += len(variants)
+        for variant_index, variant in enumerate(variants):
+            variant_path = f"{path}.variants[{variant_index}]"
+            key = variant.get("key")
+            if isinstance(key, str):
+                if not SOURCE_ID_PATTERN.fullmatch(key):
+                    _diagnostic(diagnostics, f"{variant_path}.key", "asset.invalid_key", "Icon variant key is malformed.", "Use a safe stable variant key.")
+                if key in keys:
+                    _diagnostic(diagnostics, f"{variant_path}.key", "asset.duplicate_variant", f"Variant {key!r} is duplicated.", "Use a unique key within the icon set.")
+                keys.add(key)
+            _validate_icon_asset(variant, variant_path, diagnostics)
+        fallback = icon_set.get("fallback")
+        if isinstance(fallback, dict):
+            _validate_icon_asset(fallback, f"{path}.fallback", diagnostics)
+        if isinstance(set_id, str):
+            icon_sets[set_id] = {"keys": keys, "fallback": isinstance(fallback, dict)}
+    if total_variants > MAX_ICON_VARIANTS:
+        _diagnostic(diagnostics, "$.card.assets.icon_sets", "budget.icon_variants", f"Card declares more than {MAX_ICON_VARIANTS} icon variants.", "Reduce or combine reusable variants.")
+    return icon_sets
+
+
+def _validate_icon_asset(
+    asset: dict[str, Any], path: str, diagnostics: list[dict[str, Any]]
+) -> None:
+    has_icon = isinstance(asset.get("icon"), str) and bool(asset.get("icon"))
+    has_vector = isinstance(asset.get("vector_icon"), dict)
+    if has_icon == has_vector:
+        _diagnostic(diagnostics, path, "asset.invalid_variant", "An icon asset must define exactly one icon or vector_icon.", "Keep one MDI icon or one declarative vector icon.")
+    if has_icon and not MDI_ICON_PATTERN.fullmatch(asset["icon"]):
+        _diagnostic(diagnostics, f"{path}.icon", "asset.invalid_icon", "Reusable icon names must use the mdi: namespace.", "Use an icon such as mdi:weather-sunny.")
+    if has_vector:
+        _validate_vector_icon_budget(asset["vector_icon"], f"{path}.vector_icon", diagnostics)
+
+
+def _validate_icon_references(
+    value: Any,
+    path: str,
+    icon_sets: dict[str, dict[str, Any]],
+    diagnostics: list[dict[str, Any]],
+) -> None:
+    if isinstance(value, dict):
+        reference = value.get("icon_ref")
+        if isinstance(reference, dict):
+            set_id = reference.get("set")
+            icon_set = icon_sets.get(set_id)
+            if icon_set is None:
+                _diagnostic(diagnostics, f"{path}.icon_ref.set", "asset.missing_set", f"Icon set {set_id!r} is not declared.", "Reference an ID from card.assets.icon_sets.")
+            key = reference.get("key")
+            if isinstance(key, str) and icon_set and key not in icon_set["keys"] and not icon_set["fallback"]:
+                _diagnostic(diagnostics, f"{path}.icon_ref.key", "asset.missing_variant", f"Variant {key!r} is not present and the set has no fallback.", "Add the variant or a fallback icon.")
+        for name, child in value.items():
+            if name != "icon_ref":
+                _validate_icon_references(child, f"{path}.{name}", icon_sets, diagnostics)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _validate_icon_references(child, f"{path}[{index}]", icon_sets, diagnostics)
 
 
 def _validate_block_references(
@@ -803,18 +884,28 @@ def _validate_visual_map(
 def _validate_vector_budget(
     block: dict[str, Any], path: str, diagnostics: list[dict[str, Any]]
 ) -> None:
-    if block.get("kind") != "vector_icon":
-        return
+    if block.get("kind") == "vector_icon":
+        _validate_vector_icon_budget(block, path, diagnostics)
+    for index, node in enumerate(block.get("nodes", [])):
+        if isinstance(node.get("vector_icon"), dict):
+            _validate_vector_icon_budget(node["vector_icon"], f"{path}.nodes[{index}].vector_icon", diagnostics)
+
+
+def _validate_vector_icon_budget(
+    icon: dict[str, Any], path: str, diagnostics: list[dict[str, Any]]
+) -> None:
     art = (
-        block.get("render_budget") == "art"
-        or block.get("performance_budget") == "art"
+        icon.get("render_budget") == "art"
+        or icon.get("renderBudget") == "art"
+        or icon.get("performance_budget") == "art"
+        or icon.get("performanceBudget") == "art"
     )
     limits = {
         "shapes": 120 if art else 48,
         "gradients": 24 if art else 8,
         "depth": 3 if art else 2,
     }
-    if len(block.get("gradients", [])) > limits["gradients"]:
+    if len(icon.get("gradients", [])) > limits["gradients"]:
         _diagnostic(
             diagnostics,
             f"{path}.gradients",
@@ -822,7 +913,7 @@ def _validate_vector_budget(
             "Vector icon exceeds its gradient budget.",
             f"Keep at most {limits['gradients']} gradients.",
         )
-    if len(block.get("shapes", [])) > limits["shapes"]:
+    if len(icon.get("shapes", [])) > limits["shapes"]:
         _diagnostic(
             diagnostics,
             f"{path}.shapes",
@@ -830,7 +921,7 @@ def _validate_vector_budget(
             "Vector icon exceeds its shape budget.",
             f"Keep at most {limits['shapes']} top-level shapes.",
         )
-    for index, shape in enumerate(block.get("shapes", [])):
+    for index, shape in enumerate(icon.get("shapes", [])):
         _validate_shape_depth(
             shape,
             f"{path}.shapes[{index}]",
