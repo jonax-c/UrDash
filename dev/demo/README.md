@@ -7,6 +7,7 @@ It provides:
 - A mocked `hass` object with sample entity states.
 - A minimal `ha-icon` custom element shim.
 - Several `urdash_schema: 2` sample cards.
+- A **Copy YAML** action on every sample that copies the real card configuration without demo-only preview flags. Replace the mocked entity IDs with IDs from the target Home Assistant instance before using controls.
 - Direct loading of the real `custom_components/urdash/frontend/urdash-custom-card.js` renderer.
 
 Start from the repository root:

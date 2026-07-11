@@ -76,6 +76,46 @@
         font-size: 15px;
       }
 
+      .card-heading {
+        min-height: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .copy-yaml {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 32px;
+        padding: 6px 10px;
+        border: 1px solid #b8c9c7;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.76);
+        color: #28504f;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .copy-yaml:hover {
+        border-color: #48877e;
+        background: #fff;
+      }
+
+      .copy-yaml:focus-visible {
+        outline: 3px solid rgba(23, 112, 99, 0.24);
+        outline-offset: 2px;
+      }
+
+      .copy-yaml ha-icon {
+        width: 16px;
+        height: 16px;
+      }
+
       .wide {
         grid-column: 1 / -1;
       }
@@ -446,13 +486,83 @@
       for (const sample of samples) {
         const section = document.createElement("section");
         if (sample.className) section.className = sample.className;
+        const heading = document.createElement("div");
+        heading.className = "card-heading";
         const title = document.createElement("h2");
         title.textContent = sample.title;
+        const copyButton = document.createElement("button");
+        copyButton.className = "copy-yaml";
+        copyButton.type = "button";
+        copyButton.title = `Copy ${sample.title} Lovelace YAML`;
+        copyButton.setAttribute("aria-label", `Copy ${sample.title} Lovelace YAML`);
+        copyButton.innerHTML = '<ha-icon icon="mdi:content-copy"></ha-icon><span>Copy YAML</span>';
+        copyButton.addEventListener("click", async () => {
+          const copied = await copyText(toYaml(sample.config));
+          const label = copyButton.querySelector("span");
+          label.textContent = copied ? "Copied" : "Copy failed";
+          window.setTimeout(() => { label.textContent = "Copy YAML"; }, 1600);
+        });
         const card = document.createElement("urdash-card");
         card.setConfig({ ...sample.config, preview: true });
         card.hass = hass;
-        section.append(title, card);
+        heading.append(title, copyButton);
+        section.append(heading, card);
         host.appendChild(section);
+      }
+
+      async function copyText(value) {
+        try {
+          if (navigator.clipboard?.writeText && window.isSecureContext) {
+            await navigator.clipboard.writeText(value);
+            return true;
+          }
+          const field = document.createElement("textarea");
+          field.value = value;
+          field.setAttribute("readonly", "");
+          field.style.position = "fixed";
+          field.style.inset = "0 auto auto -9999px";
+          document.body.appendChild(field);
+          field.select();
+          const copied = document.execCommand("copy");
+          field.remove();
+          return copied;
+        } catch (error) {
+          console.error("Unable to copy demo YAML", error);
+          return false;
+        }
+      }
+
+      function toYaml(value, indent = 0) {
+        const pad = " ".repeat(indent);
+        if (Array.isArray(value)) {
+          if (!value.length) return "[]";
+          return value.map((item) => {
+            if (isScalar(item)) return `${pad}- ${yamlScalar(item)}`;
+            return `${pad}-\n${toYaml(item, indent + 2)}`;
+          }).join("\n");
+        }
+        if (value && typeof value === "object") {
+          const entries = Object.entries(value).filter(([, item]) => item !== undefined);
+          if (!entries.length) return "{}";
+          return entries.map(([key, item]) => {
+            const yamlKey = /^[A-Za-z_][A-Za-z0-9_-]*$/.test(key) ? key : JSON.stringify(key);
+            if (isScalar(item)) return `${pad}${yamlKey}: ${yamlScalar(item)}`;
+            return `${pad}${yamlKey}:\n${toYaml(item, indent + 2)}`;
+          }).join("\n");
+        }
+        return `${pad}${yamlScalar(value)}`;
+      }
+
+      function isScalar(value) {
+        return value === null || typeof value !== "object" || (Array.isArray(value) && !value.length);
+      }
+
+      function yamlScalar(value) {
+        if (value === null) return "null";
+        if (typeof value === "string") return JSON.stringify(value);
+        if (typeof value === "number" || typeof value === "boolean") return String(value);
+        if (Array.isArray(value) && !value.length) return "[]";
+        return JSON.stringify(value);
       }
 
       function state(entityId, value, friendlyName, attributes = {}) {
