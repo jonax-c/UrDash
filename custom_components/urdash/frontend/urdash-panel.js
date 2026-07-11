@@ -41,6 +41,13 @@ class UrDashPanel extends HTMLElement {
     this._previewSize = "wide";
     this._previewMountId = 0;
     this._showConfig = false;
+    this._installOpen = false;
+    this._installLoading = false;
+    this._installError = "";
+    this._installTargets = [];
+    this._installDashboardId = "";
+    this._installViewId = "";
+    this._installSuccess = null;
     this._loaded = false;
   }
 
@@ -121,6 +128,131 @@ class UrDashPanel extends HTMLElement {
     this._flashButton("#copyJson", "Copied");
   }
 
+  async _openInstall() {
+    if (!this._result?.candidate_id) return;
+    this._captureDraft();
+    this._installOpen = true;
+    this._installLoading = true;
+    this._installError = "";
+    this._installSuccess = null;
+    this._render();
+    try {
+      const result = await this._hass.connection.sendMessagePromise({ type: "urdash/lovelace/targets" });
+      this._installTargets = (result.dashboards || []).filter((target) => target.writable && target.views?.length);
+      if (!this._installTargets.length) {
+        this._installError = "No writable UI-managed dashboard with a visible view was found.";
+      } else {
+        this._installDashboardId = this._installTargets[0].id;
+        this._installViewId = this._installTargets[0].views[0].id;
+      }
+    } catch (error) {
+      this._installError = error?.message || String(error);
+    } finally {
+      this._installLoading = false;
+      this._render();
+    }
+  }
+
+  _closeInstall() {
+    this._captureDraft();
+    this._installOpen = false;
+    this._render();
+  }
+
+  _setInstallDashboard(dashboardId) {
+    this._captureDraft();
+    this._installDashboardId = dashboardId;
+    this._installViewId = this._selectedInstallDashboard()?.views?.[0]?.id || "";
+    this._installError = "";
+    this._render();
+  }
+
+  _selectedInstallDashboard() {
+    return this._installTargets.find((target) => target.id === this._installDashboardId);
+  }
+
+  async _installCard() {
+    const dashboard = this._selectedInstallDashboard();
+    if (!dashboard || !this._installViewId || !this._result?.candidate_id) return;
+    this._captureDraft();
+    this._installLoading = true;
+    this._installError = "";
+    this._render();
+    try {
+      this._installSuccess = await this._hass.connection.sendMessagePromise({
+        type: "urdash/lovelace/install",
+        candidate_id: this._result.candidate_id,
+        dashboard_id: dashboard.id,
+        view_id: this._installViewId,
+        expected_revision: dashboard.revision,
+      });
+    } catch (error) {
+      this._installError = error?.message || String(error);
+    } finally {
+      this._installLoading = false;
+      this._render();
+    }
+  }
+
+  _installDialogMarkup() {
+    if (!this._installOpen) return "";
+    const dashboard = this._selectedInstallDashboard();
+    if (this._installSuccess) {
+      return `<div class="modal-backdrop" role="presentation">
+        <section class="install-dialog" role="dialog" aria-modal="true" aria-labelledby="installTitle">
+          <div class="success-mark"><ha-icon icon="mdi:check"></ha-icon></div>
+          <div class="install-success">
+            <h2 id="installTitle">Card added</h2>
+            <p>The generated card is now the last card in the selected Lovelace view.</p>
+          </div>
+          <div class="dialog-actions">
+            <button class="secondary-action" data-close-install type="button">Done</button>
+            <a class="install-confirm" href="${escapeHtml(this._installSuccess.url)}"><ha-icon icon="mdi:open-in-new"></ha-icon>Open dashboard</a>
+          </div>
+        </section>
+      </div>`;
+    }
+    return `<div class="modal-backdrop" role="presentation">
+      <section class="install-dialog" role="dialog" aria-modal="true" aria-labelledby="installTitle">
+        <header class="dialog-header">
+          <div>
+            <span>Install card</span>
+            <h2 id="installTitle">Add to Lovelace</h2>
+          </div>
+          <button class="icon-action" data-close-install title="Close" type="button"><ha-icon icon="mdi:close"></ha-icon></button>
+        </header>
+        ${this._installLoading && !this._installTargets.length ? `<div class="target-loading"><span class="spin-dot"></span>Loading dashboards</div>` : `
+          <div class="install-fields">
+            <label class="field">
+              <span>Dashboard</span>
+              <select id="installDashboard" ${this._installTargets.length ? "" : "disabled"}>
+                ${this._installTargets.map((target) => `<option value="${escapeHtml(target.id)}" ${target.id === this._installDashboardId ? "selected" : ""}>${escapeHtml(target.title)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="field">
+              <span>View</span>
+              <select id="installView" ${dashboard?.views?.length ? "" : "disabled"}>
+                ${(dashboard?.views || []).map((view) => `<option value="${escapeHtml(view.id)}" ${view.id === this._installViewId ? "selected" : ""}>${escapeHtml(view.title)}</option>`).join("")}
+              </select>
+            </label>
+          </div>
+          <div class="placement-summary">
+            <ha-icon icon="mdi:format-vertical-align-bottom"></ha-icon>
+            <span>The card will be appended after the existing cards. Nothing will be replaced or reordered.</span>
+          </div>
+        `}
+        ${this._installError ? `<div class="generation-error install-error" role="alert"><ha-icon icon="mdi:alert-circle-outline"></ha-icon><span>${escapeHtml(this._installError)}</span></div>` : ""}
+        <div class="dialog-actions">
+          <button class="secondary-action" data-close-install type="button">Cancel</button>
+          <button class="install-confirm" id="confirmInstall" ${dashboard && this._installViewId && !this._installLoading ? "" : "disabled"} type="button">
+            <ha-icon icon="${this._installLoading ? "mdi:loading" : "mdi:view-dashboard-plus-outline"}" class="${this._installLoading ? "spin" : ""}"></ha-icon>
+            ${this._installLoading ? "Adding card" : "Add card"}
+          </button>
+        </div>
+      </section>
+    </div>`;
+  }
+
   _flashButton(selector, text) {
     const button = this.shadowRoot.querySelector(selector);
     if (!button) return;
@@ -151,7 +283,7 @@ class UrDashPanel extends HTMLElement {
 
   async _loadUrDashCard() {
     if (customElements.get("urdash-card")) return;
-    await import("/urdash/static/urdash-custom-card.js?v=20260711.4");
+    await import("/urdash/static/urdash-custom-card.js?v=20260711.5");
   }
 
   _refreshPreviewHass() {
@@ -433,7 +565,7 @@ class UrDashPanel extends HTMLElement {
           <footer class="result-actions">
             <button class="secondary-action" id="toggleConfig" ${hasResult ? "" : "disabled"} type="button"><ha-icon icon="mdi:code-json"></ha-icon>Configuration</button>
             <button class="secondary-action" id="copyYaml" ${this._result?.yaml ? "" : "disabled"} type="button"><ha-icon icon="mdi:content-copy"></ha-icon>Copy YAML</button>
-            <button class="install-action" disabled title="Dashboard installation is planned for the next phase" type="button"><ha-icon icon="mdi:view-dashboard-plus-outline"></ha-icon>Add to dashboard</button>
+            <button class="install-action" id="openInstall" ${this._result?.candidate_id ? "" : "disabled"} type="button"><ha-icon icon="mdi:view-dashboard-plus-outline"></ha-icon>Add to dashboard</button>
           </footer>
 
           ${this._showConfig && hasResult ? `<section class="config-drawer">
@@ -441,12 +573,14 @@ class UrDashPanel extends HTMLElement {
             <pre>${escapeHtml(this._result.json || this._result.yaml)}</pre>
           </section>` : ""}
         </section>
+        ${this._installDialogMarkup()}
       </main>
     `;
 
     this.shadowRoot.querySelector("#generate").addEventListener("click", () => this._generate());
     this.shadowRoot.querySelector("#copyYaml").addEventListener("click", () => this._copyYaml());
     this.shadowRoot.querySelector("#copyJson")?.addEventListener("click", () => this._copyJson());
+    this.shadowRoot.querySelector("#openInstall").addEventListener("click", () => this._openInstall());
     this.shadowRoot.querySelector("#toggleConfig").addEventListener("click", () => {
       this._captureDraft();
       this._showConfig = !this._showConfig;
@@ -471,6 +605,15 @@ class UrDashPanel extends HTMLElement {
       const button = event.target.closest("button[data-preview-size]");
       if (button) this._setPreviewSize(button.dataset.previewSize);
     });
+    this.shadowRoot.querySelectorAll("[data-close-install]").forEach((button) => {
+      button.addEventListener("click", () => this._closeInstall());
+    });
+    this.shadowRoot.querySelector("#installDashboard")?.addEventListener("change", (event) => this._setInstallDashboard(event.target.value));
+    this.shadowRoot.querySelector("#installView")?.addEventListener("change", (event) => {
+      this._captureDraft();
+      this._installViewId = event.target.value;
+    });
+    this.shadowRoot.querySelector("#confirmInstall")?.addEventListener("click", () => this._installCard());
     if (this._result?.card_config) this._mountPreview();
   }
 
@@ -628,6 +771,7 @@ const VALIDATION_CARD = {
 };
 
 const VALIDATION_RESULT = {
+  candidate_id: "validation-candidate",
   summary: "Validation fixture loaded from the UrDash frontend. No AI request was made.",
   engine: "validation",
   schema: 2,
@@ -1284,6 +1428,85 @@ const styles = `
   .config-header { display: flex; justify-content: space-between; align-items: center; }
   .config-header h2 { font-size: 15px; }
 
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    background: rgba(18,31,33,0.52);
+    backdrop-filter: blur(5px);
+  }
+
+  .install-dialog {
+    width: min(100%, 480px);
+    display: grid;
+    gap: 18px;
+    border: 1px solid rgba(255,255,255,0.5);
+    border-radius: 8px;
+    padding: 20px;
+    background: #fff;
+    box-shadow: 0 28px 80px rgba(14,34,36,0.32);
+  }
+
+  .dialog-header, .config-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .dialog-header span { color: var(--console-warm); font-size: 11px; font-weight: 900; text-transform: uppercase; }
+  .dialog-header h2 { margin-top: 3px; font-size: 20px; }
+  .icon-action { width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 7px; background: var(--console-soft); color: var(--console-ink); cursor: pointer; }
+
+  .install-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+
+  .placement-summary {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    border-left: 3px solid var(--console-accent);
+    padding: 11px 12px;
+    background: #eef7f4;
+    color: #40595b;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .placement-summary ha-icon { --mdc-icon-size: 19px; color: var(--console-accent); }
+  .install-error { margin: 0; }
+  .target-loading { min-height: 120px; display: flex; gap: 10px; align-items: center; justify-content: center; color: var(--console-muted); font-size: 13px; font-weight: 800; }
+  .spin-dot { width: 14px; height: 14px; border: 2px solid #bad0cc; border-top-color: var(--console-accent); border-radius: 50%; animation: rotate 0.8s linear infinite; }
+
+  .dialog-actions { display: flex; gap: 9px; justify-content: flex-end; }
+  .dialog-actions button, .dialog-actions a {
+    min-height: 42px;
+    display: inline-flex;
+    gap: 7px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    padding: 0 15px;
+    font: inherit;
+    font-weight: 850;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .dialog-actions .secondary-action { border: 1px solid #c8d4d3; background: #fff; color: #405558; }
+  .install-confirm { border: 1px solid #173b39; background: #173b39; color: #fff; }
+  .install-confirm:disabled { cursor: not-allowed; opacity: 0.5; }
+  .install-confirm ha-icon { --mdc-icon-size: 18px; }
+
+  .success-mark { width: 56px; height: 56px; display: grid; place-items: center; margin: 4px auto 0; border-radius: 50%; background: #dff4ed; color: #11745f; }
+  .success-mark ha-icon { --mdc-icon-size: 28px; }
+  .install-success { display: grid; gap: 6px; text-align: center; }
+  .install-success h2 { font-size: 22px; }
+  .install-success p { color: var(--console-muted); font-size: 13px; line-height: 1.5; }
+
   @keyframes rotate { to { transform: rotate(360deg); } }
 
   @media (max-width: 980px) {
@@ -1319,6 +1542,9 @@ const styles = `
     .empty-preview { min-height: 300px; padding: 18px; }
     .result-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .result-actions .install-action { grid-column: 1 / -1; }
+    .install-fields { grid-template-columns: 1fr; }
+    .install-dialog { padding: 17px; }
+    .dialog-actions { display: grid; grid-template-columns: 1fr 1fr; }
   }
 `;
 

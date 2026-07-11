@@ -69,9 +69,22 @@
       document.querySelector("urdash-panel").hass = {
         states: Object.fromEntries(entities.map((entity) => [entity.entity_id, entity])),
         connection: {
-          sendMessagePromise: async ({ type }) => type === "urdash/entities"
-            ? { entities }
-            : { ai_enabled: true, model: "gpt-5.2", default_theme: "aurora", default_height_mode: "auto", style_presets: stylePresets },
+          sendMessagePromise: async ({ type }) => {
+            if (type === "urdash/entities") return { entities };
+            if (type === "urdash/lovelace/targets") return {
+              dashboards: [
+                { id: "lovelace", title: "Overview", writable: true, revision: "demo-revision", views: [
+                  { id: "path:home", title: "Home", path: "home", index: 0 },
+                  { id: "path:living-room", title: "Living Room", path: "living-room", index: 1 },
+                ] },
+                { id: "tablet-dashboard", title: "Wall Tablet", writable: true, revision: "demo-tablet", views: [
+                  { id: "path:overview", title: "Overview", path: "overview", index: 0 },
+                ] },
+              ],
+            };
+            if (type === "urdash/lovelace/install") return { installed: true, url: "/lovelace/home", revision: "demo-next" };
+            return { ai_enabled: true, model: "gpt-5.2", default_theme: "aurora", default_height_mode: "auto", style_presets: stylePresets };
+          },
         },
       };
     </script>

@@ -257,8 +257,8 @@ The product workflow and acceptance criteria are defined in
 - [ ] Redesign the composer around area/device/entity selection, optional style,
   prompt, and recoverable generation states.
 - [ ] Add production-equivalent live preview controls and candidate refinement.
-- [ ] Implement safe, conflict-aware append installation for storage dashboards.
-- [ ] Add the dashboard/view target selector, YAML fallback, and success navigation.
+- [x] Implement safe, conflict-aware append installation for storage dashboards.
+- [x] Add the dashboard/view target selector, YAML fallback, and success navigation.
 - [ ] Validate the complete workflow in disposable Home Assistant across desktop,
   tablet, and mobile viewports.
 

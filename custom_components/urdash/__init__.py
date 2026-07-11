@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections import OrderedDict
+from copy import deepcopy
+import secrets
 from typing import Any
 
 import voluptuous as vol
@@ -12,6 +15,7 @@ from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.components.lovelace.const import LOVELACE_DATA, MODE_STORAGE
 
 try:
     from homeassistant.components.http import StaticPathConfig
@@ -19,6 +23,8 @@ except ImportError:
     StaticPathConfig = None
 
 from .ai_client import AiGenerationError, async_generate_with_openai
+from .ai_client import CARD_V2_SCHEMA
+from .card_validator import format_diagnostics, has_errors, validate_card_config
 from .const import (
     CONF_API_KEY,
     CONF_BASE_URL,
@@ -39,8 +45,11 @@ from .const import (
     STATIC_URL,
 )
 from .style_presets import STYLES, STYLE_PRESETS, resolve_style
+from .lovelace_install import append_card, config_revision, visible_views
 
 PLATFORMS: list[str] = []
+CANDIDATES_KEY = "_candidates"
+MAX_CANDIDATES = 20
 
 SERVICE_GENERATE_CARD = "generate_card"
 THEMES = ["aurora", "quiet", "graphite", "calm", "sunrise"]
@@ -61,6 +70,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up UrDash from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = entry.data
+    hass.data[DOMAIN].setdefault(CANDIDATES_KEY, OrderedDict())
 
     await _async_register_static_path(hass)
     _register_panel(hass)
@@ -117,6 +127,8 @@ def _register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_entities)
     websocket_api.async_register_command(hass, websocket_settings)
     websocket_api.async_register_command(hass, websocket_generate)
+    websocket_api.async_register_command(hass, websocket_lovelace_targets)
+    websocket_api.async_register_command(hass, websocket_install_card)
 
 
 def _register_services(hass: HomeAssistant) -> None:
@@ -213,6 +225,134 @@ async def websocket_generate(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required("type"): "urdash/lovelace/targets"})
+@websocket_api.async_response
+async def websocket_lovelace_targets(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return writable storage dashboards and their visible views."""
+    targets = []
+    dashboards = hass.data[LOVELACE_DATA].dashboards
+    for dashboard_key, dashboard in dashboards.items():
+        dashboard_id = dashboard.url_path if dashboard.url_path is not None else "__default__"
+        title = (dashboard.config or {}).get("title") or (
+            "Overview" if dashboard.url_path in {None, "lovelace"} else dashboard.url_path
+        )
+        if dashboard.mode != MODE_STORAGE:
+            targets.append(
+                {
+                    "id": dashboard_id,
+                    "url_path": dashboard.url_path,
+                    "title": title,
+                    "mode": dashboard.mode,
+                    "writable": False,
+                    "views": [],
+                }
+            )
+            continue
+        try:
+            config = await dashboard.async_load(True)
+        except Exception:  # Home Assistant maps missing/auto-generated configs to fallback UI.
+            continue
+        views = visible_views(config, connection.user.id)
+        if not views:
+            continue
+        targets.append(
+            {
+                "id": dashboard_id,
+                "url_path": dashboard.url_path,
+                "title": title,
+                "mode": dashboard.mode,
+                "writable": True,
+                "revision": config_revision(config),
+                "views": views,
+            }
+        )
+    connection.send_result(msg["id"], {"dashboards": targets})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "urdash/lovelace/install",
+        vol.Required("candidate_id"): cv.string,
+        vol.Required("dashboard_id"): cv.string,
+        vol.Required("view_id"): cv.string,
+        vol.Required("expected_revision"): cv.string,
+    }
+)
+@websocket_api.async_response
+async def websocket_install_card(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Append a generated candidate to a storage Lovelace dashboard."""
+    candidates = hass.data[DOMAIN].get(CANDIDATES_KEY, {})
+    candidate = candidates.get(msg["candidate_id"])
+    if candidate is None:
+        connection.send_error(msg["id"], "candidate_not_found", "Generate the card again before installing it.")
+        return
+
+    dashboard_key = None if msg["dashboard_id"] == "__default__" else msg["dashboard_id"]
+    dashboard = hass.data[LOVELACE_DATA].dashboards.get(dashboard_key)
+    if dashboard is None or dashboard.mode != MODE_STORAGE:
+        connection.send_error(msg["id"], "dashboard_not_writable", "The selected dashboard is not writable storage.")
+        return
+
+    try:
+        current_config = await dashboard.async_load(True)
+    except Exception as err:
+        connection.send_error(msg["id"], "dashboard_load_failed", str(err))
+        return
+    if config_revision(current_config) != msg["expected_revision"]:
+        connection.send_error(msg["id"], "dashboard_changed", "The dashboard changed. Select the target again.")
+        return
+
+    card_config = deepcopy(candidate["card_config"])
+    diagnostics = validate_card_config(
+        card_config,
+        CARD_V2_SCHEMA,
+        entities=_serialize_states_with_registry(hass),
+        available_services=_available_services(hass),
+    )
+    if has_errors(diagnostics):
+        connection.send_error(msg["id"], "candidate_invalid", format_diagnostics(diagnostics))
+        return
+
+    try:
+        updated_config = append_card(
+            current_config, msg["view_id"], card_config, connection.user.id
+        )
+        await dashboard.async_save(updated_config)
+    except Exception as err:
+        try:
+            await dashboard.async_save(current_config)
+        except Exception:
+            pass
+        connection.send_error(msg["id"], "dashboard_save_failed", str(err))
+        return
+
+    view = next(
+        item
+        for item in visible_views(updated_config, connection.user.id)
+        if item["id"] == msg["view_id"]
+    )
+    url_path = dashboard.url_path or "lovelace"
+    target_suffix = view["path"] or str(view["index"])
+    connection.send_result(
+        msg["id"],
+        {
+            "installed": True,
+            "url": f"/{url_path}/{target_suffix}",
+            "revision": config_revision(updated_config),
+        },
+    )
+
+
 async def _async_generate_from_hass(
     hass: HomeAssistant,
     *,
@@ -238,7 +378,7 @@ async def _async_generate_from_hass(
 
     try:
         preferred_theme, style_guidance = resolve_style(style, theme)
-        return await async_generate_with_openai(
+        result = await async_generate_with_openai(
             hass,
             api_key=settings[CONF_API_KEY],
             base_url=settings[CONF_BASE_URL],
@@ -251,6 +391,14 @@ async def _async_generate_from_hass(
             style_guidance=style_guidance,
             height_mode=height_mode,
         )
+        if result.get("card_config"):
+            candidate_id = secrets.token_urlsafe(12)
+            candidates = hass.data[DOMAIN].setdefault(CANDIDATES_KEY, OrderedDict())
+            candidates[candidate_id] = {"card_config": deepcopy(result["card_config"])}
+            while len(candidates) > MAX_CANDIDATES:
+                candidates.popitem(last=False)
+            result["candidate_id"] = candidate_id
+        return result
     except AiGenerationError as err:
         return {
             "error": str(err),

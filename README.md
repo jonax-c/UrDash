@@ -51,7 +51,7 @@ The base URL can be changed for OpenAI-compatible providers. If the AI request f
 Before using generated YAML in Lovelace, add the UrDash card resource:
 
 ```text
-/urdash/static/urdash-custom-card.js?v=20260711.4
+/urdash/static/urdash-custom-card.js?v=20260711.5
 ```
 
 Set the resource type to `JavaScript module`.
@@ -79,6 +79,8 @@ card:
 ```
 
 Paste the YAML into a manual Lovelace card editor.
+
+Generated candidates can also be installed directly from the generation console. Select **Add to dashboard**, choose a writable UI-managed dashboard and visible view, then confirm. UrDash revalidates the server-side candidate and appends it after the existing cards without replacing or reordering dashboard content. Automatic installation requires a Home Assistant administrator account; YAML-managed dashboards continue to use the YAML fallback.
 
 ## Device And Entity Selection
 
