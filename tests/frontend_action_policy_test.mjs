@@ -111,6 +111,11 @@ card._hass = {
       state: "on",
       attributes: { supported_features: 0 },
     },
+    "fan.full": {
+      entity_id: "fan.full",
+      state: "on",
+      attributes: { supported_features: 63, percentage: 65, oscillating: true, direction: "forward", preset_modes: ["auto", "sleep"] },
+    },
     "sensor.indoor_temperature": {
       entity_id: "sensor.indoor_temperature",
       state: "24",
@@ -146,7 +151,7 @@ card._hass = {
   },
   services: {
     light: { turn_on: {} },
-    fan: { set_percentage: {} },
+    fan: { set_percentage: {}, oscillate: {} },
     cover: { open_cover: {} },
     lock: { unlock: {} },
   },
@@ -259,6 +264,18 @@ assert.deepEqual(card._resolveActionData({
   },
   target_temp_high: { op: "entity", entity_id: "climate.bedroom", path: "attributes.target_temp_high" },
 }, { value: 28 }), { target_temp_low: 25, target_temp_high: 25 });
+assert.equal(card._componentBoolean(true), true);
+assert.equal(card._componentBoolean("off"), false);
+assert.equal(card._componentBoolean(1), true);
+const oscillateAction = {
+  type: "service",
+  domain: "fan",
+  service: "oscillate",
+  entity_id: "fan.full",
+  data: { oscillating: { op: "local", name: "value" } },
+};
+assert.equal(card._actionAllowed(oscillateAction), true);
+assert.deepEqual(card._resolveActionData(oscillateAction.data, { value: false }), { oscillating: false });
 
 const dependencies = card._collectEntityDependencies(validConfig);
 assert.deepEqual([...dependencies], []);

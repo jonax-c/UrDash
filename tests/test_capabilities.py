@@ -131,6 +131,34 @@ class CapabilityDescriptorTests(unittest.TestCase):
         self.assertEqual(operations, {"turn_on", "turn_off", "set_percentage"})
         self.assertEqual(operation(descriptor, "set_percentage")["parameters"]["percentage"]["step"], 5)
 
+    def test_fan_exposes_speed_preset_oscillation_and_direction(self):
+        descriptor = capabilities.build_entity_capability_descriptor(
+            entity(
+                "fan.bedroom",
+                "on",
+                {
+                    "supported_features": sum(capabilities.FAN_FEATURES.values()),
+                    "percentage_step": 5,
+                    "preset_modes": ["auto", "sleep", "breeze"],
+                    "percentage": 65,
+                    "oscillating": True,
+                    "direction": "forward",
+                },
+            )
+        )
+        operations = {item["id"] for item in descriptor["capabilities"]}
+        self.assertTrue(
+            {"turn_on", "turn_off", "toggle", "set_percentage", "set_preset_mode", "set_oscillating", "set_direction"}
+            <= operations
+        )
+        self.assertEqual(operation(descriptor, "set_percentage")["parameters"]["percentage"]["step"], 5)
+        self.assertEqual(
+            operation(descriptor, "set_preset_mode")["parameters"]["preset_mode"]["options"],
+            ["auto", "sleep", "breeze"],
+        )
+        self.assertEqual(operation(descriptor, "set_oscillating")["parameters"]["oscillating"]["type"], "boolean")
+        self.assertEqual(operation(descriptor, "set_direction")["parameters"]["direction"]["options"], ["forward", "reverse"])
+
     def test_garage_opening_and_unlock_are_risky(self):
         garage = capabilities.build_entity_capability_descriptor(
             entity(

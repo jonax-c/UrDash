@@ -153,7 +153,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.7");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.8");
 
       const hass = {
         config: {
@@ -241,6 +241,15 @@
           "sensor.sleep_score": state("sensor.sleep_score", "86", "Sleep Score", { unit_of_measurement: "%" }),
           "sensor.air_purifier_filter": state("sensor.air_purifier_filter", "64", "Air Purifier Filter", { unit_of_measurement: "%" }),
           "fan.air_purifier": state("fan.air_purifier", "on", "Air Purifier"),
+          "fan.bedroom_breeze": state("fan.bedroom_breeze", "on", "Bedroom Breeze", {
+            supported_features: 63,
+            percentage: 65,
+            percentage_step: 5,
+            preset_mode: "auto",
+            preset_modes: ["auto", "sleep", "breeze", "turbo"],
+            oscillating: true,
+            direction: "forward",
+          }),
           "switch.washer": state("switch.washer", "on", "Washer"),
           "sensor.washer_remaining": state("sensor.washer_remaining", "24", "Washer Remaining", { unit_of_measurement: "min" }),
           "sensor.washer_power": state("sensor.washer_power", "342", "Washer Power", { unit_of_measurement: "W" }),
@@ -290,6 +299,10 @@
         {
           title: "Capability-driven Climate Studio",
           config: capabilityClimateCard(),
+        },
+        {
+          title: "Capability-driven Fan Studio",
+          config: capabilityFanCard(),
         },
         {
           title: "Live Weather Forecast",
@@ -836,6 +849,122 @@
               grid: { col: 1, row: 1, w: 12, h: 8 },
               presentation: { surface: "glass", align: "stretch", scale: "normal" },
               style: { accent: "#4c8f91", tone: "cool", emphasis: "high" },
+            }],
+          },
+        });
+      }
+
+      function capabilityFanCard() {
+        const fanEntity = "fan.bedroom_breeze";
+        const localValue = { op: "local", name: "value" };
+        const localSelected = { op: "local", name: "selected" };
+        return baseCard({
+          intent: {
+            goal: "multi_device_control",
+            title: "Bedroom Breeze",
+            summary: "A freely composed fan surface with power, speed, preset, oscillation, and direction controls.",
+            risk_level: "low",
+            primary_entities: [fanEntity],
+            primary_actions: ["fan.toggle", "fan.set_percentage", "fan.set_preset_mode", "fan.oscillate", "fan.set_direction"],
+          },
+          layout: {
+            type: "grid",
+            columns: 12,
+            density: "comfortable",
+            theme: "aurora",
+            blocks: [{
+              id: "bedroom-fan",
+              kind: "component_tree",
+              grid: { col: 1, row: 1, w: 12, h: 6 },
+              presentation: { surface: "naked", align: "stretch", scale: "normal" },
+              component: {
+                type: "surface",
+                style: { surface: "solid", shape: "soft", accent: "#54a6a0" },
+                layout: { width: "fill", direction: "column", padding: "md", gap: "md", align: "stretch" },
+                children: [
+                  {
+                    type: "row",
+                    layout: { width: "fill", gap: "md", align: "center" },
+                    children: [
+                      { type: "icon", icon: "mdi:fan", style: { surface: "glass", shape: "circle", size: "lg", accent: "#67d5ca" }, layout: { padding: "sm" } },
+                      {
+                        type: "column",
+                        layout: { grow: 1, gap: "xs", align: "start" },
+                        children: [
+                          { type: "text", text: "Bedroom Breeze", style: { size: "lg", emphasis: "high" } },
+                          { type: "text", text: "Quiet circulation · oscillating", style: { size: "sm", emphasis: "low" } },
+                        ],
+                      },
+                      { type: "toggle", entity: fanEntity, label: "Fan power", action: { type: "service", domain: "fan", service: "toggle", entity_id: fanEntity } },
+                    ],
+                  },
+                  {
+                    type: "column",
+                    layout: { width: "fill", gap: "xs", align: "stretch" },
+                    children: [
+                      {
+                        type: "row",
+                        layout: { width: "fill", justify: "between", align: "center" },
+                        children: [
+                          { type: "text", text: "Air speed", style: { size: "sm", emphasis: "low" } },
+                          { type: "value", entity: fanEntity, bind: { value: "attributes.percentage" }, unit: "%", style: { size: "sm", emphasis: "high" } },
+                        ],
+                      },
+                      {
+                        type: "slider",
+                        entity: fanEntity,
+                        bind: { value: "attributes.percentage" },
+                        range: { min: 0, max: 100, step: 5 },
+                        label: "Air speed",
+                        layout: { width: "fill" },
+                        action: { type: "service", domain: "fan", service: "set_percentage", entity_id: fanEntity, data: { percentage: localValue } },
+                      },
+                    ],
+                  },
+                  {
+                    type: "wrap",
+                    layout: { width: "fill", gap: "md", align: "end" },
+                    children: [
+                      {
+                        type: "select",
+                        entity: fanEntity,
+                        label: "Preset",
+                        bind: { value: "attributes.preset_mode" },
+                        options: [
+                          { label: "Auto", value: "auto" }, { label: "Sleep", value: "sleep" },
+                          { label: "Breeze", value: "breeze" }, { label: "Turbo", value: "turbo" },
+                        ],
+                        layout: { grow: 1 },
+                        action: { type: "service", domain: "fan", service: "set_preset_mode", entity_id: fanEntity, data: { preset_mode: localSelected } },
+                      },
+                      {
+                        type: "select",
+                        entity: fanEntity,
+                        label: "Direction",
+                        bind: { value: "attributes.direction" },
+                        options: [{ label: "Forward", value: "forward" }, { label: "Reverse", value: "reverse" }],
+                        layout: { grow: 1 },
+                        action: { type: "service", domain: "fan", service: "set_direction", entity_id: fanEntity, data: { direction: localSelected } },
+                      },
+                      {
+                        type: "row",
+                        layout: { gap: "sm", align: "center", padding: "sm" },
+                        style: { surface: "glass", shape: "pill" },
+                        children: [
+                          { type: "text", text: "Oscillate", style: { size: "sm", emphasis: "normal" } },
+                          {
+                            type: "toggle",
+                            entity: fanEntity,
+                            label: "Oscillation",
+                            bind: { value: "attributes.oscillating" },
+                            action: { type: "service", domain: "fan", service: "oscillate", entity_id: fanEntity, data: { oscillating: localValue } },
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
             }],
           },
         });

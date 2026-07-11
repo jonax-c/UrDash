@@ -486,6 +486,38 @@ class CardValidatorTests(unittest.TestCase):
         )
         self.assertEqual(errors(card, {"light.turn_on"}), [])
 
+    def test_component_tree_supports_attribute_bound_fan_controls(self):
+        card = base_card(
+            [{
+                "id": "fan-controls",
+                "kind": "component_tree",
+                "component": {
+                    "type": "row",
+                    "children": [
+                        {
+                            "type": "slider",
+                            "entity": "fan.bedroom",
+                            "bind": {"value": "attributes.percentage"},
+                            "range": {"min": 0, "max": 100, "step": 5},
+                            "action": {"type": "service", "domain": "fan", "service": "set_percentage", "entity_id": "fan.bedroom", "data": {"percentage": {"op": "local", "name": "value"}}},
+                        },
+                        {
+                            "type": "toggle",
+                            "entity": "fan.bedroom",
+                            "bind": {"value": "attributes.oscillating"},
+                            "action": {"type": "service", "domain": "fan", "service": "oscillate", "entity_id": "fan.bedroom", "data": {"oscillating": {"op": "local", "name": "value"}}},
+                        },
+                    ],
+                },
+            }]
+        )
+        ENTITIES[1]["attributes"]["supported_features"] = 63
+        ENTITIES[1]["attributes"].update({"percentage_step": 5, "oscillating": True})
+        try:
+            self.assertEqual(errors(card, {"fan.set_percentage", "fan.oscillate"}), [])
+        finally:
+            ENTITIES[1]["attributes"] = {"supported_features": 0}
+
 
 if __name__ == "__main__":
     unittest.main()

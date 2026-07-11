@@ -533,7 +533,10 @@ class UrDashCard extends HTMLElement {
 
   _componentToggle(config) {
     const state = this._state(config.entity);
-    const active = Boolean(this._isExpression(config.value) ? this._evaluateExpression(config.value) : config.value !== undefined ? config.value : state && !["off", "closed", "locked", "idle", "unavailable", "unknown"].includes(state.state));
+    const hasBoundValue = config.bind?.value !== undefined || config.value !== undefined;
+    const active = hasBoundValue
+      ? this._componentBoolean(this._componentValue(config))
+      : Boolean(state && !["off", "closed", "locked", "idle", "unavailable", "unknown"].includes(state.state));
     const button = document.createElement("button");
     button.type = "button";
     this._configureComponentElement(button, config, "toggle");
@@ -545,8 +548,19 @@ class UrDashCard extends HTMLElement {
     button.appendChild(thumb);
     const action = config.action || this._toggleActionFor(config.entity || "", state);
     button.disabled = this._componentDisabled(config) || !this._actionAllowed(action);
-    button.addEventListener("click", () => this._runAction(action, { current: state?.state, element: button }));
+    button.addEventListener("click", () => this._runAction(action, {
+      current: active,
+      selected: !active,
+      value: !active,
+      element: button,
+    }));
     return button;
+  }
+
+  _componentBoolean(value) {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    return !["", "0", "false", "off", "no", "closed", "locked", "idle", "unavailable", "unknown"].includes(String(value ?? "").toLowerCase());
   }
 
   _componentSlider(config) {
