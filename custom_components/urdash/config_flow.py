@@ -20,6 +20,7 @@ from .const import (
 
 THEME_OPTIONS = ["aurora", "quiet", "graphite", "calm", "sunrise"]
 HEIGHT_MODE_OPTIONS = ["auto", "viewport", "fixed"]
+MODEL_OPTIONS = ["gpt-5.2", "gpt-5.1", "gpt-5", "gpt-4.1"]
 
 
 class UrDashConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -86,11 +87,21 @@ def _schema(current):
             vol.Optional(
                 CONF_MODEL,
                 default=current.get(CONF_MODEL, DEFAULT_OPENAI_MODEL),
-            ): str,
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=MODEL_OPTIONS,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    custom_value=True,
+                )
+            ),
             vol.Optional(
                 CONF_BASE_URL,
                 default=current.get(CONF_BASE_URL, DEFAULT_OPENAI_BASE_URL),
-            ): str,
+            ): selector.TextSelector(
+                selector.TextSelectorConfig(
+                    type=selector.TextSelectorType.URL,
+                )
+            ),
             vol.Optional(
                 CONF_DEFAULT_THEME,
                 default=current.get(CONF_DEFAULT_THEME, DEFAULT_THEME),

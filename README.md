@@ -35,7 +35,7 @@ After setup, UrDash appears in the sidebar.
 
 ## AI Setup
 
-During setup, users enter their own OpenAI API key. The API key is stored in Home Assistant's integration entry and is used only by the Home Assistant backend. It is never sent to the UrDash frontend panel.
+During setup, users enter their own OpenAI API key, select a model, and configure the OpenAI API endpoint. The model selector includes common OpenAI models and accepts a custom model ID for OpenAI-compatible providers. The API key is stored in Home Assistant's integration entry and is used only by the Home Assistant backend. It is never sent to the UrDash frontend panel.
 
 Defaults:
 

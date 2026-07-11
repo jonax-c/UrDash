@@ -1,0 +1,45 @@
+{
+  "config": {
+    "abort": {
+      "single_instance_allowed": "UrDash 已經設定完成。"
+    },
+    "step": {
+      "user": {
+        "title": "設定 UrDash",
+        "description": "設定 UrDash 卡片設計 Agent 使用的 OpenAI 相容服務。",
+        "data": {
+          "api_key": "OpenAI API 金鑰",
+          "base_url": "OpenAI API Endpoint",
+          "model": "模型",
+          "default_theme": "預設卡片主題",
+          "default_height_mode": "預設高度模式"
+        },
+        "data_description": {
+          "api_key": "只會儲存在 Home Assistant 整合項目中，不會傳送到瀏覽器。",
+          "base_url": "Responses API 基礎網址，例如 https://api.openai.com/v1；亦支援 OpenAI 相容服務。",
+          "model": "選擇常用模型，或輸入 Endpoint 支援的自訂模型 ID。"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "UrDash 選項",
+        "description": "設定 UrDash 卡片設計 Agent 使用的 OpenAI 相容服務。",
+        "data": {
+          "api_key": "OpenAI API 金鑰",
+          "base_url": "OpenAI API Endpoint",
+          "model": "模型",
+          "default_theme": "預設卡片主題",
+          "default_height_mode": "預設高度模式"
+        },
+        "data_description": {
+          "api_key": "只會儲存在 Home Assistant 整合項目中，不會傳送到瀏覽器。",
+          "base_url": "Responses API 基礎網址，例如 https://api.openai.com/v1；亦支援 OpenAI 相容服務。",
+          "model": "選擇常用模型，或輸入 Endpoint 支援的自訂模型 ID。"
+        }
+      }
+    }
+  }
+}
