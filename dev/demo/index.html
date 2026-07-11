@@ -153,7 +153,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.8");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.9");
 
       const hass = {
         config: {
@@ -207,6 +207,12 @@
             swing_horizontal_modes: ["off", "on"],
           }),
           "cover.living_room_curtain": state("cover.living_room_curtain", "closed", "Curtain"),
+          "cover.office_blinds": state("cover.office_blinds", "open", "Office Blinds", {
+            supported_features: 255,
+            device_class: "blind",
+            current_position: 68,
+            current_tilt_position: 35,
+          }),
           "binary_sensor.front_door": state("binary_sensor.front_door", "off", "Front Door"),
           "binary_sensor.hall_motion": state("binary_sensor.hall_motion", "off", "Hall"),
           "binary_sensor.kitchen_window": state("binary_sensor.kitchen_window", "off", "Kitchen"),
@@ -303,6 +309,10 @@
         {
           title: "Capability-driven Fan Studio",
           config: capabilityFanCard(),
+        },
+        {
+          title: "Capability-driven Cover Studio",
+          config: capabilityCoverCard(),
         },
         {
           title: "Live Weather Forecast",
@@ -965,6 +975,36 @@
                   },
                 ],
               },
+            }],
+          },
+        });
+      }
+
+      function capabilityCoverCard() {
+        return baseCard({
+          intent: {
+            goal: "multi_device_control",
+            title: "Office Blinds",
+            summary: "A capability-composed cover surface with movement, precise position, and full tilt control.",
+            risk_level: "low",
+            primary_entities: ["cover.office_blinds"],
+            primary_actions: [
+              "cover.open_cover", "cover.stop_cover", "cover.close_cover", "cover.set_cover_position",
+              "cover.open_cover_tilt", "cover.stop_cover_tilt", "cover.close_cover_tilt", "cover.set_cover_tilt_position",
+            ],
+          },
+          layout: {
+            type: "grid",
+            columns: 12,
+            density: "comfortable",
+            theme: "quiet",
+            blocks: [{
+              id: "office-blinds",
+              kind: "cover_control",
+              entity: "cover.office_blinds",
+              grid: { col: 1, row: 1, w: 12, h: 7 },
+              presentation: { surface: "glass", align: "stretch", scale: "normal" },
+              style: { accent: "#6d8f85", tone: "calm", emphasis: "high" },
             }],
           },
         });

@@ -174,7 +174,7 @@ Implemented foundation:
 ## P1: Device Interaction Coverage
 
 - [x] Replace fixed climate UI behavior with capability-composed controls.
-- [ ] Replace fixed cover UI behavior with capability-composed controls.
+- [x] Replace fixed cover UI behavior with capability-composed controls.
 - [x] Add light controls for brightness, color, temperature, and effects.
 - [x] Add fan controls for speed, oscillation, direction, and presets.
 - [ ] Add media transport, volume, mute, seek, source, and browsing controls.

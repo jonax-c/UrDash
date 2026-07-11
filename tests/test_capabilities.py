@@ -176,6 +176,30 @@ class CapabilityDescriptorTests(unittest.TestCase):
         self.assertEqual(operation(garage, "close")["risk"], "low")
         self.assertEqual(operation(lock, "unlock")["risk"], "high")
 
+    def test_cover_exposes_position_and_complete_tilt_controls(self):
+        descriptor = capabilities.build_entity_capability_descriptor(
+            entity(
+                "cover.office_blinds",
+                "open",
+                {
+                    "supported_features": sum(capabilities.COVER_FEATURES.values()),
+                    "device_class": "blind",
+                    "current_position": 68,
+                    "current_tilt_position": 35,
+                },
+            )
+        )
+        operations = {item["id"] for item in descriptor["capabilities"]}
+        self.assertEqual(
+            {
+                "open", "close", "stop", "set_position", "open_tilt", "close_tilt",
+                "stop_tilt", "set_tilt_position",
+            },
+            operations,
+        )
+        self.assertEqual(operation(descriptor, "set_position")["parameters"]["position"]["max"], 100)
+        self.assertEqual(operation(descriptor, "set_tilt_position")["parameters"]["tilt_position"]["min"], 0)
+
     def test_media_player_uses_feature_flags_and_source_options(self):
         supported = (
             capabilities.MEDIA_PLAYER_FEATURES["pause"]

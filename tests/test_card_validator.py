@@ -518,6 +518,43 @@ class CardValidatorTests(unittest.TestCase):
         finally:
             ENTITIES[1]["attributes"] = {"supported_features": 0}
 
+    def test_component_tree_supports_cover_position_and_tilt(self):
+        card = base_card(
+            [{
+                "id": "cover-controls",
+                "kind": "component_tree",
+                "component": {
+                    "type": "column",
+                    "children": [
+                        {
+                            "type": "slider",
+                            "entity": "cover.blinds",
+                            "bind": {"value": "attributes.current_position"},
+                            "range": {"min": 0, "max": 100, "step": 1},
+                            "action": {"type": "service", "domain": "cover", "service": "set_cover_position", "entity_id": "cover.blinds", "data": {"position": {"op": "local", "name": "value"}}},
+                        },
+                        {
+                            "type": "slider",
+                            "entity": "cover.blinds",
+                            "bind": {"value": "attributes.current_tilt_position"},
+                            "range": {"min": 0, "max": 100, "step": 1},
+                            "action": {"type": "service", "domain": "cover", "service": "set_cover_tilt_position", "entity_id": "cover.blinds", "data": {"tilt_position": {"op": "local", "name": "value"}}},
+                        },
+                    ],
+                },
+            }]
+        )
+        ENTITIES.append({
+            "entity_id": "cover.blinds",
+            "domain": "cover",
+            "state": "open",
+            "attributes": {"supported_features": 255, "current_position": 68, "current_tilt_position": 35},
+        })
+        try:
+            self.assertEqual(errors(card, {"cover.set_cover_position", "cover.set_cover_tilt_position"}), [])
+        finally:
+            ENTITIES.pop()
+
 
 if __name__ == "__main__":
     unittest.main()

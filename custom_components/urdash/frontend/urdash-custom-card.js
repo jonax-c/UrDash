@@ -1436,14 +1436,93 @@ class UrDashCard extends HTMLElement {
   _coverControl(entityId) {
     const state = this._state(entityId);
     if (!state) return this._missing(entityId);
-    const group = document.createElement("div");
-    group.className = "action-grid";
-    group.append(
-      this._actionButton("Open", "mdi:arrow-up", { type: "service", domain: "cover", service: "open_cover", entity_id: entityId }),
-      this._actionButton("Stop", "mdi:pause", { type: "service", domain: "cover", service: "stop_cover", entity_id: entityId }),
-      this._actionButton("Close", "mdi:arrow-down", { type: "service", domain: "cover", service: "close_cover", entity_id: entityId }),
-    );
-    return group;
+    const attributes = state.attributes || {};
+    const features = Number(attributes.supported_features || 0);
+    const localValue = { op: "local", name: "value" };
+    const children = [{
+      type: "row",
+      layout: { width: "fill", justify: "between", align: "center", gap: "md" },
+      children: [
+        {
+          type: "column",
+          layout: { gap: "xs", align: "start" },
+          children: [
+            { type: "text", text: this._stateName(state) || "Cover", style: { size: "lg", emphasis: "high" } },
+            { type: "text", text: this._humanize(state.state), style: { size: "sm", emphasis: "low" } },
+          ],
+        },
+        {
+          type: "value",
+          entity: entityId,
+          label: "Position",
+          bind: { value: "attributes.current_position" },
+          unit: "%",
+          style: { size: "lg", emphasis: "high" },
+        },
+      ],
+    }];
+    const movementButtons = [];
+    const addButton = (target, flag, label, icon, service) => {
+      if (!(features & flag)) return;
+      target.push({
+        type: "button",
+        label,
+        icon,
+        layout: { grow: 1 },
+        style: { surface: "soft", shape: "soft" },
+        action: { type: "service", domain: "cover", service, entity_id: entityId },
+      });
+    };
+    addButton(movementButtons, 1, "Open", "mdi:arrow-up", "open_cover");
+    addButton(movementButtons, 8, "Stop", "mdi:stop", "stop_cover");
+    addButton(movementButtons, 2, "Close", "mdi:arrow-down", "close_cover");
+    if (movementButtons.length) children.push({
+      type: "row", layout: { width: "fill", gap: "sm", align: "stretch" }, children: movementButtons,
+    });
+
+    const addPositionSlider = (label, valuePath, service, parameter) => children.push({
+      type: "column",
+      layout: { width: "fill", gap: "xs", align: "stretch" },
+      children: [
+        {
+          type: "row",
+          layout: { width: "fill", justify: "between", align: "center" },
+          children: [
+            { type: "text", text: label, style: { size: "sm", emphasis: "low" } },
+            { type: "value", entity: entityId, bind: { value: valuePath }, unit: "%", style: { size: "sm", emphasis: "high" } },
+          ],
+        },
+        {
+          type: "slider",
+          entity: entityId,
+          label,
+          bind: { value: valuePath },
+          range: { min: 0, max: 100, step: 1 },
+          layout: { width: "fill" },
+          action: { type: "service", domain: "cover", service, entity_id: entityId, data: { [parameter]: localValue } },
+        },
+      ],
+    });
+    if (features & 4) addPositionSlider("Cover position", "attributes.current_position", "set_cover_position", "position");
+
+    const tiltButtons = [];
+    addButton(tiltButtons, 16, "Open tilt", "mdi:arrow-expand-horizontal", "open_cover_tilt");
+    addButton(tiltButtons, 64, "Stop tilt", "mdi:stop", "stop_cover_tilt");
+    addButton(tiltButtons, 32, "Close tilt", "mdi:arrow-collapse-horizontal", "close_cover_tilt");
+    if (tiltButtons.length) children.push({
+      type: "row", layout: { width: "fill", gap: "sm", align: "stretch" }, children: tiltButtons,
+    });
+    if (features & 128) addPositionSlider("Tilt position", "attributes.current_tilt_position", "set_cover_tilt_position", "tilt_position");
+
+    const wrap = document.createElement("div");
+    wrap.className = "cover-control cover-control-composed";
+    const component = this._componentNode({
+      type: "column",
+      layout: { width: "fill", gap: "md", align: "stretch" },
+      children,
+    }, 1);
+    if (component) wrap.appendChild(component);
+    return wrap;
   }
 
   _securityCluster(entityIds) {

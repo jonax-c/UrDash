@@ -131,6 +131,11 @@ card._hass = {
       state: "closed",
       attributes: { supported_features: 1, device_class: "garage" },
     },
+    "cover.blinds": {
+      entity_id: "cover.blinds",
+      state: "open",
+      attributes: { supported_features: 255, device_class: "blind", current_position: 68, current_tilt_position: 35 },
+    },
     "lock.front_door": {
       entity_id: "lock.front_door",
       state: "locked",
@@ -152,7 +157,7 @@ card._hass = {
   services: {
     light: { turn_on: {} },
     fan: { set_percentage: {}, oscillate: {} },
-    cover: { open_cover: {} },
+    cover: { open_cover: {}, set_cover_position: {}, set_cover_tilt_position: {} },
     lock: { unlock: {} },
   },
   callService: async () => {
@@ -191,6 +196,16 @@ const garageAction = {
 };
 assert.equal(card._actionAllowed(garageAction), true);
 assert.equal(card._requiresConfirmation(garageAction), true);
+const coverPositionAction = {
+  type: "service",
+  domain: "cover",
+  service: "set_cover_position",
+  entity_id: "cover.blinds",
+  data: { position: { op: "local", name: "value" } },
+};
+assert.equal(card._actionAllowed(coverPositionAction), true);
+assert.deepEqual(card._resolveActionData(coverPositionAction.data, { value: 42 }), { position: 42 });
+assert.equal(card._actionAllowed({ ...coverPositionAction, data: { position: 101 } }), false);
 assert.equal(card._requiresConfirmation({
   type: "service",
   domain: "lock",
