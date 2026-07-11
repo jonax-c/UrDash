@@ -153,7 +153,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.9");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.10");
 
       const hass = {
         config: {
@@ -268,9 +268,19 @@
           "scene.home_focus": state("scene.home_focus", "scening", "Focus Mode"),
           "scene.home_morning": state("scene.home_morning", "scening", "Morning Mode"),
           "media_player.living_room": state("media_player.living_room", "playing", "Living Room Speaker", {
+            supported_features: 383423,
             media_title: "Midnight City",
             media_artist: "M83",
+            media_duration: 244,
+            media_position: 86,
             volume_level: 0.34,
+            is_volume_muted: false,
+            source: "Music",
+            source_list: ["Music", "TV", "Radio"],
+            sound_mode: "Stereo",
+            sound_mode_list: ["Stereo", "Movie", "Night"],
+            shuffle: false,
+            repeat: "off",
           }),
         },
         connection: {
@@ -313,6 +323,10 @@
         {
           title: "Capability-driven Cover Studio",
           config: capabilityCoverCard(),
+        },
+        {
+          title: "Capability-driven Media Studio",
+          config: capabilityMediaCard(),
         },
         {
           title: "Live Weather Forecast",
@@ -1005,6 +1019,153 @@
               grid: { col: 1, row: 1, w: 12, h: 7 },
               presentation: { surface: "glass", align: "stretch", scale: "normal" },
               style: { accent: "#6d8f85", tone: "calm", emphasis: "high" },
+            }],
+          },
+        });
+      }
+
+      function capabilityMediaCard() {
+        const mediaEntity = "media_player.living_room";
+        const localValue = { op: "local", name: "value" };
+        const localSelected = { op: "local", name: "selected" };
+        const duration = { op: "entity", entity_id: mediaEntity, path: "attributes.media_duration" };
+        const volumePercent = {
+          op: "round",
+          decimals: 0,
+          args: [{ op: "multiply", args: [{ op: "entity", entity_id: mediaEntity, path: "attributes.volume_level" }, { op: "literal", value: 100 }] }],
+        };
+        const action = (service, data = undefined) => ({
+          type: "service", domain: "media_player", service, entity_id: mediaEntity, ...(data ? { data } : {}),
+        });
+        return baseCard({
+          intent: {
+            goal: "media_control",
+            title: "Living Room Audio",
+            summary: "A capability-composed media surface with live metadata, transport, seek, sound, and playback preferences.",
+            risk_level: "low",
+            primary_entities: [mediaEntity],
+            primary_actions: [
+              "media_player.media_play_pause", "media_player.media_stop", "media_player.media_previous_track",
+              "media_player.media_next_track", "media_player.volume_set", "media_player.volume_mute",
+              "media_player.media_seek", "media_player.select_source", "media_player.select_sound_mode",
+              "media_player.shuffle_set", "media_player.repeat_set",
+            ],
+          },
+          layout: {
+            type: "grid",
+            columns: 12,
+            density: "comfortable",
+            theme: "graphite",
+            blocks: [{
+              id: "living-media",
+              kind: "component_tree",
+              grid: { col: 1, row: 1, w: 12, h: 8 },
+              presentation: { surface: "naked", align: "stretch", scale: "normal" },
+              component: {
+                type: "surface",
+                style: { surface: "solid", shape: "soft", accent: "#69c1b6" },
+                layout: { width: "fill", direction: "column", padding: "md", gap: "md", align: "stretch" },
+                children: [
+                  {
+                    type: "row",
+                    layout: { width: "fill", gap: "md", align: "center" },
+                    children: [
+                      { type: "icon", icon: "mdi:music-circle", style: { surface: "glass", shape: "circle", size: "xl", accent: "#69c1b6" }, layout: { padding: "sm" } },
+                      {
+                        type: "column",
+                        layout: { grow: 1, gap: "xs", align: "start" },
+                        children: [
+                          { type: "value", entity: mediaEntity, bind: { value: "attributes.media_title" }, label: "Now playing", style: { size: "lg", emphasis: "high" } },
+                          { type: "value", entity: mediaEntity, bind: { value: "attributes.media_artist" }, label: "Artist", style: { size: "sm", emphasis: "low" } },
+                        ],
+                      },
+                      { type: "button", label: "Power", icon: "mdi:power", style: { surface: "ghost", shape: "circle" }, action: action("turn_off") },
+                    ],
+                  },
+                  {
+                    type: "column",
+                    layout: { width: "fill", gap: "xs", align: "stretch" },
+                    children: [
+                      {
+                        type: "row",
+                        layout: { width: "fill", justify: "between", align: "center" },
+                        children: [
+                          { type: "text", text: { op: "format_duration", args: [{ op: "entity", entity_id: mediaEntity, path: "attributes.media_position" }] }, style: { size: "sm", emphasis: "low" } },
+                          { type: "text", text: { op: "format_duration", args: [duration] }, style: { size: "sm", emphasis: "low" } },
+                        ],
+                      },
+                      {
+                        type: "slider", entity: mediaEntity, label: "Playback position",
+                        bind: { value: "attributes.media_position" },
+                        range: { min: 0, max: duration, step: 1 },
+                        layout: { width: "fill" },
+                        action: action("media_seek", { seek_position: localValue }),
+                      },
+                    ],
+                  },
+                  {
+                    type: "row",
+                    layout: { width: "fill", gap: "sm", justify: "center", align: "center" },
+                    children: [
+                      { type: "button", label: "Previous", icon: "mdi:skip-previous", style: { surface: "ghost", shape: "circle" }, action: action("media_previous_track") },
+                      { type: "button", label: "Play or pause", icon: "mdi:play-pause", style: { surface: "solid", shape: "circle", size: "lg" }, action: action("media_play_pause") },
+                      { type: "button", label: "Stop", icon: "mdi:stop", style: { surface: "ghost", shape: "circle" }, action: action("media_stop") },
+                      { type: "button", label: "Next", icon: "mdi:skip-next", style: { surface: "ghost", shape: "circle" }, action: action("media_next_track") },
+                    ],
+                  },
+                  {
+                    type: "row",
+                    layout: { width: "fill", gap: "md", align: "center" },
+                    children: [
+                      { type: "icon", icon: "mdi:volume-medium", style: { size: "md", accent: "#69c1b6" } },
+                      {
+                        type: "slider", entity: mediaEntity, label: "Volume",
+                        bind: { value: "attributes.volume_level" }, range: { min: 0, max: 1, step: 0.01 },
+                        layout: { grow: 1, width: "fill" }, action: action("volume_set", { volume_level: localValue }),
+                      },
+                      { type: "value", value: volumePercent, unit: "%", label: "Volume", style: { size: "sm", emphasis: "high" } },
+                      {
+                        type: "toggle", entity: mediaEntity, label: "Mute", bind: { value: "attributes.is_volume_muted" },
+                        action: action("volume_mute", { is_volume_muted: localValue }),
+                      },
+                    ],
+                  },
+                  {
+                    type: "wrap",
+                    layout: { width: "fill", gap: "md", align: "end" },
+                    children: [
+                      {
+                        type: "select", entity: mediaEntity, label: "Source", bind: { value: "attributes.source" }, layout: { grow: 1 },
+                        options: [{ label: "Music", value: "Music" }, { label: "TV", value: "TV" }, { label: "Radio", value: "Radio" }],
+                        action: action("select_source", { source: localSelected }),
+                      },
+                      {
+                        type: "select", entity: mediaEntity, label: "Sound mode", bind: { value: "attributes.sound_mode" }, layout: { grow: 1 },
+                        options: [{ label: "Stereo", value: "Stereo" }, { label: "Movie", value: "Movie" }, { label: "Night", value: "Night" }],
+                        action: action("select_sound_mode", { sound_mode: localSelected }),
+                      },
+                    ],
+                  },
+                  {
+                    type: "wrap",
+                    layout: { width: "fill", gap: "md", align: "end" },
+                    children: [
+                      {
+                        type: "select", entity: mediaEntity, label: "Repeat", bind: { value: "attributes.repeat" },
+                        options: [{ label: "Off", value: "off" }, { label: "One", value: "one" }, { label: "All", value: "all" }],
+                        action: action("repeat_set", { repeat: localSelected }),
+                      },
+                      {
+                        type: "row", style: { surface: "glass", shape: "pill" }, layout: { gap: "sm", padding: "sm", align: "center" },
+                        children: [
+                          { type: "text", text: "Shuffle", style: { size: "sm", emphasis: "normal" } },
+                          { type: "toggle", entity: mediaEntity, label: "Shuffle", bind: { value: "attributes.shuffle" }, action: action("shuffle_set", { shuffle: localValue }) },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
             }],
           },
         });

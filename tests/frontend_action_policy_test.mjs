@@ -153,12 +153,28 @@ card._hass = {
         target_temp_step: 0.5,
       },
     },
+    "media_player.living_room": {
+      entity_id: "media_player.living_room",
+      state: "playing",
+      attributes: {
+        supported_features: 383423,
+        media_duration: 244,
+        media_position: 86,
+        volume_level: 0.34,
+        is_volume_muted: false,
+        source: "Music",
+        source_list: ["Music", "TV", "Radio"],
+        sound_mode: "Stereo",
+        sound_mode_list: ["Stereo", "Movie", "Night"],
+      },
+    },
   },
   services: {
     light: { turn_on: {} },
     fan: { set_percentage: {}, oscillate: {} },
     cover: { open_cover: {}, set_cover_position: {}, set_cover_tilt_position: {} },
     lock: { unlock: {} },
+    media_player: { media_seek: {}, volume_set: {}, volume_mute: {}, select_source: {} },
   },
   callService: async () => {
     serviceCalls += 1;
@@ -291,6 +307,22 @@ const oscillateAction = {
 };
 assert.equal(card._actionAllowed(oscillateAction), true);
 assert.deepEqual(card._resolveActionData(oscillateAction.data, { value: false }), { oscillating: false });
+assert.equal(card._componentRangeValue({ range: { max: {
+  op: "entity",
+  entity_id: "media_player.living_room",
+  path: "attributes.media_duration",
+} } }, "max", 100), 244);
+const seekAction = {
+  type: "service",
+  domain: "media_player",
+  service: "media_seek",
+  entity_id: "media_player.living_room",
+  data: { seek_position: { op: "local", name: "value" } },
+};
+assert.equal(card._actionAllowed(seekAction), true);
+assert.deepEqual(card._resolveActionData(seekAction.data, { value: 120 }), { seek_position: 120 });
+assert.equal(card._entityParameterAllowed(seekAction, "seek_position", 244), true);
+assert.equal(card._entityParameterAllowed(seekAction, "seek_position", 245), false);
 
 const dependencies = card._collectEntityDependencies(validConfig);
 assert.deepEqual([...dependencies], []);

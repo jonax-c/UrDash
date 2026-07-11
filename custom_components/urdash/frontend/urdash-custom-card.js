@@ -468,8 +468,8 @@ class UrDashCard extends HTMLElement {
     if (type === "progress") {
       const progress = document.createElement("progress");
       this._configureComponentElement(progress, config, type);
-      const minimum = Number(config.range?.min ?? 0);
-      const maximum = Number(config.range?.max ?? 100);
+      const minimum = this._componentRangeValue(config, "min", 0);
+      const maximum = this._componentRangeValue(config, "max", 100);
       progress.max = maximum;
       progress.value = this._clampNumber(this._componentValue(config), minimum, maximum, minimum);
       progress.setAttribute("aria-label", this._resolveDisplay(config.label) || "Progress");
@@ -568,9 +568,9 @@ class UrDashCard extends HTMLElement {
     const input = document.createElement("input");
     input.type = "range";
     this._configureComponentElement(input, config, "slider");
-    input.min = String(config.range?.min ?? 0);
-    input.max = String(config.range?.max ?? 100);
-    input.step = String(config.range?.step ?? 1);
+    input.min = String(this._componentRangeValue(config, "min", 0));
+    input.max = String(this._componentRangeValue(config, "max", 100));
+    input.step = String(this._componentRangeValue(config, "step", 1));
     const value = Number(this._componentValue(config));
     input.value = String(Number.isFinite(value) ? value : Number(input.min));
     input.disabled = this._componentDisabled(config) || !this._actionAllowed(config.action);
@@ -581,6 +581,13 @@ class UrDashCard extends HTMLElement {
       element: input,
     }));
     return input;
+  }
+
+  _componentRangeValue(config, key, fallback) {
+    const configured = config.range?.[key];
+    const resolved = this._isExpression(configured) ? this._evaluateExpression(configured) : configured;
+    const number = Number(resolved);
+    return Number.isFinite(number) ? number : fallback;
   }
 
   _componentColorPicker(config) {
@@ -2158,6 +2165,7 @@ class UrDashCard extends HTMLElement {
       humidity: [attributes.min_humidity, attributes.max_humidity],
       percentage: [0, 100],
       position: [0, 100],
+      seek_position: [0, attributes.media_duration],
       temperature: [attributes.min_temp, attributes.max_temp],
       target_temp_low: [attributes.min_temp, attributes.max_temp],
       target_temp_high: [attributes.min_temp, attributes.max_temp],

@@ -555,6 +555,42 @@ class CardValidatorTests(unittest.TestCase):
         finally:
             ENTITIES.pop()
 
+    def test_component_tree_supports_dynamic_media_seek_and_mute(self):
+        card = base_card(
+            [{
+                "id": "media-controls",
+                "kind": "component_tree",
+                "component": {
+                    "type": "column",
+                    "children": [
+                        {
+                            "type": "slider",
+                            "entity": "media_player.living_room",
+                            "bind": {"value": "attributes.media_position"},
+                            "range": {"min": 0, "max": {"op": "entity", "entity_id": "media_player.living_room", "path": "attributes.media_duration"}, "step": 1},
+                            "action": {"type": "service", "domain": "media_player", "service": "media_seek", "entity_id": "media_player.living_room", "data": {"seek_position": {"op": "local", "name": "value"}}},
+                        },
+                        {
+                            "type": "toggle",
+                            "entity": "media_player.living_room",
+                            "bind": {"value": "attributes.is_volume_muted"},
+                            "action": {"type": "service", "domain": "media_player", "service": "volume_mute", "entity_id": "media_player.living_room", "data": {"is_volume_muted": {"op": "local", "name": "value"}}},
+                        },
+                    ],
+                },
+            }]
+        )
+        ENTITIES.append({
+            "entity_id": "media_player.living_room",
+            "domain": "media_player",
+            "state": "playing",
+            "attributes": {"supported_features": 383423, "media_duration": 244, "media_position": 86, "is_volume_muted": False},
+        })
+        try:
+            self.assertEqual(errors(card, {"media_player.media_seek", "media_player.volume_mute"}), [])
+        finally:
+            ENTITIES.pop()
+
 
 if __name__ == "__main__":
     unittest.main()

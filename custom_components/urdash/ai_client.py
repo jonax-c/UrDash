@@ -36,6 +36,7 @@ Keep long light-control labels and values in a separate row above a full-width s
 For climate controls, prefer a freely designed component_tree over the climate_control convenience macro. Use only advertised capabilities: HVAC mode select, one target-temperature slider or paired low/high sliders, target-humidity slider, and selects for fan, preset, vertical swing, and horizontal swing. Use the entity's min, max, step, and option values exactly. For a temperature range action, always submit both target_temp_low and target_temp_high so Home Assistant receives a valid pair.
 For fan controls, compose only advertised capabilities: toggle for power, percentage slider with percentage_step, select for preset_modes, an attribute-bound toggle for attributes.oscillating, and a select for direction. For the oscillation action, bind the toggle value to attributes.oscillating and pass the local value as the oscillating parameter. Do not display unsupported controls.
 For cover controls, compose only advertised capabilities: open, stop, and close buttons; a current_position slider; tilt open, stop, and close buttons; and a current_tilt_position slider. Use position and tilt_position local values in actions. Make door, garage, and gate opening intent unmistakable because UrDash will require risk confirmation.
+For media-player controls, compose only advertised capabilities: transport buttons, volume slider, attribute-bound mute and shuffle toggles, seek slider with an expression-bound media_duration maximum, source and sound-mode selects, and repeat select. Show current title, artist, position, and duration when available. Do not generate browse_media or play_media actions until a safe Home Assistant-local media source is provided.
 Use visual_map when the user asks for flows, relationships, topology, spatial control, power movement, irrigation paths, security perimeters, HVAC air movement, or any card that benefits from AI-designed nodes and links. Do not use predefined layouts; choose node positions and link paths based on the user's goal and the available entities.
 For polished smart-home topology cards, visual_map can use ring nodes, node stats, connection anchors, manual path points, flow dots, and hidden link labels. Use these to create clear energy, water, HVAC, network, security, and appliance-flow displays without hardcoded templates.
 Design cards for both desktop and mobile. Canvas cards should remain readable around 350px wide; use layout.responsive.mobile.aspect_ratio and block responsive.mobile.frame when the mobile composition needs different spacing.
@@ -578,9 +579,9 @@ COMPONENT_DEFINITION: dict[str, Any] = {
             "type": "object",
             "additionalProperties": False,
             "properties": {
-                "min": {"type": "number"},
-                "max": {"type": "number"},
-                "step": {"type": "number"},
+                "min": {"anyOf": [{"type": "number"}, EXPRESSION_REF]},
+                "max": {"anyOf": [{"type": "number"}, EXPRESSION_REF]},
+                "step": {"anyOf": [{"type": "number"}, EXPRESSION_REF]},
             },
         },
         "options": {
@@ -1185,6 +1186,7 @@ def _requirements() -> list[str]:
         "For climate requests, compose capability-driven component_tree controls for HVAC mode, one or two target temperatures, humidity, fan, preset, vertical swing, and horizontal swing. Use climate_control only as a compact convenience macro.",
         "For fan requests, compose capability-driven component_tree controls for power, percentage, presets, oscillation, and direction, but only when each operation appears in the entity capability descriptor.",
         "For cover requests, compose capability-driven component_tree controls for movement, position, tilt movement, and tilt position, but only when each operation appears in the entity capability descriptor.",
+        "For media-player requests, compose capability-driven component_tree metadata, transport, volume, mute, seek, source, sound mode, shuffle, and repeat controls. Bind seek maximum to media_duration and omit browse/play-media operations.",
         "For room requests, combine controllable devices and key sensors in one card when helpful.",
         "For security requests, make attention states visible and require confirmation for risky actions.",
         "For sensor requests, make the primary value readable and include supporting context.",

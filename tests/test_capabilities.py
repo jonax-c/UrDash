@@ -227,6 +227,36 @@ class CapabilityDescriptorTests(unittest.TestCase):
         )
         self.assertEqual(operation(descriptor, "set_muted")["parameters"]["is_volume_muted"]["type"], "boolean")
 
+    def test_media_player_exposes_complete_safe_playback_controls(self):
+        supported = sum(
+            flag
+            for name, flag in capabilities.MEDIA_PLAYER_FEATURES.items()
+            if name not in {"play_media", "browse_media", "volume_step"}
+        )
+        descriptor = capabilities.build_entity_capability_descriptor(
+            entity(
+                "media_player.living_room",
+                "playing",
+                {
+                    "supported_features": supported,
+                    "media_duration": 244,
+                    "source_list": ["Music", "TV", "Radio"],
+                    "sound_mode_list": ["Stereo", "Movie", "Night"],
+                },
+            )
+        )
+        operations = {item["id"] for item in descriptor["capabilities"]}
+        self.assertTrue(
+            {
+                "turn_on", "turn_off", "play", "pause", "play_pause", "stop",
+                "previous_track", "next_track", "set_volume", "set_muted", "seek",
+                "select_source", "select_sound_mode", "set_shuffle", "set_repeat",
+            }
+            <= operations
+        )
+        self.assertEqual(operation(descriptor, "seek")["parameters"]["seek_position"]["max"], 244)
+        self.assertEqual(operation(descriptor, "select_sound_mode")["parameters"]["sound_mode"]["options"], ["Stereo", "Movie", "Night"])
+
     def test_water_heater_and_remote_expose_bounded_parameters(self):
         water_heater = capabilities.build_entity_capability_descriptor(
             entity(

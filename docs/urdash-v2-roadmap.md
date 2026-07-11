@@ -42,7 +42,9 @@ UrDash v2 is architecture-complete when:
 - [x] Cover current Home Assistant climate capabilities: temperature ranges,
   humidity, fan, preset, vertical swing, and horizontal swing.
 - [x] Cover cover position, tilt, and device-class-specific behavior.
-- [ ] Cover media playback, volume, mute, seek, source, and media selection.
+- [x] Cover safe media transport, volume, mute, seek, source, sound mode, shuffle,
+  and repeat controls.
+- [ ] Add a bounded Home Assistant-local media browsing and play-media source.
 - [x] Cover alarm, vacuum, lock, valve, siren, humidifier, water heater, remote,
   lawn mower, update, timer, button, number, and select domains.
 - [x] Replace the fixed 250-entity truncation with explicit selection, grouping,
@@ -177,7 +179,8 @@ Implemented foundation:
 - [x] Replace fixed cover UI behavior with capability-composed controls.
 - [x] Add light controls for brightness, color, temperature, and effects.
 - [x] Add fan controls for speed, oscillation, direction, and presets.
-- [ ] Add media transport, volume, mute, seek, source, and browsing controls.
+- [x] Add media transport, volume, mute, seek, source, sound mode, shuffle, and
+  repeat controls.
 - [ ] Add security, alarm, lock, camera, and siren controls with risk policy.
 - [ ] Add vacuum, valve, humidifier, water heater, remote, and mower controls.
 - [ ] Add generic button, toggle, number, select, text, date, and time controls.
