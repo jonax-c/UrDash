@@ -247,6 +247,21 @@ Implemented foundation:
 - [ ] Score generated cards for schema validity, entity correctness, action safety,
   information coverage, and visual regression.
 
+## Next Product Milestone: Generation Console
+
+The product workflow and acceptance criteria are defined in
+[`urdash-generation-console-spec.md`](urdash-generation-console-spec.md).
+
+- [ ] Complete the Home Assistant Lovelace storage and permission spike.
+- [ ] Add optional style guidance and versioned candidate contracts.
+- [ ] Redesign the composer around area/device/entity selection, optional style,
+  prompt, and recoverable generation states.
+- [ ] Add production-equivalent live preview controls and candidate refinement.
+- [ ] Implement safe, conflict-aware append installation for storage dashboards.
+- [ ] Add the dashboard/view target selector, YAML fallback, and success navigation.
+- [ ] Validate the complete workflow in disposable Home Assistant across desktop,
+  tablet, and mobile viewports.
+
 ## P2: Developer Tooling And Release Quality
 
 - [ ] Add a standalone demo harness with simulated Home Assistant capabilities,
