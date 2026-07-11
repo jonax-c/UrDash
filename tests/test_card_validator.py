@@ -82,6 +82,12 @@ ENTITIES = [
         "state": "partlycloudy",
         "attributes": {"supported_features": 1, "temperature": 27},
     },
+    {
+        "entity_id": "light.desk",
+        "domain": "light",
+        "state": "on",
+        "attributes": {"supported_features": 0, "supported_color_modes": ["brightness"], "brightness": 180},
+    },
 ]
 
 
@@ -386,6 +392,54 @@ class CardValidatorTests(unittest.TestCase):
             "shapes": [{"type": "circle", "cx": 1, "cy": 1, "r": 1}]
         }
         self.assertIn("asset.invalid_variant", {item["code"] for item in errors(card)})
+
+    def test_component_tree_composes_safe_bubble_controls(self):
+        card = base_card(
+            [
+                {
+                    "id": "desk-bubble",
+                    "kind": "component_tree",
+                    "component": {
+                        "id": "surface",
+                        "type": "surface",
+                        "entity": "light.desk",
+                        "action": {"type": "service", "domain": "light", "service": "toggle", "entity_id": "light.desk"},
+                        "style": {"surface": "solid", "shape": "pill", "accent": "#f6c453"},
+                        "layout": {"width": "fill", "padding": "md", "gap": "md", "align": "center"},
+                        "children": [
+                            {"type": "icon", "icon": "mdi:desk-lamp"},
+                            {
+                                "type": "column",
+                                "layout": {"grow": 1, "gap": "xs"},
+                                "children": [
+                                    {"type": "text", "text": "Desk light", "style": {"emphasis": "high"}},
+                                    {"type": "value", "entity": "light.desk", "bind": {"value": "state"}},
+                                ],
+                            },
+                            {
+                                "type": "toggle",
+                                "entity": "light.desk",
+                                "action": {"type": "service", "domain": "light", "service": "toggle", "entity_id": "light.desk"},
+                            },
+                        ],
+                    },
+                }
+            ]
+        )
+        self.assertEqual(errors(card, {"light.toggle"}), [])
+
+        slider = card["card"]["layout"]["blocks"][0]["component"]["children"][1]
+        slider["type"] = "slider"
+        slider.pop("children")
+        diagnostics = errors(card, {"light.toggle"})
+        self.assertIn("component.missing_action", {item["code"] for item in diagnostics})
+
+    def test_component_tree_depth_budget_is_enforced(self):
+        node = {"type": "text", "text": "deep"}
+        for _ in range(7):
+            node = {"type": "column", "children": [node]}
+        card = base_card([{"id": "deep", "kind": "component_tree", "component": node}])
+        self.assertIn("budget.component_depth", {item["code"] for item in errors(card)})
 
 
 if __name__ == "__main__":

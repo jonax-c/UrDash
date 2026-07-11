@@ -132,7 +132,7 @@ Primary implementation area: `custom_components/urdash/ai_client.py` and
 
 ## P1: Generic Scene And Component Tree
 
-- [ ] Replace flat-only composition with safe nested containers.
+- [x] Replace flat-only composition with safe nested containers.
 - [ ] Add row, column, stack, wrap, nested grid, overlay, scroll, and aspect-ratio
   containers.
 - [ ] Evaluate tabs, carousel, disclosure, modal, and popover primitives with
@@ -145,7 +145,16 @@ Primary implementation area: `custom_components/urdash/ai_client.py` and
 - [ ] Retain semantic convenience blocks only as optional macros compiled into the
   generic component tree.
 - [ ] Define reusable components and safe repetition over bounded entity lists.
-- [ ] Add container-depth and child-count limits.
+- [x] Add container-depth and child-count limits.
+
+Implemented foundation:
+
+- [x] Add recursive row, column, stack, wrap, and pressable surface containers.
+- [x] Add text, icon, value, toggle, slider, button, progress, divider, and spacer.
+- [x] Add expression-driven state, style, visibility, disabled state, and actions.
+- [x] Add keyboard semantics and prevent nested-control action bubbling.
+- [x] Enforce 6-level, 96-node, and 16-child composition budgets.
+- [x] Add a responsive compound Bubble-style light-control demo.
 
 ## P1: Data Sources And Visualization
 

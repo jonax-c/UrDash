@@ -74,6 +74,21 @@ const validConfig = {
   },
 };
 assert.equal(card._normalizeConfig(validConfig).urdash_schema_minor, 0);
+const componentConfig = structuredClone(validConfig);
+componentConfig.card.layout.blocks = [{
+  id: "bubble",
+  kind: "component_tree",
+  component: {
+    type: "surface",
+    action: { type: "more_info", entity_id: "light.desk" },
+    children: [
+      { type: "icon", icon: "mdi:desk-lamp" },
+      { type: "column", children: [{ type: "text", text: "Desk" }, { type: "value", entity: "light.desk" }] },
+      { type: "toggle", entity: "light.desk", action: { type: "service", domain: "light", service: "toggle", entity_id: "light.desk" } },
+    ],
+  },
+}];
+assert.equal(card._normalizeConfig(componentConfig).card.layout.blocks[0].component.type, "surface");
 assert.throws(
   () => card._normalizeConfig({ ...validConfig, raw_html: "<script>alert(1)</script>" }),
   (error) => error.diagnostics?.[0]?.code === "schema.additional_property",

@@ -153,7 +153,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.2");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260711.3");
 
       const hass = {
         config: {
@@ -165,7 +165,7 @@
           "sensor.living_room_temperature": state("sensor.living_room_temperature", "24", "Living Room Temperature", { unit_of_measurement: "°C", device_class: "temperature" }),
           "sensor.living_room_humidity": state("sensor.living_room_humidity", "57", "Living Room Humidity", { unit_of_measurement: "%", device_class: "humidity" }),
           "sensor.living_room_air_quality": state("sensor.living_room_air_quality", "Good", "Air Quality"),
-          "light.living_room_main": state("light.living_room_main", "on", "Main Lights"),
+          "light.living_room_main": state("light.living_room_main", "on", "Main Lights", { brightness: 184, supported_color_modes: ["brightness"] }),
           "light.living_room_lamp": state("light.living_room_lamp", "off", "Reading Lamp"),
           "climate.living_room_ac": state("climate.living_room_ac", "cool", "Living Room AC", {
             current_temperature: 24,
@@ -247,6 +247,10 @@
       };
 
       const samples = [
+        {
+          title: "Adaptive Bubble Control",
+          config: adaptiveBubbleControlCard(),
+        },
         {
           title: "Live Weather Forecast",
           className: "wide",
@@ -554,6 +558,146 @@
               },
               ...forecastBlocks,
             ],
+          },
+        });
+      }
+
+      function adaptiveBubbleControlCard() {
+        const lightState = { op: "entity", entity_id: "light.living_room_main", path: "state" };
+        const brightness = {
+          op: "round",
+          decimals: 0,
+          args: [{
+            op: "percentage",
+            args: [
+              { op: "entity", entity_id: "light.living_room_main", path: "attributes.brightness" },
+              { op: "literal", value: 255 },
+            ],
+          }],
+        };
+        const toggleMain = { type: "service", domain: "light", service: "toggle", entity_id: "light.living_room_main" };
+        return baseCard({
+          assets: {
+            icon_sets: [{
+              id: "light_states",
+              variants: [
+                { key: "on", icon: "mdi:lightbulb-on" },
+                { key: "off", icon: "mdi:lightbulb-outline" },
+              ],
+              fallback: { icon: "mdi:lightbulb-question" },
+            }],
+          },
+          intent: {
+            goal: "room_control",
+            title: "Living Light",
+            summary: "A freely composed Bubble-style light control with state, dimming, and secondary actions.",
+            risk_level: "low",
+            primary_entities: ["light.living_room_main", "light.living_room_lamp"],
+            primary_actions: ["light.toggle", "light.turn_on"],
+          },
+          layout: {
+            type: "grid",
+            columns: 12,
+            density: "comfortable",
+            theme: "quiet",
+            blocks: [{
+              id: "living-bubble",
+              kind: "component_tree",
+              grid: { col: 1, row: 1, w: 12, h: 4 },
+              presentation: { surface: "naked", align: "stretch", layer: "base", scale: "normal" },
+              component: {
+                id: "bubble-surface",
+                type: "surface",
+                entity: "light.living_room_main",
+                action: toggleMain,
+                style: {
+                  surface: "solid",
+                  shape: "soft",
+                  accent: {
+                    op: "if",
+                    condition: { op: "eq", args: [lightState, { op: "literal", value: "on" }] },
+                    then: { op: "literal", value: "#f6c453" },
+                    else: { op: "literal", value: "#708287" },
+                  },
+                },
+                layout: { width: "fill", direction: "column", padding: "md", gap: "md", align: "stretch" },
+                children: [
+                  {
+                    type: "row",
+                    layout: { width: "fill", gap: "md", align: "center" },
+                    children: [
+                      {
+                        type: "icon",
+                        icon_ref: { set: "light_states", key: lightState },
+                        style: { surface: "glass", shape: "circle", size: "lg", accent: "#f6c453" },
+                        layout: { padding: "sm" },
+                      },
+                      {
+                        type: "column",
+                        layout: { grow: 1, gap: "xs", align: "start" },
+                        children: [
+                          { type: "text", text: "Main lights", style: { size: "lg", emphasis: "high" } },
+                          {
+                            type: "text",
+                            text: {
+                              op: "map",
+                              args: [lightState],
+                              cases: [{ when: "on", value: { op: "literal", value: "On · warm evening scene" } }],
+                              default: { op: "literal", value: "Off · tap anywhere to wake" },
+                            },
+                            style: { size: "sm", emphasis: "low" },
+                          },
+                        ],
+                      },
+                      { type: "toggle", entity: "light.living_room_main", action: toggleMain, label: "Main lights" },
+                    ],
+                  },
+                  {
+                    type: "row",
+                    layout: { width: "fill", gap: "md", align: "center" },
+                    children: [
+                      {
+                        type: "slider",
+                        entity: "light.living_room_main",
+                        bind: { value: brightness },
+                        range: { min: 1, max: 100, step: 1 },
+                        label: "Brightness",
+                        layout: { grow: 1, width: "fill" },
+                        style: { accent: "#f6c453" },
+                        action: {
+                          type: "service",
+                          domain: "light",
+                          service: "turn_on",
+                          entity_id: "light.living_room_main",
+                          data: { brightness_pct: { op: "local", name: "value" } },
+                        },
+                      },
+                      { type: "value", value: brightness, unit: "%", label: "Brightness", style: { size: "sm", emphasis: "high" } },
+                    ],
+                  },
+                  {
+                    type: "wrap",
+                    layout: { width: "fill", gap: "sm", align: "center" },
+                    children: [
+                      {
+                        type: "button",
+                        label: "Reading lamp",
+                        icon: "mdi:floor-lamp",
+                        style: { surface: "glass", shape: "pill", size: "sm" },
+                        action: { type: "service", domain: "light", service: "toggle", entity_id: "light.living_room_lamp" },
+                      },
+                      {
+                        type: "button",
+                        label: "Details",
+                        icon: "mdi:tune-variant",
+                        style: { surface: "ghost", shape: "pill", size: "sm" },
+                        action: { type: "more_info", entity_id: "light.living_room_main" },
+                      },
+                    ],
+                  },
+                ],
+              },
+            }],
           },
         });
       }

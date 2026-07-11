@@ -1218,6 +1218,80 @@ A card may define at most 8 icon sets, 24 variants per set, and 96 variants in
 total. Set IDs and variant keys are bounded safe identifiers. References use the
 declared fallback when a dynamic key is unknown, and never load external assets.
 
+## Generic Component Tree
+
+`component_tree` is the safe composition primitive for Bubble-style switches and
+compound controls. It gives the AI nested layout freedom without exposing DOM,
+HTML, CSS, or JavaScript.
+
+Container components:
+
+- `row`, `column`, `wrap`: flex composition.
+- `stack`: bounded overlay composition with semantic placement tokens.
+- `surface`: optionally pressable row or column surface with keyboard behavior.
+
+Leaf components:
+
+- `text`, `icon`, `value`, `toggle`, `slider`, `button`, `progress`, `divider`,
+  and `spacer`.
+
+```yaml
+- id: living-light
+  kind: component_tree
+  component:
+    type: surface
+    entity: light.living_room
+    action:
+      type: service
+      domain: light
+      service: toggle
+      entity_id: light.living_room
+    style:
+      surface: solid
+      shape: pill
+      accent: "#f6c453"
+    layout:
+      direction: row
+      width: fill
+      align: center
+      gap: md
+      padding: md
+    children:
+      - type: icon
+        icon: mdi:lightbulb-on
+      - type: column
+        layout: { grow: 1, gap: xs }
+        children:
+          - type: text
+            text: Living room
+            style: { emphasis: high }
+          - type: value
+            entity: light.living_room
+      - type: toggle
+        entity: light.living_room
+        action:
+          type: service
+          domain: light
+          service: toggle
+          entity_id: light.living_room
+```
+
+Components accept expression-driven text, values, units, icons, icon references,
+accent, visibility, and disabled state. Interactive nodes use the existing
+allowlisted action manifest. Sliders pass their bounded numeric result through
+the local `value` expression and always require an explicit action.
+
+Layout is tokenized: direction, gap, padding, alignment, justification, width,
+grow, and stack placement. Styling is tokenized through surface, shape, tone,
+emphasis, size, opacity, and a validated accent color. Accent inherits through
+the tree so compound controls share one state-driven visual language.
+
+Trees are limited to 6 levels, 96 total nodes, and 16 children per container.
+Entity references, actions, expressions, icon references, component IDs, ranges,
+and leaf/container contracts are validated recursively. Surface, toggle, slider,
+and button controls provide keyboard and disabled semantics; child controls do
+not accidentally trigger a pressable parent surface.
+
 ## Styling
 
 AI can choose style tokens, not raw CSS.

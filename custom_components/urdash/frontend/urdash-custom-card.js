@@ -390,6 +390,8 @@ class UrDashCard extends HTMLElement {
         return this._radialScene(config);
       case "visual_map":
         return this._visualMap(config);
+      case "component_tree":
+        return this._componentTree(config);
       default:
         return this._empty(`Unsupported block: ${config.kind || "unknown"}`);
     }
@@ -402,6 +404,184 @@ class UrDashCard extends HTMLElement {
     text.textContent = this._resolveDisplay(config.text ?? config.title ?? "");
     wrap.appendChild(text);
     return wrap;
+  }
+
+  _componentTree(config) {
+    const root = document.createElement("div");
+    root.className = "component-tree";
+    const component = this._componentNode(config.component, 1);
+    if (component) root.appendChild(component);
+    else root.appendChild(this._empty("No component tree configured."));
+    return root;
+  }
+
+  _componentNode(config, depth) {
+    if (!config || typeof config !== "object" || depth > 6 || !this._componentVisible(config)) return null;
+    const type = this._safeEnum(config.type, [
+      "row", "column", "stack", "wrap", "surface", "text", "icon", "value",
+      "toggle", "slider", "button", "progress", "divider", "spacer",
+    ], "spacer");
+    if (["row", "column", "stack", "wrap", "surface"].includes(type)) {
+      const container = document.createElement("div");
+      this._configureComponentElement(container, config, type);
+      for (const child of (config.children || []).slice(0, 16)) {
+        const element = this._componentNode(child, depth + 1);
+        if (element) container.appendChild(element);
+      }
+      if (type === "surface") this._makeComponentActionable(container, config);
+      return container;
+    }
+    if (type === "text") {
+      const text = document.createElement("span");
+      this._configureComponentElement(text, config, type);
+      text.textContent = this._resolveDisplay(config.text ?? config.label ?? "");
+      return text;
+    }
+    if (type === "icon") {
+      const icon = document.createElement("span");
+      this._configureComponentElement(icon, config, type);
+      if (!this._appendResolvedIcon(icon, config, this._resolveDisplay(config.label) || "Component icon", "component-asset-icon")) {
+        icon.appendChild(this._icon("mdi:view-dashboard"));
+      }
+      return icon;
+    }
+    if (type === "value") {
+      const value = document.createElement("div");
+      this._configureComponentElement(value, config, type);
+      const strong = document.createElement("strong");
+      strong.textContent = this._formatValue(this._componentValue(config), this._componentUnit(config));
+      value.appendChild(strong);
+      const label = this._resolveDisplay(config.label);
+      if (label) value.appendChild(this._label(label));
+      return value;
+    }
+    if (type === "toggle") return this._componentToggle(config);
+    if (type === "slider") return this._componentSlider(config);
+    if (type === "button") {
+      const button = this._actionButton(config.label || config.text || "Action", config.icon, config.action, config.icon_ref);
+      this._configureComponentElement(button, config, type);
+      if (this._componentDisabled(config)) button.disabled = true;
+      return button;
+    }
+    if (type === "progress") {
+      const progress = document.createElement("progress");
+      this._configureComponentElement(progress, config, type);
+      const minimum = Number(config.range?.min ?? 0);
+      const maximum = Number(config.range?.max ?? 100);
+      progress.max = maximum;
+      progress.value = this._clampNumber(this._componentValue(config), minimum, maximum, minimum);
+      progress.setAttribute("aria-label", this._resolveDisplay(config.label) || "Progress");
+      return progress;
+    }
+    if (type === "divider") {
+      const divider = document.createElement("hr");
+      this._configureComponentElement(divider, config, type);
+      return divider;
+    }
+    const spacer = document.createElement("span");
+    this._configureComponentElement(spacer, config, type);
+    return spacer;
+  }
+
+  _configureComponentElement(element, config, type) {
+    element.classList.add(
+      "component",
+      `component-${type}`,
+      `component-surface-${this._safeEnum(config.style?.surface, ["none", "soft", "glass", "solid", "ghost"], "none")}`,
+      `component-shape-${this._safeEnum(config.style?.shape, ["square", "soft", "pill", "circle"], "soft")}`,
+      `component-tone-${config.style?.tone ? this._safeEnum(config.style.tone, ["neutral", "calm", "warm", "cool", "alert", "success"], "neutral") : "inherit"}`,
+      `component-emphasis-${this._safeEnum(config.style?.emphasis, ["low", "normal", "high"], "normal")}`,
+      `component-size-${this._safeEnum(config.style?.size, ["xs", "sm", "md", "lg", "xl"], "md")}`,
+      `component-gap-${this._safeEnum(config.layout?.gap, ["none", "xs", "sm", "md", "lg"], "sm")}`,
+      `component-direction-${this._safeEnum(config.layout?.direction, ["row", "column"], "row")}`,
+      `component-padding-${this._safeEnum(config.layout?.padding, ["none", "xs", "sm", "md", "lg"], "none")}`,
+      `component-align-${this._safeEnum(config.layout?.align, ["start", "center", "end", "stretch"], "center")}`,
+      `component-justify-${this._safeEnum(config.layout?.justify, ["start", "center", "end", "between", "around"], "start")}`,
+      `component-width-${this._safeEnum(config.layout?.width, ["auto", "fill", "content"], "auto")}`,
+      `component-place-${this._safeEnum(config.layout?.placement, ["center", "top", "right", "bottom", "left", "top_left", "top_right", "bottom_left", "bottom_right"], "center")}`,
+    );
+    if (config.id) element.dataset.componentId = this._safeKind(config.id);
+    const accent = this._resolveDisplay(config.style?.accent);
+    if (accent) element.style.setProperty("--component-accent", this._safeAccent(accent));
+    element.style.setProperty("--component-grow", String(this._clampInt(config.layout?.grow, 0, 4, 0)));
+    element.style.opacity = String(this._clampNumber(config.style?.opacity, 0, 1, 1));
+  }
+
+  _componentValue(config) {
+    if (config.bind?.value !== undefined) return this._boundValue(this._state(config.entity), config.bind.value);
+    if (config.value !== undefined) return this._isExpression(config.value) ? this._evaluateExpression(config.value) : config.value;
+    return this._boundValue(this._state(config.entity), "state");
+  }
+
+  _componentUnit(config) {
+    if (config.bind?.unit !== undefined) return this._boundValue(this._state(config.entity), config.bind.unit);
+    if (config.unit !== undefined) return this._isExpression(config.unit) ? this._evaluateExpression(config.unit) : config.unit;
+    return this._boundValue(this._state(config.entity), "attributes.unit_of_measurement");
+  }
+
+  _componentVisible(config) {
+    if (config.visibility === undefined) return true;
+    return Boolean(this._isExpression(config.visibility) ? this._evaluateExpression(config.visibility) : config.visibility);
+  }
+
+  _componentDisabled(config) {
+    if (config.disabled === undefined) return false;
+    return Boolean(this._isExpression(config.disabled) ? this._evaluateExpression(config.disabled) : config.disabled);
+  }
+
+  _componentToggle(config) {
+    const state = this._state(config.entity);
+    const active = Boolean(this._isExpression(config.value) ? this._evaluateExpression(config.value) : config.value !== undefined ? config.value : state && !["off", "closed", "locked", "idle", "unavailable", "unknown"].includes(state.state));
+    const button = document.createElement("button");
+    button.type = "button";
+    this._configureComponentElement(button, config, "toggle");
+    button.classList.toggle("active", active);
+    button.setAttribute("role", "switch");
+    button.setAttribute("aria-checked", String(active));
+    button.setAttribute("aria-label", this._resolveDisplay(config.label) || this._stateName(state) || "Toggle");
+    const thumb = document.createElement("span");
+    button.appendChild(thumb);
+    const action = config.action || this._toggleActionFor(config.entity || "", state);
+    button.disabled = this._componentDisabled(config) || !this._actionAllowed(action);
+    button.addEventListener("click", () => this._runAction(action, { current: state?.state, element: button }));
+    return button;
+  }
+
+  _componentSlider(config) {
+    const state = this._state(config.entity);
+    const input = document.createElement("input");
+    input.type = "range";
+    this._configureComponentElement(input, config, "slider");
+    input.min = String(config.range?.min ?? 0);
+    input.max = String(config.range?.max ?? 100);
+    input.step = String(config.range?.step ?? 1);
+    const value = Number(this._componentValue(config));
+    input.value = String(Number.isFinite(value) ? value : Number(input.min));
+    input.disabled = this._componentDisabled(config) || !this._actionAllowed(config.action);
+    input.setAttribute("aria-label", this._resolveDisplay(config.label) || this._stateName(state) || "Value");
+    input.addEventListener("change", () => this._runAction(config.action, {
+      value: Number(input.value),
+      current: Number(state?.state),
+      element: input,
+    }));
+    return input;
+  }
+
+  _makeComponentActionable(element, config) {
+    if (this._componentDisabled(config) || !this._actionAllowed(config.action)) return;
+    element.classList.add("component-actionable");
+    element.setAttribute("role", "button");
+    element.tabIndex = 0;
+    const run = () => this._runAction(config.action, { current: this._state(config.entity)?.state, element });
+    element.addEventListener("click", (event) => {
+      if (event.target?.closest?.("button,input,select")) return;
+      run();
+    });
+    element.addEventListener("keydown", (event) => {
+      if (!["Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      run();
+    });
   }
 
   _iconBlock(config) {
@@ -2474,6 +2654,113 @@ const styles = `
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
+
+  .component-tree { width: 100%; min-width: 0; --component-accent: var(--accent); }
+  .component { box-sizing: border-box; min-width: 0; color: var(--urdash-fg); }
+  .component-row, .component-wrap, .component-surface {
+    display: flex;
+    flex-direction: row;
+  }
+  .component-column { display: flex; flex-direction: column; }
+  .component-wrap { flex-wrap: wrap; }
+  .component-stack { display: grid; }
+  .component-stack > .component { grid-area: 1 / 1; }
+  .component-surface {
+    min-height: 52px;
+    border: 1px solid transparent;
+    transition: background-color 180ms ease, border-color 180ms ease, transform 180ms ease;
+  }
+  .component-surface.component-direction-column { flex-direction: column; }
+  .component-surface-soft { background: color-mix(in srgb, var(--component-accent) 10%, var(--urdash-panel)); border-color: color-mix(in srgb, var(--component-accent) 16%, transparent); }
+  .component-surface-glass { background: rgba(255,255,255,0.13); border-color: rgba(255,255,255,0.28); backdrop-filter: blur(14px); }
+  .component-surface-solid { background: color-mix(in srgb, var(--component-accent) 22%, var(--urdash-panel)); border-color: color-mix(in srgb, var(--component-accent) 34%, transparent); }
+  .component-surface-ghost { background: transparent; border-color: color-mix(in srgb, var(--component-accent) 18%, transparent); }
+  .component-shape-square { border-radius: 0; }
+  .component-shape-soft { border-radius: 8px; }
+  .component-shape-pill { border-radius: 999px; }
+  .component-shape-circle { border-radius: 50%; aspect-ratio: 1; }
+  .component-gap-none { gap: 0; }
+  .component-gap-xs { gap: 4px; }
+  .component-gap-sm { gap: 8px; }
+  .component-gap-md { gap: 12px; }
+  .component-gap-lg { gap: 18px; }
+  .component-padding-none { padding: 0; }
+  .component-padding-xs { padding: 4px; }
+  .component-padding-sm { padding: 8px; }
+  .component-padding-md { padding: 12px; }
+  .component-padding-lg { padding: 18px; }
+  .component-align-start { align-items: flex-start; }
+  .component-align-center { align-items: center; }
+  .component-align-end { align-items: flex-end; }
+  .component-align-stretch { align-items: stretch; }
+  .component-justify-start { justify-content: flex-start; }
+  .component-justify-center { justify-content: center; }
+  .component-justify-end { justify-content: flex-end; }
+  .component-justify-between { justify-content: space-between; }
+  .component-justify-around { justify-content: space-around; }
+  .component-width-auto { width: auto; }
+  .component-width-fill { width: 100%; }
+  .component-width-content { width: max-content; max-width: 100%; }
+  .component { flex-grow: var(--component-grow, 0); }
+  .component-place-center { place-self: center; }
+  .component-place-top { place-self: start center; }
+  .component-place-right { place-self: center end; }
+  .component-place-bottom { place-self: end center; }
+  .component-place-left { place-self: center start; }
+  .component-place-top_left { place-self: start; }
+  .component-place-top_right { place-self: start end; }
+  .component-place-bottom_left { place-self: end start; }
+  .component-place-bottom_right { place-self: end; }
+  .component-actionable { cursor: pointer; }
+  .component-actionable:hover { transform: translateY(-1px); }
+  .component-actionable:focus-visible { outline: 2px solid var(--component-accent); outline-offset: 2px; }
+  .component-text { display: block; overflow-wrap: anywhere; }
+  .component-emphasis-low { color: var(--urdash-muted); font-weight: 600; }
+  .component-emphasis-normal { font-weight: 750; }
+  .component-emphasis-high { font-weight: 900; }
+  .component-tone-neutral { --component-accent: #60777b; }
+  .component-tone-calm { --component-accent: #2a8f83; }
+  .component-tone-warm { --component-accent: #d99a3e; }
+  .component-tone-cool { --component-accent: #4f91b8; }
+  .component-tone-alert { --component-accent: #c95b56; }
+  .component-tone-success { --component-accent: #31956e; }
+  .component-size-xs { font-size: 11px; }
+  .component-size-sm { font-size: 12px; }
+  .component-size-md { font-size: 14px; }
+  .component-size-lg { font-size: 18px; }
+  .component-size-xl { font-size: 26px; }
+  .component-icon { display: inline-grid; place-items: center; flex: 0 0 auto; color: var(--component-accent); }
+  .component-icon ha-icon, .component-icon .resolved-vector-icon { width: 1.7em; height: 1.7em; }
+  .component-value { display: grid; gap: 2px; }
+  .component-value strong { font-size: 1.25em; line-height: 1; }
+  .component-value span { color: var(--urdash-muted); font-size: 11px; }
+  .component-toggle {
+    position: relative;
+    flex: 0 0 auto;
+    width: 46px;
+    height: 26px;
+    border: 0;
+    border-radius: 999px;
+    padding: 3px;
+    background: color-mix(in srgb, var(--urdash-muted) 24%, transparent);
+    cursor: pointer;
+  }
+  .component-toggle span {
+    display: block;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    transition: transform 180ms ease;
+  }
+  .component-toggle.active { background: var(--component-accent); }
+  .component-toggle.active span { transform: translateX(20px); }
+  .component-toggle:disabled, .component-slider:disabled, .component-button:disabled { cursor: not-allowed; opacity: 0.48 !important; }
+  .component-slider { width: 100%; min-width: 90px; accent-color: var(--component-accent); }
+  .component-progress { width: 100%; height: 7px; accent-color: var(--component-accent); }
+  .component-divider { width: 100%; border: 0; border-top: 1px solid color-mix(in srgb, var(--component-accent) 22%, transparent); }
+  .component-spacer { min-width: 8px; min-height: 8px; }
 
   .block-visual_map {
     align-content: stretch;

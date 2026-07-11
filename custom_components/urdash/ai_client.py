@@ -30,6 +30,7 @@ Each entity includes a versioned capability descriptor. Use it to understand the
 Design the card before composing blocks: choose the user's task, visible state, one-tap actions, secondary context, risky actions, and a layout that makes the card useful.
 Cards may combine multiple device functions when it helps the user's goal.
 Design expressive card experiences, not just block grids. Use canvas layout, floating primitives, hero values, ambient layers, orbit/constellation compositions, visual maps, strips, and unframed surfaces when they improve the card.
+Use component_tree when the user asks for a Bubble-style control, a compound device control, or a freely composed interactive surface. Build it from nested row, column, stack, wrap, and surface containers with text, icon, value, toggle, slider, button, progress, divider, and spacer components. A component tree is not a predefined layout: design its hierarchy, emphasis, actions, and responsive wrapping for the user's task.
 Use visual_map when the user asks for flows, relationships, topology, spatial control, power movement, irrigation paths, security perimeters, HVAC air movement, or any card that benefits from AI-designed nodes and links. Do not use predefined layouts; choose node positions and link paths based on the user's goal and the available entities.
 For polished smart-home topology cards, visual_map can use ring nodes, node stats, connection anchors, manual path points, flow dots, and hidden link labels. Use these to create clear energy, water, HVAC, network, security, and appliance-flow displays without hardcoded templates.
 Design cards for both desktop and mobile. Canvas cards should remain readable around 350px wide; use layout.responsive.mobile.aspect_ratio and block responsive.mobile.frame when the mobile composition needs different spacing.
@@ -506,6 +507,83 @@ ICON_REF_SCHEMA: dict[str, Any] = {
     "properties": {"set": {"type": "string"}, "key": DISPLAY_VALUE_SCHEMA},
 }
 
+COMPONENT_REF: dict[str, Any] = {"$ref": "#/$defs/component"}
+
+COMPONENT_STYLE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "surface": {"type": "string", "enum": ["none", "soft", "glass", "solid", "ghost"]},
+        "shape": {"type": "string", "enum": ["square", "soft", "pill", "circle"]},
+        "tone": {"type": "string", "enum": ["neutral", "calm", "warm", "cool", "alert", "success"]},
+        "emphasis": {"type": "string", "enum": ["low", "normal", "high"]},
+        "accent": DISPLAY_VALUE_SCHEMA,
+        "size": {"type": "string", "enum": ["xs", "sm", "md", "lg", "xl"]},
+        "opacity": {"type": "number", "minimum": 0, "maximum": 1},
+    },
+}
+
+COMPONENT_LAYOUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "gap": {"type": "string", "enum": ["none", "xs", "sm", "md", "lg"]},
+        "direction": {"type": "string", "enum": ["row", "column"]},
+        "padding": {"type": "string", "enum": ["none", "xs", "sm", "md", "lg"]},
+        "align": {"type": "string", "enum": ["start", "center", "end", "stretch"]},
+        "justify": {"type": "string", "enum": ["start", "center", "end", "between", "around"]},
+        "width": {"type": "string", "enum": ["auto", "fill", "content"]},
+        "grow": {"type": "integer", "minimum": 0, "maximum": 4},
+        "placement": {"type": "string", "enum": ["center", "top", "right", "bottom", "left", "top_left", "top_right", "bottom_left", "bottom_right"]},
+    },
+}
+
+COMPONENT_DEFINITION: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["type"],
+    "properties": {
+        "id": {"type": "string"},
+        "type": {
+            "type": "string",
+            "enum": [
+                "row", "column", "stack", "wrap", "surface", "text", "icon",
+                "value", "toggle", "slider", "button", "progress", "divider", "spacer",
+            ],
+        },
+        "children": {"type": "array", "maxItems": 16, "items": COMPONENT_REF},
+        "text": DISPLAY_VALUE_SCHEMA,
+        "label": DISPLAY_VALUE_SCHEMA,
+        "value": DISPLAY_VALUE_SCHEMA,
+        "unit": DISPLAY_VALUE_SCHEMA,
+        "entity": {"type": "string"},
+        "bind": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "value": DISPLAY_VALUE_SCHEMA,
+                "unit": DISPLAY_VALUE_SCHEMA,
+            },
+        },
+        "icon": DISPLAY_VALUE_SCHEMA,
+        "icon_ref": ICON_REF_SCHEMA,
+        "action": ACTION_SCHEMA,
+        "range": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "min": {"type": "number"},
+                "max": {"type": "number"},
+                "step": {"type": "number"},
+            },
+        },
+        "style": COMPONENT_STYLE_SCHEMA,
+        "layout": COMPONENT_LAYOUT_SCHEMA,
+        "disabled": {"anyOf": [{"type": "boolean"}, EXPRESSION_REF]},
+        "visibility": {"anyOf": [{"type": "boolean"}, EXPRESSION_REF]},
+    },
+}
+
 ASSETS_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
@@ -688,6 +766,7 @@ BLOCK_SCHEMA: dict[str, Any] = {
                 "constellation",
                 "radial_scene",
                 "visual_map",
+                "component_tree",
             ],
         },
         "title": DISPLAY_VALUE_SCHEMA,
@@ -812,6 +891,7 @@ BLOCK_SCHEMA: dict[str, Any] = {
         },
         "nodes": {"type": "array", "items": VISUAL_MAP_NODE_SCHEMA},
         "links": {"type": "array", "items": VISUAL_MAP_LINK_SCHEMA},
+        "component": COMPONENT_REF,
         "style": STYLE_SCHEMA,
         "presentation": PRESENTATION_SCHEMA,
         "animation": ANIMATION_SCHEMA,
@@ -837,7 +917,7 @@ BLOCK_SCHEMA: dict[str, Any] = {
 }
 
 CARD_V2_SCHEMA: dict[str, Any] = {
-    "$defs": {"expression": EXPRESSION_DEFINITION},
+    "$defs": {"expression": EXPRESSION_DEFINITION, "component": COMPONENT_DEFINITION},
     "type": "object",
     "additionalProperties": False,
     "required": ["type", "urdash_schema", "height_mode", "card"],
@@ -905,7 +985,7 @@ CARD_V2_SCHEMA: dict[str, Any] = {
 }
 
 GENERATION_SCHEMA: dict[str, Any] = {
-    "$defs": {"expression": EXPRESSION_DEFINITION},
+    "$defs": {"expression": EXPRESSION_DEFINITION, "component": COMPONENT_DEFINITION},
     "type": "object",
     "additionalProperties": False,
     "required": ["card_config", "summary", "notes"],
@@ -1067,6 +1147,7 @@ def _requirements() -> list[str]:
         "Use canvas layout for fancy, spatial, or futuristic cards. Use grid layout only when utility and scanning are more important.",
         "Use presentation.surface to vary the visual treatment: naked, ghost, hero, floating, orb, strip, rail, panel, or glass.",
         "Use hero_value, ambient, entity_orbit, constellation, radial_scene, and visual_map for expressive visual structure when appropriate.",
+        "Use component_tree for Bubble-style switches and compound controls. Compose safe containers and controls instead of flattening the design into unrelated blocks.",
         "Use vector_icon for custom decorative or semantic symbols; only safe declarative path/circle/ellipse/rect/line/polyline/group shapes, gradients, focal points, numeric coordinate_mode, ordered transform stacks, blend modes, safe filter presets, glow/neon/blur/color effects, and preset or keyframe shape animations are allowed.",
         "Use visual_map for relationship or flow cards. AI owns node positions, node sizes, labels, icons, link routing style, and animation choices; UrDash only renders the safe declarative map.",
         "Define reusable MDI or declarative vector variants in card.assets.icon_sets when several blocks share a visual language. Reference them with icon_ref set and a literal or expression key instead of duplicating artwork.",

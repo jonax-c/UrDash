@@ -20,6 +20,8 @@ MAX_EXPRESSION_OUTPUT = 1024
 MAX_DATA_SOURCES = 4
 MAX_ICON_SETS = 8
 MAX_ICON_VARIANTS = 96
+MAX_COMPONENT_NODES = 96
+MAX_COMPONENT_DEPTH = 6
 CURRENT_SCHEMA_MINOR = 0
 
 BINDING_PATTERN = re.compile(
@@ -349,6 +351,8 @@ def _validate_semantics(
             _validate_action(action, action_path, entities, available_services, diagnostics)
         if block.get("kind") == "visual_map":
             _validate_visual_map(block, path, seen_ids, entities, diagnostics)
+        if block.get("kind") == "component_tree":
+            _validate_component_tree(block.get("component"), f"{path}.component", entities, diagnostics)
         _validate_vector_budget(block, path, diagnostics)
     if action_count > MAX_ACTIONS:
         _diagnostic(
@@ -539,6 +543,74 @@ def _validate_block_references(
                 "Visibility requires an expression or an entity and operator.",
                 "Add a boolean expression or a legacy entity visibility rule.",
             )
+    _validate_component_entities(block.get("component"), f"{path}.component", entities, diagnostics)
+
+
+def _validate_component_entities(
+    node: Any,
+    path: str,
+    entities: dict[str, dict[str, Any]],
+    diagnostics: list[dict[str, Any]],
+) -> None:
+    if not isinstance(node, dict):
+        return
+    if node.get("entity"):
+        _validate_entity(node["entity"], f"{path}.entity", entities, diagnostics)
+    for index, child in enumerate(node.get("children", [])):
+        _validate_component_entities(child, f"{path}.children[{index}]", entities, diagnostics)
+
+
+def _validate_component_tree(
+    root: Any,
+    path: str,
+    entities: dict[str, dict[str, Any]],
+    diagnostics: list[dict[str, Any]],
+) -> None:
+    if not isinstance(root, dict):
+        _diagnostic(diagnostics, path, "component.missing_root", "Component-tree blocks require a root component.", "Add a safe component object.")
+        return
+    container_types = {"row", "column", "stack", "wrap", "surface"}
+    leaf_types = {"text", "icon", "value", "toggle", "slider", "button", "progress", "divider", "spacer"}
+    state = {"nodes": 0, "ids": set()}
+
+    def visit(node: Any, node_path: str, depth: int) -> None:
+        if not isinstance(node, dict):
+            return
+        state["nodes"] += 1
+        if state["nodes"] > MAX_COMPONENT_NODES:
+            _diagnostic(diagnostics, node_path, "budget.component_nodes", f"Component tree exceeds {MAX_COMPONENT_NODES} nodes.", "Reduce or reuse component structure.")
+            return
+        if depth > MAX_COMPONENT_DEPTH:
+            _diagnostic(diagnostics, node_path, "budget.component_depth", f"Component tree exceeds {MAX_COMPONENT_DEPTH} levels.", "Flatten nested containers.")
+            return
+        node_type = node.get("type")
+        children = node.get("children", [])
+        if node_type in container_types and not children:
+            _diagnostic(diagnostics, f"{node_path}.children", "component.empty_container", f"Container {node_type!r} has no children.", "Add at least one child component.", severity="warning")
+        if node_type in leaf_types and children:
+            _diagnostic(diagnostics, f"{node_path}.children", "component.leaf_children", f"Leaf component {node_type!r} cannot contain children.", "Move children into a row, column, stack, wrap, or surface.")
+        node_id = node.get("id")
+        if isinstance(node_id, str):
+            if not SOURCE_ID_PATTERN.fullmatch(node_id):
+                _diagnostic(diagnostics, f"{node_path}.id", "component.invalid_id", "Component ID is malformed.", "Use a safe stable identifier.")
+            if node_id in state["ids"]:
+                _diagnostic(diagnostics, f"{node_path}.id", "component.duplicate_id", f"Component ID {node_id!r} is duplicated.", "Use a unique component ID within the tree.")
+            state["ids"].add(node_id)
+        if node_type == "slider" and not isinstance(node.get("action"), dict):
+            _diagnostic(diagnostics, f"{node_path}.action", "component.missing_action", "Slider components require an explicit safe action.", "Add an allowlisted service action using the local value.")
+        range_config = node.get("range")
+        if isinstance(range_config, dict):
+            minimum = range_config.get("min")
+            maximum = range_config.get("max")
+            step = range_config.get("step")
+            if isinstance(minimum, int | float) and isinstance(maximum, int | float) and minimum >= maximum:
+                _diagnostic(diagnostics, f"{node_path}.range", "component.invalid_range", "Range minimum must be less than maximum.", "Correct the range bounds.")
+            if isinstance(step, int | float) and step <= 0:
+                _diagnostic(diagnostics, f"{node_path}.range.step", "component.invalid_step", "Range step must be positive.", "Use a positive step value.")
+        for index, child in enumerate(children):
+            visit(child, f"{node_path}.children[{index}]", depth + 1)
+
+    visit(root, path, 1)
 
 
 def _validate_bindings(value: Any, path: str, diagnostics: list[dict[str, Any]]) -> None:
@@ -664,6 +736,15 @@ def _block_actions(block: dict[str, Any], path: str) -> list[tuple[dict[str, Any
     for index, node in enumerate(block.get("nodes", [])):
         if isinstance(node.get("action"), dict):
             actions.append((node["action"], f"{path}.nodes[{index}].action"))
+    def collect_component(node: Any, node_path: str) -> None:
+        if not isinstance(node, dict):
+            return
+        if isinstance(node.get("action"), dict):
+            actions.append((node["action"], f"{node_path}.action"))
+        for index, child in enumerate(node.get("children", [])):
+            collect_component(child, f"{node_path}.children[{index}]")
+
+    collect_component(block.get("component"), f"{path}.component")
     return actions
 
 
