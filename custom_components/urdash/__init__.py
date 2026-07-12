@@ -50,6 +50,7 @@ from .lovelace_install import append_card, config_revision, visible_views
 PLATFORMS: list[str] = []
 CANDIDATES_KEY = "_candidates"
 MAX_CANDIDATES = 20
+WEBSOCKET_REGISTERED_KEY = "_websocket_registered"
 
 SERVICE_GENERATE_CARD = "generate_card"
 THEMES = ["aurora", "quiet", "graphite", "calm", "sunrise"]
@@ -64,6 +65,13 @@ GENERATE_SERVICE_SCHEMA = vol.Schema(
         vol.Optional("entity_ids"): vol.All(cv.ensure_list, [cv.entity_id]),
     }
 )
+
+
+async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
+    """Register connection-level APIs before config entries finish loading."""
+    hass.data.setdefault(DOMAIN, {})
+    _register_websocket_commands(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -95,13 +103,13 @@ async def _async_register_static_path(hass: HomeAssistant) -> None:
                 StaticPathConfig(
                     url_path=STATIC_URL,
                     path=str(static_path),
-                    cache_headers=True,
+                    cache_headers=False,
                 )
             ]
         )
         return
 
-    await hass.http.async_register_static_path(STATIC_URL, str(static_path), True)
+    await hass.http.async_register_static_path(STATIC_URL, str(static_path), False)
 
 
 def _register_panel(hass: HomeAssistant) -> None:
@@ -124,11 +132,15 @@ def _register_panel(hass: HomeAssistant) -> None:
 
 
 def _register_websocket_commands(hass: HomeAssistant) -> None:
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    if domain_data.get(WEBSOCKET_REGISTERED_KEY):
+        return
     websocket_api.async_register_command(hass, websocket_entities)
     websocket_api.async_register_command(hass, websocket_settings)
     websocket_api.async_register_command(hass, websocket_generate)
     websocket_api.async_register_command(hass, websocket_lovelace_targets)
     websocket_api.async_register_command(hass, websocket_install_card)
+    domain_data[WEBSOCKET_REGISTERED_KEY] = True
 
 
 def _register_services(hass: HomeAssistant) -> None:

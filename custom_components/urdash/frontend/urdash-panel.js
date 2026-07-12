@@ -49,12 +49,13 @@ class UrDashPanel extends HTMLElement {
     this._installViewId = "";
     this._installSuccess = null;
     this._loaded = false;
+    this._loading = false;
+    this._loadRetryTimer = null;
   }
 
   set hass(hass) {
     this._hass = hass;
-    if (!this._loaded) {
-      this._loaded = true;
+    if (!this._loaded && !this._loading) {
       this._load();
     } else {
       this._refreshPreviewHass();
@@ -62,23 +63,57 @@ class UrDashPanel extends HTMLElement {
   }
 
   async _load() {
+    this._loading = true;
     this._render();
     try {
-      const [entityPayload, settingsPayload] = await Promise.all([
-        this._hass.connection.sendMessagePromise({ type: "urdash/entities" }),
-        this._hass.connection.sendMessagePromise({ type: "urdash/settings" }),
-      ]);
+      const [entityPayload, settingsPayload] = await this._loadBackendData();
       this._entities = entityPayload.entities || [];
       this._selectedEntityIds = new Set(this._entities.map((entity) => entity.entity_id).filter(Boolean));
       this._settings = { ...this._settings, ...settingsPayload };
       this._theme = this._settings.default_theme || this._theme;
       this._heightMode = this._settings.default_height_mode || this._heightMode;
       if (this._isValidationMode()) this._result = VALIDATION_RESULT;
+      this._loaded = true;
       this._render();
       if (this._result?.card_config) await this._mountPreview();
     } catch (error) {
       this._renderError(error);
+      if (this._isUnknownCommandError(error)) {
+        window.clearTimeout(this._loadRetryTimer);
+        this._loadRetryTimer = window.setTimeout(() => {
+          if (!this._loaded && !this._loading && this.isConnected) this._load();
+        }, 5000);
+      }
+    } finally {
+      this._loading = false;
     }
+  }
+
+  disconnectedCallback() {
+    window.clearTimeout(this._loadRetryTimer);
+  }
+
+  async _loadBackendData() {
+    const delays = [0, 250, 750, 1500, 3000];
+    let lastError;
+    for (const delay of delays) {
+      if (delay) await new Promise((resolve) => window.setTimeout(resolve, delay));
+      try {
+        return await Promise.all([
+          this._hass.connection.sendMessagePromise({ type: "urdash/entities" }),
+          this._hass.connection.sendMessagePromise({ type: "urdash/settings" }),
+        ]);
+      } catch (error) {
+        lastError = error;
+        if (!this._isUnknownCommandError(error)) throw error;
+      }
+    }
+    throw lastError;
+  }
+
+  _isUnknownCommandError(error) {
+    const message = `${error?.code || ""} ${error?.message || error || ""}`.toLowerCase();
+    return message.includes("unknown_command") || message.includes("unknown command");
   }
 
   async _generate() {
@@ -283,7 +318,7 @@ class UrDashPanel extends HTMLElement {
 
   async _loadUrDashCard() {
     if (customElements.get("urdash-card")) return;
-    await import("/urdash/static/urdash-custom-card.js?v=20260711.11");
+    await import("/urdash/static/urdash-custom-card.js?v=20260711.13");
   }
 
   _refreshPreviewHass() {

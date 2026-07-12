@@ -51,7 +51,7 @@ The base URL can be changed for OpenAI-compatible providers. If the AI request f
 Before using generated YAML in Lovelace, add the UrDash card resource:
 
 ```text
-/urdash/static/urdash-custom-card.js?v=20260711.11
+/urdash/static/urdash-custom-card.js?v=20260711.13
 ```
 
 Set the resource type to `JavaScript module`.
@@ -187,4 +187,4 @@ After updating UrDash through HACS:
 1. Restart Home Assistant.
 2. Hard-refresh the browser.
 
-UrDash version-tags its frontend panel URL to reduce stale JavaScript cache issues, but a hard refresh is still recommended after frontend changes.
+UrDash version-tags its frontend URLs and serves integration assets with cache revalidation so normal browser reloads cannot silently restore an incompatible renderer or schema. After upgrading from a release that used long-lived cache headers, update the Lovelace resource URL to the current version once and reload Home Assistant.
