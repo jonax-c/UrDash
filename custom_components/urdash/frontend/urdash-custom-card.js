@@ -4023,10 +4023,10 @@ const styles = `
   }
 
   @keyframes urdash-vector-rain {
-    0% { opacity: 0; transform: translateY(calc(-5px * var(--vector-strength, 1))); }
+    0% { opacity: 0; transform: translateY(-18%); }
     20% { opacity: 1; }
     82% { opacity: 1; }
-    100% { opacity: 0; transform: translateY(calc(8px * var(--vector-strength, 1))); }
+    100% { opacity: 0; transform: translateY(28%); }
   }
 
   @keyframes urdash-vector-drift {
