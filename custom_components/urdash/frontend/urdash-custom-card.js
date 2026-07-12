@@ -131,6 +131,13 @@ class UrDashCard extends HTMLElement {
 
   getCardSize() {
     const blocks = this._card?.layout?.blocks || [];
+    const layout = this._card?.layout || {};
+    if (
+      layout.type === "grid"
+      && layout.chrome === "art"
+      && blocks.length === 1
+      && blocks[0]?.kind === "component_tree"
+    ) return 2;
     return Math.max(3, Math.min(12, Math.ceil(blocks.length / 2) + 2));
   }
 
@@ -3000,15 +3007,28 @@ const styles = `
   .component-toggle {
     position: relative;
     flex: 0 0 auto;
-    width: 46px;
-    height: 26px;
+    width: 50px;
+    height: 44px;
     border: 0;
-    border-radius: 999px;
-    padding: 3px;
-    background: color-mix(in srgb, var(--urdash-muted) 24%, transparent);
+    border-radius: 8px;
+    padding: 0;
+    background: transparent;
     cursor: pointer;
   }
+  .component-toggle::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 9px;
+    width: 46px;
+    height: 26px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--urdash-muted) 24%, transparent);
+  }
   .component-toggle span {
+    position: absolute;
+    left: 5px;
+    top: 12px;
     display: block;
     width: 20px;
     height: 20px;
@@ -3017,7 +3037,7 @@ const styles = `
     box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     transition: transform 180ms ease;
   }
-  .component-toggle.active { background: var(--component-accent); }
+  .component-toggle.active::before { background: var(--component-accent); }
   .component-toggle.active span { transform: translateX(20px); }
   .component-toggle:disabled, .component-slider:disabled, .component-color-picker:disabled, .component-select:disabled, .component-button:disabled { cursor: not-allowed; opacity: 0.48 !important; }
   .component-slider { width: 100%; min-width: 90px; accent-color: var(--component-accent); }

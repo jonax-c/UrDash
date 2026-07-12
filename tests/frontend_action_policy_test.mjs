@@ -89,6 +89,11 @@ componentConfig.card.layout.blocks = [{
   },
 }];
 assert.equal(card._normalizeConfig(componentConfig).card.layout.blocks[0].component.type, "surface");
+const compactComponentConfig = structuredClone(componentConfig);
+compactComponentConfig.card.layout.chrome = "art";
+card._card = compactComponentConfig.card;
+assert.equal(card.getCardSize(), 2);
+card._card = null;
 assert.throws(
   () => card._normalizeConfig({ ...validConfig, raw_html: "<script>alert(1)</script>" }),
   (error) => error.diagnostics?.[0]?.code === "schema.additional_property",
