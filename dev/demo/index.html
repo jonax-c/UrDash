@@ -116,6 +116,23 @@
         height: 16px;
       }
 
+      .sample-error {
+        min-height: 96px;
+        display: grid;
+        align-content: center;
+        gap: 6px;
+        padding: 16px;
+        border: 1px solid #d9a5a0;
+        border-radius: 8px;
+        background: #fff6f4;
+        color: #762f2a;
+        font-size: 13px;
+      }
+
+      .sample-error strong {
+        font-size: 14px;
+      }
+
       .wide {
         grid-column: 1 / -1;
       }
@@ -503,10 +520,23 @@
           window.setTimeout(() => { label.textContent = "Copy YAML"; }, 1600);
         });
         const card = document.createElement("urdash-card");
-        card.setConfig({ ...sample.config, preview: true });
-        card.hass = hass;
         heading.append(title, copyButton);
-        section.append(heading, card);
+        section.appendChild(heading);
+        try {
+          card.setConfig({ ...sample.config, preview: true });
+          card.hass = hass;
+          section.appendChild(card);
+        } catch (error) {
+          const diagnostic = document.createElement("div");
+          diagnostic.className = "sample-error";
+          const heading = document.createElement("strong");
+          heading.textContent = "Sample configuration error";
+          const message = document.createElement("span");
+          message.textContent = error?.message || String(error);
+          diagnostic.append(heading, message);
+          section.appendChild(diagnostic);
+          console.error(`Unable to render demo sample: ${sample.title}`, error);
+        }
         host.appendChild(section);
       }
 
@@ -787,7 +817,7 @@
             }],
           },
           intent: {
-            goal: "light_control",
+            goal: "room_control",
             title: "Living Light",
             summary: "A compact single-light control designed for Lovelace stacks and groups.",
             risk_level: "low",
