@@ -133,6 +133,12 @@
         font-size: 14px;
       }
 
+      .lovelace-stack {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+      }
+
       .wide {
         grid-column: 1 / -1;
       }
@@ -322,6 +328,7 @@
             direction: "forward",
           }),
           "switch.washer": state("switch.washer", "on", "Washer"),
+          "switch.coffee_station": state("switch.coffee_station", "off", "Coffee Station"),
           "sensor.washer_remaining": state("sensor.washer_remaining", "24", "Washer Remaining", { unit_of_measurement: "min" }),
           "sensor.washer_power": state("sensor.washer_power", "342", "Washer Power", { unit_of_measurement: "W" }),
           "switch.irrigation_front": state("switch.irrigation_front", "off", "Front Irrigation"),
@@ -372,10 +379,24 @@
         },
       };
 
+      const livingLightSample = adaptiveBubbleControlCard();
+      const basicSwitchSample = compactSwitchCard();
       const samples = [
         {
           title: "Compact Living Light",
-          config: adaptiveBubbleControlCard(),
+          config: livingLightSample,
+        },
+        {
+          title: "Basic Switch",
+          config: basicSwitchSample,
+        },
+        {
+          title: "Compact Control Stack",
+          config: {
+            type: "vertical-stack",
+            cards: [livingLightSample, basicSwitchSample],
+          },
+          renderConfigs: [livingLightSample, basicSwitchSample],
         },
         {
           title: "Capability-driven Climate Studio",
@@ -519,13 +540,18 @@
           label.textContent = copied ? "Copied" : "Copy failed";
           window.setTimeout(() => { label.textContent = "Copy YAML"; }, 1600);
         });
-        const card = document.createElement("urdash-card");
         heading.append(title, copyButton);
         section.appendChild(heading);
         try {
-          card.setConfig({ ...sample.config, preview: true });
-          card.hass = hass;
-          section.appendChild(card);
+          const stack = document.createElement("div");
+          stack.className = "lovelace-stack";
+          for (const config of sample.renderConfigs || [sample.config]) {
+            const card = document.createElement("urdash-card");
+            card.setConfig({ ...config, preview: true });
+            card.hass = hass;
+            stack.appendChild(card);
+          }
+          section.appendChild(stack);
         } catch (error) {
           const diagnostic = document.createElement("div");
           diagnostic.className = "sample-error";
@@ -919,6 +945,97 @@
                       },
                       { type: "value", value: brightness, unit: "%", style: { size: "xs", emphasis: "high" } },
                     ],
+                  },
+                ],
+              },
+            }],
+          },
+        });
+      }
+
+      function compactSwitchCard() {
+        const switchState = { op: "entity", entity_id: "switch.coffee_station", path: "state" };
+        const toggleSwitch = {
+          type: "service",
+          domain: "switch",
+          service: "toggle",
+          entity_id: "switch.coffee_station",
+        };
+        return baseCard({
+          assets: {
+            icon_sets: [{
+              id: "switch_states",
+              variants: [
+                { key: "on", icon: "mdi:power-plug" },
+                { key: "off", icon: "mdi:power-plug-off-outline" },
+              ],
+              fallback: { icon: "mdi:power-plug-off-outline" },
+            }],
+          },
+          intent: {
+            goal: "room_control",
+            title: "Coffee Station",
+            summary: "A basic compact switch designed to stack with other device controls.",
+            risk_level: "low",
+            primary_entities: ["switch.coffee_station"],
+            primary_actions: ["switch.toggle"],
+          },
+          layout: {
+            type: "grid",
+            chrome: "art",
+            columns: 12,
+            density: "compact",
+            theme: "quiet",
+            blocks: [{
+              id: "coffee-switch",
+              kind: "component_tree",
+              grid: { col: 1, row: 1, w: 12, h: 1 },
+              presentation: { surface: "naked", align: "stretch", layer: "base", scale: "normal" },
+              component: {
+                id: "switch-surface",
+                type: "surface",
+                entity: "switch.coffee_station",
+                action: { type: "more_info", entity_id: "switch.coffee_station" },
+                style: {
+                  surface: "solid",
+                  shape: "soft",
+                  accent: {
+                    op: "if",
+                    condition: { op: "eq", args: [switchState, { op: "literal", value: "on" }] },
+                    then: { op: "literal", value: "#42a47b" },
+                    else: { op: "literal", value: "#718083" },
+                  },
+                },
+                layout: { width: "fill", padding: "sm", gap: "sm", align: "center" },
+                children: [
+                  {
+                    type: "icon",
+                    icon_ref: { set: "switch_states", key: switchState },
+                    style: { surface: "glass", shape: "circle", size: "md", accent: "#42a47b" },
+                    layout: { padding: "xs" },
+                  },
+                  {
+                    type: "column",
+                    layout: { grow: 1, gap: "xs", align: "start" },
+                    children: [
+                      { type: "text", text: "Coffee station", style: { size: "md", emphasis: "high" } },
+                      {
+                        type: "text",
+                        text: {
+                          op: "map",
+                          args: [switchState],
+                          cases: [{ when: "on", value: { op: "literal", value: "On" } }],
+                          default: { op: "literal", value: "Off" },
+                        },
+                        style: { size: "xs", emphasis: "low" },
+                      },
+                    ],
+                  },
+                  {
+                    type: "toggle",
+                    entity: "switch.coffee_station",
+                    action: toggleSwitch,
+                    label: "Coffee station",
                   },
                 ],
               },
