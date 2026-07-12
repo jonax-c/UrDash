@@ -101,6 +101,15 @@ def errors(card: dict, services: set[str] | None = None) -> list[dict]:
 
 
 class CardValidatorTests(unittest.TestCase):
+    def test_presentation_clip_is_a_strict_boolean(self):
+        card = base_card()
+        block = card["card"]["layout"]["blocks"][0]
+        block["presentation"] = {"surface": "naked", "clip": True}
+        self.assertFalse(errors(card))
+
+        block["presentation"]["clip"] = "true"
+        self.assertIn("schema.type", {item["code"] for item in errors(card)})
+
     def test_strict_provider_schema_requires_all_properties_as_nullable(self):
         strict = validator.build_strict_provider_schema(SCHEMA)
         self.assertEqual(

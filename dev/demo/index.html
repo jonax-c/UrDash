@@ -193,7 +193,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260712.1");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260712.2");
 
       const hass = {
         config: {
@@ -3012,7 +3012,7 @@
           frame: { x: 11 + index * 16.8, y: 77, w: 11, h: 6.8 },
           responsive: { mobile: { frame: { x: 11 + index * 16.8, y: 75.5, w: 11, h: 6.2 } } },
           style: { accent: "#26332e" },
-          presentation: { surface: "naked", layer: "overlay", align: "center", scale: "full" },
+          presentation: { surface: "naked", layer: "overlay", align: "center", scale: "full", clip: true },
         }));
         return baseCard({
           assets: { icon_sets: [weatherIconSet] },

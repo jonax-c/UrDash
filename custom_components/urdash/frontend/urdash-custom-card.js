@@ -2702,6 +2702,7 @@ class UrDashCard extends HTMLElement {
       `scale-${this._safeEnum(presentation.scale, ["micro", "small", "normal", "large", "xl", "full"], "normal")}`,
       `align-${this._safeEnum(presentation.align, ["start", "center", "end", "stretch"], "stretch")}`,
       `layer-${this._safeEnum(presentation.layer, ["backdrop", "base", "raised", "overlay"], "base")}`,
+      presentation.clip === true ? "clip-frame" : "overflow-frame",
     ].join(" ");
   }
 
@@ -3341,6 +3342,12 @@ const styles = `
   .layout-canvas .block-vector_icon.scale-full {
     padding: 0;
     overflow: visible;
+  }
+
+  .layout-canvas .block-vector_icon.scale-full.clip-frame,
+  .clip-frame .vector-icon,
+  .clip-frame .vector-icon svg {
+    overflow: hidden;
   }
 
   .layout-canvas .block-vector_icon.scale-full > .block-body {

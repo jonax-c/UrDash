@@ -748,6 +748,7 @@ PRESENTATION_SCHEMA: dict[str, Any] = {
         "scale": {"type": "string", "enum": ["micro", "small", "normal", "large", "xl", "full"]},
         "align": {"type": "string", "enum": ["start", "center", "end", "stretch"]},
         "layer": {"type": "string", "enum": ["backdrop", "base", "raised", "overlay"]},
+        "clip": {"type": "boolean"},
     },
 }
 
@@ -1176,6 +1177,7 @@ def _requirements() -> list[str]:
         "Do not default to simple block-style UI. Prefer a designed composition with one strong focal area and supporting controls.",
         "Use canvas layout for fancy, spatial, or futuristic cards. Use grid layout only when utility and scanning are more important.",
         "Use presentation.surface to vary the visual treatment: naked, ghost, hero, floating, orb, strip, rail, panel, or glass.",
+        "Use presentation.clip for compact animated artwork that must stay inside its block frame, such as forecast glyphs beside text.",
         "Use hero_value, ambient, entity_orbit, constellation, radial_scene, and visual_map for expressive visual structure when appropriate.",
         "Use component_tree for Bubble-style switches and compound controls. Compose safe containers and controls instead of flattening the design into unrelated blocks.",
         "For lights, include only capability-advertised controls: toggle power, brightness_pct slider, Kelvin slider, RGB color_picker, and effect select. Use advertised ranges/options and local value expressions in actions.",
