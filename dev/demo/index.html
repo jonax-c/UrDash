@@ -67,6 +67,7 @@
       .demo-grid > section {
         min-width: 0;
         display: grid;
+        align-content: start;
         gap: 10px;
       }
 
@@ -248,7 +249,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260712.5");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260712.7");
 
       const renderedCards = new Set();
       let hass = {
@@ -630,27 +631,23 @@
           intent: {
             goal: "energy",
             title: "Live Energy Balance",
-            summary: "Derived values and adaptive presentation from multiple Home Assistant entities.",
+            summary: "Solar contribution, net demand, and battery reserve.",
             risk_level: "low",
             primary_entities: ["sensor.solar_power", "sensor.home_power", "sensor.home_battery"],
             primary_actions: [],
           },
           layout: {
             type: "grid",
+            chrome: "art",
             columns: 12,
-            density: "comfortable",
+            density: "compact",
             theme: "graphite",
             blocks: [
               {
                 id: "energy-ratio",
                 kind: "hero_value",
-                title: {
-                  op: "map",
-                  args: [{ op: "gt", args: [selfPowered, { op: "literal", value: 50 }] }],
-                  cases: [{ when: true, value: { op: "literal", value: "Solar is carrying the home" } }],
-                  default: { op: "literal", value: "Grid support is active" },
-                },
                 label: "self powered",
+                subtitle: "",
                 entity: "sensor.solar_power",
                 bind: { value: selfPowered, unit: { op: "literal", value: "%" } },
                 icon: {
@@ -669,7 +666,7 @@
                   emphasis: "hero",
                 },
                 animation: { preset: "glow", trigger: "always", speed: "slow", intensity: "subtle", active: { op: "gt", args: [solar, { op: "literal", value: 0 }] } },
-                grid: { col: 1, row: 1, w: 12, h: 3 },
+                grid: { col: 1, row: 1, w: 12, h: 2 },
               },
               {
                 id: "net-demand",
@@ -680,7 +677,7 @@
                   value: { op: "subtract", args: [load, solar] },
                   unit: { op: "literal", value: " W" },
                 },
-                grid: { col: 1, row: 4, w: 6, h: 2 },
+                grid: { col: 1, row: 3, w: 6, h: 1 },
               },
               {
                 id: "battery",
@@ -689,7 +686,7 @@
                 entity: "sensor.home_battery",
                 bind: { value: "state", unit: "attributes.unit_of_measurement" },
                 visibility: { expression: { op: "gt", args: [{ op: "entity", entity_id: "sensor.home_battery", path: "state" }, { op: "literal", value: 0 }] } },
-                grid: { col: 7, row: 4, w: 6, h: 2 },
+                grid: { col: 7, row: 3, w: 6, h: 1 },
               },
             ],
           },
@@ -731,6 +728,7 @@
           },
           icon_ref: conditionIconRef(source(index, "condition")),
           entity: "weather.home",
+          label: "",
           bind: {
             value: {
               op: "concat",
@@ -743,11 +741,7 @@
             },
             unit: literal(""),
           },
-          label: {
-            op: "concat",
-            args: [literal("Rain "), source(index, "precipitation_probability"), literal("%")],
-          },
-          grid: { col: index * 2 + 1, row: 4, w: 2, h: 2 },
+          grid: { col: index * 2 + 1, row: 3, w: 2, h: 2 },
           style: { tone: "cool", shape: "soft", accent: "#58a6a6" },
           presentation: { surface: "ghost", layer: "base", align: "center", scale: "small" },
         }));
@@ -757,15 +751,16 @@
           intent: {
             goal: "weather",
             title: "Taipei Sky",
-            summary: "Live current conditions and a five-day forecast subscribed directly from weather.home.",
+            summary: "Current conditions and five-day forecast from weather.home.",
             risk_level: "low",
             primary_entities: ["weather.home"],
             primary_actions: [],
           },
           layout: {
             type: "grid",
+            chrome: "art",
             columns: 10,
-            density: "comfortable",
+            density: "compact",
             theme: "calm",
             blocks: [
               {
@@ -775,7 +770,7 @@
                 bind: { value: "attributes.temperature", unit: "attributes.temperature_unit" },
                 label: { op: "entity", entity_id: "weather.home", path: "state" },
                 icon_ref: conditionIconRef({ op: "entity", entity_id: "weather.home", path: "state" }),
-                grid: { col: 1, row: 1, w: 10, h: 3 },
+                grid: { col: 1, row: 1, w: 10, h: 2 },
                 style: { accent: "#2c8c99", emphasis: "hero", shape: "soft" },
                 presentation: { surface: "hero", layer: "raised", align: "center", scale: "xl" },
                 animation: { preset: "breathe", trigger: "always", speed: "slow", intensity: "subtle" },
@@ -978,31 +973,59 @@
       }
 
       function capabilityClimateCard() {
+        const climateEntity = "climate.bedroom_suite";
+        const localValue = { op: "local", name: "value" };
+        const localSelected = { op: "local", name: "selected" };
+        const action = (service, data) => ({ type: "service", domain: "climate", service, entity_id: climateEntity, data });
         return baseCard({
           intent: {
             goal: "climate_control",
             title: "Bedroom Climate",
-            summary: "A capability-composed climate surface with temperature range, humidity, fan, preset, and two-axis swing controls.",
+            summary: "Temperature range, HVAC mode, fan, and preset controls.",
             risk_level: "low",
-            primary_entities: ["climate.bedroom_suite"],
+            primary_entities: [climateEntity],
             primary_actions: [
-              "climate.set_temperature", "climate.set_humidity", "climate.set_hvac_mode",
-              "climate.set_fan_mode", "climate.set_preset_mode", "climate.set_swing_mode",
-              "climate.set_swing_horizontal_mode",
+              "climate.set_temperature", "climate.set_hvac_mode", "climate.set_fan_mode", "climate.set_preset_mode",
             ],
           },
           layout: {
             type: "grid",
+            chrome: "art",
             columns: 12,
-            density: "comfortable",
+            density: "compact",
             theme: "calm",
             blocks: [{
               id: "bedroom-climate",
-              kind: "climate_control",
-              entity: "climate.bedroom_suite",
-              grid: { col: 1, row: 1, w: 12, h: 8 },
-              presentation: { surface: "glass", align: "stretch", scale: "normal" },
-              style: { accent: "#4c8f91", tone: "cool", emphasis: "high" },
+              kind: "component_tree",
+              grid: { col: 1, row: 1, w: 12, h: 4 },
+              presentation: { surface: "naked", align: "stretch", scale: "normal" },
+              component: {
+                type: "surface",
+                style: { surface: "solid", shape: "soft", accent: "#4c8f91" },
+                layout: { width: "fill", direction: "column", padding: "sm", gap: "sm", align: "stretch" },
+                children: [
+                  { type: "row", layout: { width: "fill", gap: "sm", align: "center" }, children: [
+                    { type: "icon", icon: "mdi:thermostat", style: { surface: "glass", shape: "circle", size: "md" }, layout: { padding: "xs" } },
+                    { type: "text", text: "Bedroom", style: { size: "md", emphasis: "high" }, layout: { grow: 1 } },
+                    { type: "value", entity: climateEntity, bind: { value: "attributes.current_temperature" }, unit: "°C", style: { size: "md", emphasis: "high" } },
+                    { type: "select", entity: climateEntity, label: "Mode", bind: { value: "state" }, options: ["heat_cool", "heat", "cool", "dry", "fan_only", "off"].map((value) => ({ label: value.replace("_", " "), value })), action: action("set_hvac_mode", { hvac_mode: localSelected }) },
+                  ] },
+                  { type: "row", layout: { width: "fill", gap: "sm", align: "center" }, children: [
+                    { type: "text", text: "Low", style: { size: "xs", emphasis: "low" }, layout: { width: "content" } },
+                    { type: "slider", entity: climateEntity, label: "Minimum temperature", bind: { value: "attributes.target_temp_low" }, range: { min: 16, max: 30, step: 0.5 }, layout: { grow: 1, width: "fill" }, action: action("set_temperature", { target_temp_low: localValue }) },
+                    { type: "value", entity: climateEntity, bind: { value: "attributes.target_temp_low" }, unit: "°C", style: { size: "xs", emphasis: "high" } },
+                  ] },
+                  { type: "row", layout: { width: "fill", gap: "sm", align: "center" }, children: [
+                    { type: "text", text: "High", style: { size: "xs", emphasis: "low" }, layout: { width: "content" } },
+                    { type: "slider", entity: climateEntity, label: "Maximum temperature", bind: { value: "attributes.target_temp_high" }, range: { min: 16, max: 30, step: 0.5 }, layout: { grow: 1, width: "fill" }, action: action("set_temperature", { target_temp_high: localValue }) },
+                    { type: "value", entity: climateEntity, bind: { value: "attributes.target_temp_high" }, unit: "°C", style: { size: "xs", emphasis: "high" } },
+                  ] },
+                  { type: "wrap", layout: { width: "fill", gap: "sm", align: "end" }, children: [
+                    { type: "select", entity: climateEntity, label: "Fan", bind: { value: "attributes.fan_mode" }, options: ["auto", "low", "medium", "high"].map((value) => ({ label: value, value })), layout: { grow: 1 }, action: action("set_fan_mode", { fan_mode: localSelected }) },
+                    { type: "select", entity: climateEntity, label: "Preset", bind: { value: "attributes.preset_mode" }, options: ["none", "eco", "comfort", "sleep"].map((value) => ({ label: value, value })), layout: { grow: 1 }, action: action("set_preset_mode", { preset_mode: localSelected }) },
+                  ] },
+                ],
+              },
             }],
           },
         });
@@ -1016,68 +1039,67 @@
           intent: {
             goal: "multi_device_control",
             title: "Bedroom Breeze",
-            summary: "A freely composed fan surface with power, speed, preset, oscillation, and direction controls.",
+            summary: "Power, speed, and preset controls.",
             risk_level: "low",
             primary_entities: [fanEntity],
-            primary_actions: ["fan.toggle", "fan.set_percentage", "fan.set_preset_mode", "fan.oscillate", "fan.set_direction"],
+            primary_actions: ["fan.toggle", "fan.set_percentage", "fan.set_preset_mode"],
           },
           layout: {
             type: "grid",
+            chrome: "art",
             columns: 12,
-            density: "comfortable",
+            density: "compact",
             theme: "aurora",
             blocks: [{
               id: "bedroom-fan",
               kind: "component_tree",
-              grid: { col: 1, row: 1, w: 12, h: 6 },
+              grid: { col: 1, row: 1, w: 12, h: 3 },
               presentation: { surface: "naked", align: "stretch", scale: "normal" },
               component: {
                 type: "surface",
-                style: { surface: "solid", shape: "soft", accent: "#54a6a0" },
-                layout: { width: "fill", direction: "column", padding: "md", gap: "md", align: "stretch" },
+                entity: fanEntity,
+                label: "Bedroom fan",
+                action: { type: "service", domain: "fan", service: "toggle", entity_id: fanEntity },
+                style: {
+                  surface: "solid",
+                  shape: "soft",
+                  accent: {
+                    op: "if",
+                    condition: { op: "eq", args: [{ op: "entity", entity_id: fanEntity, path: "state" }, { op: "literal", value: "on" }] },
+                    then: { op: "literal", value: "#54a6a0" },
+                    else: { op: "literal", value: "#718083" },
+                  },
+                },
+                layout: { width: "fill", direction: "column", padding: "sm", gap: "sm", align: "stretch" },
                 children: [
                   {
                     type: "row",
-                    layout: { width: "fill", gap: "md", align: "center" },
+                    layout: { width: "fill", gap: "sm", align: "center" },
                     children: [
-                      { type: "icon", icon: "mdi:fan", style: { surface: "glass", shape: "circle", size: "lg", accent: "#67d5ca" }, layout: { padding: "sm" } },
-                      {
-                        type: "column",
-                        layout: { grow: 1, gap: "xs", align: "start" },
-                        children: [
-                          { type: "text", text: "Bedroom Breeze", style: { size: "lg", emphasis: "high" } },
-                          { type: "text", text: "Quiet circulation · oscillating", style: { size: "sm", emphasis: "low" } },
-                        ],
-                      },
-                      { type: "toggle", entity: fanEntity, label: "Fan power", action: { type: "service", domain: "fan", service: "toggle", entity_id: fanEntity } },
+                      { type: "icon", icon: "mdi:fan", style: { surface: "glass", shape: "circle", size: "md" }, layout: { padding: "xs" } },
+                      { type: "text", text: "Bedroom fan", style: { size: "md", emphasis: "high" }, layout: { grow: 1 } },
                     ],
                   },
                   {
-                    type: "column",
-                    layout: { width: "fill", gap: "xs", align: "stretch" },
+                    type: "row",
+                    layout: { width: "fill", gap: "sm", align: "center" },
                     children: [
-                      {
-                        type: "row",
-                        layout: { width: "fill", justify: "between", align: "center" },
-                        children: [
-                          { type: "text", text: "Air speed", style: { size: "sm", emphasis: "low" } },
-                          { type: "value", entity: fanEntity, bind: { value: "attributes.percentage" }, unit: "%", style: { size: "sm", emphasis: "high" } },
-                        ],
-                      },
+                      { type: "icon", icon: "mdi:fan", style: { size: "sm", emphasis: "low" } },
                       {
                         type: "slider",
                         entity: fanEntity,
                         bind: { value: "attributes.percentage" },
                         range: { min: 0, max: 100, step: 5 },
                         label: "Air speed",
-                        layout: { width: "fill" },
+                        layout: { grow: 1, width: "fill" },
                         action: { type: "service", domain: "fan", service: "set_percentage", entity_id: fanEntity, data: { percentage: localValue } },
                       },
+                      { type: "value", entity: fanEntity, bind: { value: "attributes.percentage" }, unit: "%", style: { size: "xs", emphasis: "high" } },
                     ],
                   },
                   {
                     type: "wrap",
-                    layout: { width: "fill", gap: "md", align: "end" },
+                    layout: { width: "fill", gap: "sm", align: "end" },
                     children: [
                       {
                         type: "select",
@@ -1091,30 +1113,6 @@
                         layout: { grow: 1 },
                         action: { type: "service", domain: "fan", service: "set_preset_mode", entity_id: fanEntity, data: { preset_mode: localSelected } },
                       },
-                      {
-                        type: "select",
-                        entity: fanEntity,
-                        label: "Direction",
-                        bind: { value: "attributes.direction" },
-                        options: [{ label: "Forward", value: "forward" }, { label: "Reverse", value: "reverse" }],
-                        layout: { grow: 1 },
-                        action: { type: "service", domain: "fan", service: "set_direction", entity_id: fanEntity, data: { direction: localSelected } },
-                      },
-                      {
-                        type: "row",
-                        layout: { gap: "sm", align: "center", padding: "sm" },
-                        style: { surface: "glass", shape: "pill" },
-                        children: [
-                          { type: "text", text: "Oscillate", style: { size: "sm", emphasis: "normal" } },
-                          {
-                            type: "toggle",
-                            entity: fanEntity,
-                            label: "Oscillation",
-                            bind: { value: "attributes.oscillating" },
-                            action: { type: "service", domain: "fan", service: "oscillate", entity_id: fanEntity, data: { oscillating: localValue } },
-                          },
-                        ],
-                      },
                     ],
                   },
                 ],
@@ -1125,30 +1123,55 @@
       }
 
       function capabilityCoverCard() {
+        const coverEntity = "cover.office_blinds";
+        const localValue = { op: "local", name: "value" };
+        const action = (service, data = undefined) => ({ type: "service", domain: "cover", service, entity_id: coverEntity, ...(data ? { data } : {}) });
         return baseCard({
           intent: {
             goal: "multi_device_control",
             title: "Office Blinds",
-            summary: "A capability-composed cover surface with movement, precise position, and full tilt control.",
+            summary: "Motion, position, and tilt controls.",
             risk_level: "low",
-            primary_entities: ["cover.office_blinds"],
+            primary_entities: [coverEntity],
             primary_actions: [
-              "cover.open_cover", "cover.stop_cover", "cover.close_cover", "cover.set_cover_position",
-              "cover.open_cover_tilt", "cover.stop_cover_tilt", "cover.close_cover_tilt", "cover.set_cover_tilt_position",
+              "cover.open_cover", "cover.stop_cover", "cover.close_cover", "cover.set_cover_position", "cover.set_cover_tilt_position",
             ],
           },
           layout: {
             type: "grid",
+            chrome: "art",
             columns: 12,
-            density: "comfortable",
+            density: "compact",
             theme: "quiet",
             blocks: [{
               id: "office-blinds",
-              kind: "cover_control",
-              entity: "cover.office_blinds",
-              grid: { col: 1, row: 1, w: 12, h: 7 },
-              presentation: { surface: "glass", align: "stretch", scale: "normal" },
-              style: { accent: "#6d8f85", tone: "calm", emphasis: "high" },
+              kind: "component_tree",
+              grid: { col: 1, row: 1, w: 12, h: 3 },
+              presentation: { surface: "naked", align: "stretch", scale: "normal" },
+              component: {
+                type: "surface",
+                style: { surface: "solid", shape: "soft", accent: "#6d8f85" },
+                layout: { width: "fill", direction: "column", padding: "sm", gap: "sm", align: "stretch" },
+                children: [
+                  { type: "row", layout: { width: "fill", gap: "sm", align: "center" }, children: [
+                    { type: "icon", icon: "mdi:blinds-horizontal", style: { surface: "glass", shape: "circle", size: "md" }, layout: { padding: "xs" } },
+                    { type: "text", text: "Office blinds", style: { size: "md", emphasis: "high" }, layout: { grow: 1 } },
+                    { type: "button", label: "Open", icon: "mdi:arrow-up", style: { surface: "ghost", shape: "circle", size: "sm" }, action: action("open_cover") },
+                    { type: "button", label: "Stop", icon: "mdi:stop", style: { surface: "ghost", shape: "circle", size: "sm" }, action: action("stop_cover") },
+                    { type: "button", label: "Close", icon: "mdi:arrow-down", style: { surface: "ghost", shape: "circle", size: "sm" }, action: action("close_cover") },
+                  ] },
+                  { type: "row", layout: { width: "fill", gap: "sm", align: "center" }, children: [
+                    { type: "icon", icon: "mdi:blinds", style: { size: "sm", emphasis: "low" } },
+                    { type: "slider", entity: coverEntity, label: "Position", bind: { value: "attributes.current_position" }, range: { min: 0, max: 100, step: 1 }, layout: { grow: 1, width: "fill" }, action: action("set_cover_position", { position: localValue }) },
+                    { type: "value", entity: coverEntity, bind: { value: "attributes.current_position" }, unit: "%", style: { size: "xs", emphasis: "high" } },
+                  ] },
+                  { type: "row", layout: { width: "fill", gap: "sm", align: "center" }, children: [
+                    { type: "icon", icon: "mdi:swap-horizontal", style: { size: "sm", emphasis: "low" } },
+                    { type: "slider", entity: coverEntity, label: "Tilt", bind: { value: "attributes.current_tilt_position" }, range: { min: 0, max: 100, step: 1 }, layout: { grow: 1, width: "fill" }, action: action("set_cover_tilt_position", { tilt_position: localValue }) },
+                    { type: "value", entity: coverEntity, bind: { value: "attributes.current_tilt_position" }, unit: "%", style: { size: "xs", emphasis: "high" } },
+                  ] },
+                ],
+              },
             }],
           },
         });
@@ -1157,8 +1180,6 @@
       function capabilityMediaCard() {
         const mediaEntity = "media_player.living_room";
         const localValue = { op: "local", name: "value" };
-        const localSelected = { op: "local", name: "selected" };
-        const duration = { op: "entity", entity_id: mediaEntity, path: "attributes.media_duration" };
         const volumePercent = {
           op: "round",
           decimals: 0,
@@ -1171,65 +1192,42 @@
           intent: {
             goal: "media_control",
             title: "Living Room Audio",
-            summary: "A capability-composed media surface with live metadata, transport, seek, sound, and playback preferences.",
+            summary: "Playback metadata, transport, and volume controls.",
             risk_level: "low",
             primary_entities: [mediaEntity],
             primary_actions: [
-              "media_player.media_play_pause", "media_player.media_stop", "media_player.media_previous_track",
+              "media_player.media_play_pause", "media_player.media_previous_track",
               "media_player.media_next_track", "media_player.volume_set", "media_player.volume_mute",
-              "media_player.media_seek", "media_player.select_source", "media_player.select_sound_mode",
-              "media_player.shuffle_set", "media_player.repeat_set",
             ],
           },
           layout: {
             type: "grid",
+            chrome: "art",
             columns: 12,
-            density: "comfortable",
+            density: "compact",
             theme: "graphite",
             blocks: [{
               id: "living-media",
               kind: "component_tree",
-              grid: { col: 1, row: 1, w: 12, h: 8 },
+              grid: { col: 1, row: 1, w: 12, h: 3 },
               presentation: { surface: "naked", align: "stretch", scale: "normal" },
               component: {
                 type: "surface",
                 style: { surface: "solid", shape: "soft", accent: "#69c1b6" },
-                layout: { width: "fill", direction: "column", padding: "md", gap: "md", align: "stretch" },
+                layout: { width: "fill", direction: "column", padding: "sm", gap: "sm", align: "stretch" },
                 children: [
                   {
                     type: "row",
-                    layout: { width: "fill", gap: "md", align: "center" },
+                    layout: { width: "fill", gap: "sm", align: "center" },
                     children: [
-                      { type: "icon", icon: "mdi:music-circle", style: { surface: "glass", shape: "circle", size: "xl", accent: "#69c1b6" }, layout: { padding: "sm" } },
+                      { type: "icon", icon: "mdi:music-circle", style: { surface: "glass", shape: "circle", size: "md" }, layout: { padding: "xs" } },
                       {
                         type: "column",
                         layout: { grow: 1, gap: "xs", align: "start" },
                         children: [
-                          { type: "value", entity: mediaEntity, bind: { value: "attributes.media_title" }, label: "Now playing", style: { size: "lg", emphasis: "high" } },
-                          { type: "value", entity: mediaEntity, bind: { value: "attributes.media_artist" }, label: "Artist", style: { size: "sm", emphasis: "low" } },
+                          { type: "value", entity: mediaEntity, bind: { value: "attributes.media_title" }, style: { size: "md", emphasis: "high" } },
+                          { type: "value", entity: mediaEntity, bind: { value: "attributes.media_artist" }, style: { size: "xs", emphasis: "low" } },
                         ],
-                      },
-                      { type: "button", label: "Power", icon: "mdi:power", style: { surface: "ghost", shape: "circle" }, action: action("turn_off") },
-                    ],
-                  },
-                  {
-                    type: "column",
-                    layout: { width: "fill", gap: "xs", align: "stretch" },
-                    children: [
-                      {
-                        type: "row",
-                        layout: { width: "fill", justify: "between", align: "center" },
-                        children: [
-                          { type: "text", text: { op: "format_duration", args: [{ op: "entity", entity_id: mediaEntity, path: "attributes.media_position" }] }, style: { size: "sm", emphasis: "low" } },
-                          { type: "text", text: { op: "format_duration", args: [duration] }, style: { size: "sm", emphasis: "low" } },
-                        ],
-                      },
-                      {
-                        type: "slider", entity: mediaEntity, label: "Playback position",
-                        bind: { value: "attributes.media_position" },
-                        range: { min: 0, max: duration, step: 1 },
-                        layout: { width: "fill" },
-                        action: action("media_seek", { seek_position: localValue }),
                       },
                     ],
                   },
@@ -1238,14 +1236,13 @@
                     layout: { width: "fill", gap: "sm", justify: "center", align: "center" },
                     children: [
                       { type: "button", label: "Previous", icon: "mdi:skip-previous", style: { surface: "ghost", shape: "circle" }, action: action("media_previous_track") },
-                      { type: "button", label: "Play or pause", icon: "mdi:play-pause", style: { surface: "solid", shape: "circle", size: "lg" }, action: action("media_play_pause") },
-                      { type: "button", label: "Stop", icon: "mdi:stop", style: { surface: "ghost", shape: "circle" }, action: action("media_stop") },
+                      { type: "button", label: "Play", icon: "mdi:play-pause", style: { surface: "solid", shape: "circle", size: "md" }, action: action("media_play_pause") },
                       { type: "button", label: "Next", icon: "mdi:skip-next", style: { surface: "ghost", shape: "circle" }, action: action("media_next_track") },
                     ],
                   },
                   {
                     type: "row",
-                    layout: { width: "fill", gap: "md", align: "center" },
+                    layout: { width: "fill", gap: "sm", align: "center" },
                     children: [
                       { type: "icon", icon: "mdi:volume-medium", style: { size: "md", accent: "#69c1b6" } },
                       {
@@ -1253,45 +1250,8 @@
                         bind: { value: "attributes.volume_level" }, range: { min: 0, max: 1, step: 0.01 },
                         layout: { grow: 1, width: "fill" }, action: action("volume_set", { volume_level: localValue }),
                       },
-                      { type: "value", value: volumePercent, unit: "%", label: "Volume", style: { size: "sm", emphasis: "high" } },
-                      {
-                        type: "toggle", entity: mediaEntity, label: "Mute", bind: { value: "attributes.is_volume_muted" },
-                        action: action("volume_mute", { is_volume_muted: localValue }),
-                      },
-                    ],
-                  },
-                  {
-                    type: "wrap",
-                    layout: { width: "fill", gap: "md", align: "end" },
-                    children: [
-                      {
-                        type: "select", entity: mediaEntity, label: "Source", bind: { value: "attributes.source" }, layout: { grow: 1 },
-                        options: [{ label: "Music", value: "Music" }, { label: "TV", value: "TV" }, { label: "Radio", value: "Radio" }],
-                        action: action("select_source", { source: localSelected }),
-                      },
-                      {
-                        type: "select", entity: mediaEntity, label: "Sound mode", bind: { value: "attributes.sound_mode" }, layout: { grow: 1 },
-                        options: [{ label: "Stereo", value: "Stereo" }, { label: "Movie", value: "Movie" }, { label: "Night", value: "Night" }],
-                        action: action("select_sound_mode", { sound_mode: localSelected }),
-                      },
-                    ],
-                  },
-                  {
-                    type: "wrap",
-                    layout: { width: "fill", gap: "md", align: "end" },
-                    children: [
-                      {
-                        type: "select", entity: mediaEntity, label: "Repeat", bind: { value: "attributes.repeat" },
-                        options: [{ label: "Off", value: "off" }, { label: "One", value: "one" }, { label: "All", value: "all" }],
-                        action: action("repeat_set", { repeat: localSelected }),
-                      },
-                      {
-                        type: "row", style: { surface: "glass", shape: "pill" }, layout: { gap: "sm", padding: "sm", align: "center" },
-                        children: [
-                          { type: "text", text: "Shuffle", style: { size: "sm", emphasis: "normal" } },
-                          { type: "toggle", entity: mediaEntity, label: "Shuffle", bind: { value: "attributes.shuffle" }, action: action("shuffle_set", { shuffle: localValue }) },
-                        ],
-                      },
+                      { type: "value", value: volumePercent, unit: "%", style: { size: "xs", emphasis: "high" } },
+                      { type: "button", label: "Mute", icon: "mdi:volume-off", style: { surface: "ghost", shape: "circle", size: "sm" }, action: action("volume_mute", { is_volume_muted: { op: "not", args: [{ op: "entity", entity_id: mediaEntity, path: "attributes.is_volume_muted" }] } }) },
                     ],
                   },
                 ],
@@ -1326,40 +1286,39 @@
           },
           layout: {
             type: "grid",
+            chrome: "art",
             columns: 12,
-            density: "comfortable",
+            density: "compact",
             theme: "graphite",
             blocks: [{
               id: "security-command",
               kind: "component_tree",
-              grid: { col: 1, row: 1, w: 12, h: 9 },
+              grid: { col: 1, row: 1, w: 12, h: 4 },
               presentation: { surface: "naked", align: "stretch", scale: "normal" },
               component: {
                 type: "surface",
                 style: { surface: "solid", shape: "soft", accent: "#d36a5d" },
-                layout: { width: "fill", direction: "column", padding: "md", gap: "md", align: "stretch" },
+                layout: { width: "fill", direction: "column", padding: "sm", gap: "sm", align: "stretch" },
                 children: [
                   {
                     type: "row",
-                    layout: { width: "fill", gap: "md", align: "center" },
+                    layout: { width: "fill", gap: "sm", align: "center" },
                     children: [
-                      { type: "icon", icon: "mdi:shield-home", style: { surface: "glass", shape: "circle", size: "xl", accent: "#df7d70" }, layout: { padding: "sm" } },
+                      { type: "icon", icon: "mdi:shield-home", style: { surface: "glass", shape: "circle", size: "md", accent: "#df7d70" }, layout: { padding: "xs" } },
                       {
                         type: "column",
                         layout: { grow: 1, gap: "xs", align: "start" },
                         children: [
-                          { type: "text", text: "Security command", style: { size: "lg", emphasis: "high" } },
-                          { type: "value", entity: alarm, bind: { value: "state" }, label: "Alarm status", style: { size: "sm", emphasis: "normal" } },
+                          { type: "text", text: "Home security", style: { size: "md", emphasis: "high" } },
+                          { type: "value", entity: alarm, bind: { value: "state" }, style: { size: "xs", emphasis: "normal" } },
                         ],
                       },
-                      { type: "value", entity: lock, bind: { value: "state" }, label: "Front door", style: { size: "md", emphasis: "high" } },
                     ],
                   },
                   {
                     type: "column",
                     layout: { width: "fill", gap: "sm", align: "stretch" },
                     children: [
-                      { type: "text", text: "Arm mode", style: { size: "sm", emphasis: "low" } },
                       {
                         type: "wrap",
                         layout: { width: "fill", gap: "sm", align: "center" },
@@ -1367,7 +1326,7 @@
                           { type: "button", label: "Home", icon: "mdi:home-lock", style: { surface: "soft", shape: "pill" }, action: action("alarm_control_panel", "alarm_arm_home", alarm) },
                           { type: "button", label: "Away", icon: "mdi:shield-lock", style: { surface: "soft", shape: "pill" }, action: action("alarm_control_panel", "alarm_arm_away", alarm) },
                           { type: "button", label: "Night", icon: "mdi:weather-night", style: { surface: "soft", shape: "pill" }, action: action("alarm_control_panel", "alarm_arm_night", alarm) },
-                          { type: "button", label: "Vacation", icon: "mdi:bag-suitcase", style: { surface: "soft", shape: "pill" }, action: action("alarm_control_panel", "alarm_arm_vacation", alarm) },
+                          { type: "button", label: "Disarm", icon: "mdi:shield-off", style: { surface: "ghost", shape: "pill", tone: "alert" }, action: alarmAction("alarm_disarm", "Disarm the home security system?") },
                         ],
                       },
                     ],
@@ -1375,10 +1334,10 @@
                   {
                     type: "row",
                     style: { surface: "glass", shape: "soft" },
-                    layout: { width: "fill", gap: "md", padding: "sm", align: "center" },
+                    layout: { width: "fill", gap: "sm", padding: "sm", align: "center" },
                     children: [
-                      { type: "icon", icon: "mdi:lock", style: { size: "lg", accent: "#73bcae" } },
-                      { type: "value", entity: lock, bind: { value: "state" }, label: "Front door lock", layout: { grow: 1 }, style: { emphasis: "high" } },
+                      { type: "icon", icon: "mdi:lock", style: { size: "md", accent: "#73bcae" } },
+                      { type: "value", entity: lock, bind: { value: "state" }, layout: { grow: 1 }, style: { emphasis: "high" } },
                       { type: "button", label: "Lock", icon: "mdi:lock", style: { surface: "soft", shape: "pill" }, action: action("lock", "lock", lock) },
                       { type: "button", label: "Unlock", icon: "mdi:lock-open", style: { surface: "ghost", shape: "pill", tone: "alert" }, action: action("lock", "unlock", lock, undefined, "Unlock the front door?") },
                     ],
@@ -1386,23 +1345,15 @@
                   {
                     type: "row",
                     style: { surface: "glass", shape: "soft" },
-                    layout: { width: "fill", gap: "md", padding: "sm", align: "center" },
+                    layout: { width: "fill", gap: "sm", padding: "sm", align: "center" },
                     children: [
-                      { type: "icon", icon: "mdi:bullhorn", style: { size: "lg", accent: "#df7d70" } },
-                      { type: "value", entity: siren, bind: { value: "state" }, label: "House siren", layout: { grow: 1 }, style: { emphasis: "high" } },
+                      { type: "icon", icon: "mdi:bullhorn", style: { size: "md", accent: "#df7d70" } },
+                      { type: "value", entity: siren, bind: { value: "state" }, layout: { grow: 1 }, style: { emphasis: "high" } },
                       {
                         type: "button", label: "Sound siren", icon: "mdi:alarm-light", style: { surface: "solid", shape: "pill", tone: "alert" },
                         action: action("siren", "turn_on", siren, { duration: 15, volume_level: 0.5, tone: "alarm" }, "Sound the house siren for 15 seconds?"),
                       },
                       { type: "button", label: "Stop", icon: "mdi:stop", style: { surface: "soft", shape: "pill" }, action: action("siren", "turn_off", siren) },
-                    ],
-                  },
-                  {
-                    type: "wrap",
-                    layout: { width: "fill", gap: "sm", justify: "end", align: "center" },
-                    children: [
-                      { type: "button", label: "Disarm", icon: "mdi:shield-off", style: { surface: "ghost", shape: "pill", tone: "alert" }, action: alarmAction("alarm_disarm", "Disarm the home security system?") },
-                      { type: "button", label: "Trigger alarm", icon: "mdi:alert-octagon", style: { surface: "ghost", shape: "pill", tone: "alert" }, action: alarmAction("alarm_trigger", "Trigger the home alarm now?") },
                     ],
                   },
                 ],
@@ -2247,7 +2198,7 @@
             chrome: "art",
             aspect_ratio: "1/1",
             mobile_aspect_ratio: "4/5",
-            density: "spacious",
+            density: "compact",
             theme: "graphite",
             blocks: [
               {
@@ -2633,7 +2584,7 @@
             chrome: "art",
             aspect_ratio: "1/1",
             mobile_aspect_ratio: "1/1",
-            density: "spacious",
+            density: "compact",
             theme: "graphite",
             blocks: [
               {
@@ -2798,16 +2749,6 @@
                 responsive: { mobile: { frame: { x: 9, y: 7, w: 44, h: 6 } } },
                 style: { accent: "#dffcff", emphasis: "normal" },
                 presentation: { surface: "naked", layer: "overlay", align: "start" },
-              },
-              {
-                id: "weather_live_line",
-                kind: "text",
-                text: "LIVE / 22:14",
-                variant: "caption",
-                frame: { x: 68, y: 7, w: 23, h: 5 },
-                responsive: { mobile: { frame: { x: 64, y: 7, w: 27, h: 6 } } },
-                style: { accent: "#74f6df", emphasis: "high" },
-                presentation: { surface: "naked", layer: "overlay", align: "end" },
               },
               {
                 id: "weather_rain_value",
@@ -3038,7 +2979,7 @@
             chrome: "art",
             aspect_ratio: "4/5",
             mobile_aspect_ratio: "4/5",
-            density: "comfortable",
+            density: "compact",
             theme: "quiet",
             blocks: [
               {

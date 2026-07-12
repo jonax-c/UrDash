@@ -137,7 +137,12 @@ class UrDashCard extends HTMLElement {
       && layout.chrome === "art"
       && blocks.length === 1
       && blocks[0]?.kind === "component_tree"
-    ) return 2;
+    ) {
+      const requestedRows = Number(blocks[0]?.grid?.h);
+      return Number.isFinite(requestedRows)
+        ? Math.max(1, Math.min(12, Math.ceil(requestedRows)))
+        : 2;
+    }
     return Math.max(3, Math.min(12, Math.ceil(blocks.length / 2) + 2));
   }
 
@@ -1255,9 +1260,12 @@ class UrDashCard extends HTMLElement {
     wrap.className = "value-readout";
     const strong = document.createElement("strong");
     strong.textContent = this._formatValue(value, unit);
-    const label = document.createElement("span");
-    label.textContent = this._resolveDisplay(config.label) || this._stateName(state) || config.entity || "Value";
-    wrap.append(strong, label);
+    const hasExplicitLabel = Object.prototype.hasOwnProperty.call(config, "label");
+    const labelText = hasExplicitLabel
+      ? this._resolveDisplay(config.label)
+      : this._stateName(state) || config.entity || "Value";
+    wrap.appendChild(strong);
+    if (labelText) wrap.appendChild(this._label(labelText));
     return wrap;
   }
 
@@ -1645,11 +1653,21 @@ class UrDashCard extends HTMLElement {
     this._appendResolvedIcon(wrap, config, this._resolveDisplay(config.label) || "Status icon", "hero-asset-icon");
     const valueEl = document.createElement("strong");
     valueEl.textContent = this._formatValue(value, unit);
-    const label = document.createElement("span");
-    label.textContent = this._resolveDisplay(config.label) || this._resolveDisplay(config.title) || this._stateName(state) || config.entity || "Status";
-    const subtitle = document.createElement("p");
-    subtitle.textContent = this._resolveDisplay(config.subtitle) || this._humanize(state?.state || "");
-    wrap.append(valueEl, label, subtitle);
+    const hasExplicitLabel = Object.prototype.hasOwnProperty.call(config, "label");
+    const labelText = hasExplicitLabel
+      ? this._resolveDisplay(config.label)
+      : this._resolveDisplay(config.title) || this._stateName(state) || config.entity || "Status";
+    const hasExplicitSubtitle = Object.prototype.hasOwnProperty.call(config, "subtitle");
+    const subtitleText = hasExplicitSubtitle
+      ? this._resolveDisplay(config.subtitle)
+      : this._humanize(state?.state || "");
+    wrap.appendChild(valueEl);
+    if (labelText) wrap.appendChild(this._label(labelText));
+    if (subtitleText) {
+      const subtitle = document.createElement("p");
+      subtitle.textContent = subtitleText;
+      wrap.appendChild(subtitle);
+    }
     return wrap;
   }
 

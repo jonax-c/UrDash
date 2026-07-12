@@ -93,6 +93,9 @@ const compactComponentConfig = structuredClone(componentConfig);
 compactComponentConfig.card.layout.chrome = "art";
 card._card = compactComponentConfig.card;
 assert.equal(card.getCardSize(), 2);
+compactComponentConfig.card.layout.blocks[0].grid = { col: 1, row: 1, w: 12, h: 6 };
+card._card = compactComponentConfig.card;
+assert.equal(card.getCardSize(), 6);
 card._card = null;
 assert.throws(
   () => card._normalizeConfig({ ...validConfig, raw_html: "<script>alert(1)</script>" }),
