@@ -657,6 +657,13 @@ class UrDashCard extends HTMLElement {
     if (this._componentDisabled(config) || !this._actionAllowed(config.action)) return;
     element.classList.add("component-actionable");
     element.setAttribute("role", "button");
+    const state = this._state(config.entity);
+    const label = this._resolveDisplay(config.label) || this._stateName(state) || "Device control";
+    element.setAttribute("aria-label", label);
+    if (config.action?.type === "service" && config.action?.service === "toggle") {
+      const active = Boolean(state && !["off", "unavailable", "unknown"].includes(state.state));
+      element.setAttribute("aria-pressed", String(active));
+    }
     element.tabIndex = 0;
     const run = () => this._runAction(config.action, { current: this._state(config.entity)?.state, element });
     element.addEventListener("click", (event) => {

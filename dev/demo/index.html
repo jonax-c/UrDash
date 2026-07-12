@@ -218,7 +218,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260712.4");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260712.5");
 
       const hass = {
         config: {
@@ -868,6 +868,7 @@
               component: {
                 id: "bubble-surface",
                 type: "surface",
+                label: "Living room light",
                 entity: "light.living_room_main",
                 action: toggleMain,
                 style: {
@@ -893,31 +894,10 @@
                         layout: { padding: "xs" },
                       },
                       {
-                        type: "column",
-                        layout: { grow: 1, gap: "xs", align: "start" },
-                        children: [
-                          { type: "text", text: "Living room", style: { size: "md", emphasis: "high" } },
-                          {
-                            type: "text",
-                            text: {
-                              op: "map",
-                              args: [lightState],
-                              cases: [{
-                                when: "on",
-                                value: {
-                                  op: "concat",
-                                  args: [
-                                    { op: "literal", value: "On · " },
-                                    brightness,
-                                    { op: "literal", value: "%" },
-                                  ],
-                                },
-                              }],
-                              default: { op: "literal", value: "Off" },
-                            },
-                            style: { size: "xs", emphasis: "low" },
-                          },
-                        ],
+                        type: "text",
+                        text: "Living room",
+                        style: { size: "md", emphasis: "high" },
+                        layout: { grow: 1 },
                       },
                     ],
                   },
@@ -997,6 +977,7 @@
               component: {
                 id: "switch-surface",
                 type: "surface",
+                label: "Coffee station switch",
                 entity: "switch.coffee_station",
                 action: toggleSwitch,
                 style: {
@@ -1018,21 +999,10 @@
                     layout: { padding: "xs" },
                   },
                   {
-                    type: "column",
-                    layout: { grow: 1, gap: "xs", align: "start" },
-                    children: [
-                      { type: "text", text: "Coffee station", style: { size: "md", emphasis: "high" } },
-                      {
-                        type: "text",
-                        text: {
-                          op: "map",
-                          args: [switchState],
-                          cases: [{ when: "on", value: { op: "literal", value: "On" } }],
-                          default: { op: "literal", value: "Off" },
-                        },
-                        style: { size: "xs", emphasis: "low" },
-                      },
-                    ],
+                    type: "text",
+                    text: "Coffee station",
+                    style: { size: "md", emphasis: "high" },
+                    layout: { grow: 1 },
                   },
                 ],
               },
