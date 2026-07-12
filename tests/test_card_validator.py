@@ -101,6 +101,14 @@ def errors(card: dict, services: set[str] | None = None) -> list[dict]:
 
 
 class CardValidatorTests(unittest.TestCase):
+    def test_stack_position_uses_bounded_lovelace_edges(self):
+        card = base_card()
+        card["stack_position"] = "top"
+        self.assertFalse(errors(card))
+
+        card["stack_position"] = "joined"
+        self.assertIn("schema.enum", {item["code"] for item in errors(card)})
+
     def test_presentation_clip_is_a_strict_boolean(self):
         card = base_card()
         block = card["card"]["layout"]["blocks"][0]

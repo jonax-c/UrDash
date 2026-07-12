@@ -135,8 +135,10 @@
 
       .lovelace-stack {
         display: grid;
-        gap: 8px;
+        gap: 0;
         min-width: 0;
+        overflow: hidden;
+        border-radius: 8px;
       }
 
       .wide {
@@ -216,7 +218,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260712.3");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260712.4");
 
       const hass = {
         config: {
@@ -381,6 +383,8 @@
 
       const livingLightSample = adaptiveBubbleControlCard();
       const basicSwitchSample = compactSwitchCard();
+      const stackedLivingLightSample = { ...livingLightSample, stack_position: "top" };
+      const stackedBasicSwitchSample = { ...basicSwitchSample, stack_position: "bottom" };
       const samples = [
         {
           title: "Compact Living Light",
@@ -394,9 +398,9 @@
           title: "Compact Control Stack",
           config: {
             type: "vertical-stack",
-            cards: [livingLightSample, basicSwitchSample],
+            cards: [stackedLivingLightSample, stackedBasicSwitchSample],
           },
-          renderConfigs: [livingLightSample, basicSwitchSample],
+          renderConfigs: [stackedLivingLightSample, stackedBasicSwitchSample],
         },
         {
           title: "Capability-driven Climate Studio",
@@ -865,7 +869,7 @@
                 id: "bubble-surface",
                 type: "surface",
                 entity: "light.living_room_main",
-                action: { type: "more_info", entity_id: "light.living_room_main" },
+                action: toggleMain,
                 style: {
                   surface: "solid",
                   shape: "soft",
@@ -885,7 +889,7 @@
                       {
                         type: "icon",
                         icon_ref: { set: "light_states", key: lightState },
-                        style: { surface: "glass", shape: "circle", size: "md", accent: "#f6c453" },
+                        style: { surface: "glass", shape: "circle", size: "md" },
                         layout: { padding: "xs" },
                       },
                       {
@@ -915,7 +919,6 @@
                           },
                         ],
                       },
-                      { type: "toggle", entity: "light.living_room_main", action: toggleMain, label: "Main lights" },
                     ],
                   },
                   {
@@ -995,7 +998,7 @@
                 id: "switch-surface",
                 type: "surface",
                 entity: "switch.coffee_station",
-                action: { type: "more_info", entity_id: "switch.coffee_station" },
+                action: toggleSwitch,
                 style: {
                   surface: "solid",
                   shape: "soft",
@@ -1011,7 +1014,7 @@
                   {
                     type: "icon",
                     icon_ref: { set: "switch_states", key: switchState },
-                    style: { surface: "glass", shape: "circle", size: "md", accent: "#42a47b" },
+                    style: { surface: "glass", shape: "circle", size: "md" },
                     layout: { padding: "xs" },
                   },
                   {
@@ -1030,12 +1033,6 @@
                         style: { size: "xs", emphasis: "low" },
                       },
                     ],
-                  },
-                  {
-                    type: "toggle",
-                    entity: "switch.coffee_station",
-                    action: toggleSwitch,
-                    label: "Coffee station",
                   },
                 ],
               },

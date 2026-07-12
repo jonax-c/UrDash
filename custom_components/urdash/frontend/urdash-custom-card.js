@@ -235,11 +235,12 @@ class UrDashCard extends HTMLElement {
     const density = this._safeEnum(layout.density, ["compact", "comfortable", "spacious"], "comfortable");
     const type = this._safeEnum(layout.type, ["grid", "canvas"], "grid");
     const chrome = this._safeEnum(layout.chrome, ["normal", "art"], "normal");
+    const stackPosition = this._safeEnum(this._config.stack_position, ["single", "top", "middle", "bottom"], "single");
     const showRisk = this._config.preview === true || this._config.preview_mode === true;
 
     this.shadowRoot.innerHTML = `
       <style>${styles}</style>
-      <article class="urdash-card theme-${theme} density-${density} height-${heightMode} layout-${type} chrome-${chrome}">
+      <article class="urdash-card theme-${theme} density-${density} height-${heightMode} layout-${type} chrome-${chrome} stack-${stackPosition}">
         ${chrome === "art" ? "" : `<header class="card-header">
           <div>
             <span>${escapeHtml(intent.goal || "urdash")}</span>
@@ -2824,6 +2825,12 @@ const styles = `
 
   .theme-calm { --urdash-bg: linear-gradient(135deg, #f4f7f8, #e8f0ed); }
   .theme-sunrise { --urdash-bg: linear-gradient(135deg, #fff6e8, #eaf7f2); --urdash-fg: #2a2c26; }
+  .stack-top { border-radius: 8px 8px 0 0; }
+  .stack-middle { border-radius: 0; }
+  .stack-bottom { border-radius: 0 0 8px 8px; }
+  .stack-top .component-tree > .component-surface { border-radius: 8px 8px 0 0; }
+  .stack-middle .component-tree > .component-surface { border-radius: 0; }
+  .stack-bottom .component-tree > .component-surface { border-radius: 0 0 8px 8px; }
   .height-viewport { min-height: min(760px, 92vh); }
   .height-fixed { height: var(--urdash-card-height, 720px); overflow: auto; }
 

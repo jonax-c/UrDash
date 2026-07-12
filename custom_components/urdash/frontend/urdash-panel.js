@@ -318,7 +318,7 @@ class UrDashPanel extends HTMLElement {
 
   async _loadUrDashCard() {
     if (customElements.get("urdash-card")) return;
-    await import("/urdash/static/urdash-custom-card.js?v=20260712.3");
+    await import("/urdash/static/urdash-custom-card.js?v=20260712.4");
   }
 
   _refreshPreviewHass() {
