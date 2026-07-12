@@ -9,6 +9,7 @@ It provides:
 - Several `urdash_schema: 2` sample cards.
 - A **Copy YAML** action on every sample that copies the real card configuration without demo-only preview flags. Replace the mocked entity IDs with IDs from the target Home Assistant instance before using controls.
 - Compact light and switch examples, plus a copyable native Lovelace `vertical-stack` that demonstrates grouping multiple UrDash controls.
+- An immutable mock Home Assistant service layer, so retained control samples visibly update together without adding demo data to copied YAML.
 - Direct loading of the real `custom_components/urdash/frontend/urdash-custom-card.js` renderer.
 
 Start from the repository root:

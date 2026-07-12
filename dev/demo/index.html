@@ -171,6 +171,8 @@
     </main>
 
     <script type="module">
+      import { applyDemoServiceSnapshot } from "./mock-hass.js";
+
       class DemoHaIcon extends HTMLElement {
         static get observedAttributes() {
           return ["icon"];
@@ -248,7 +250,8 @@
 
       await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260712.5");
 
-      const hass = {
+      const renderedCards = new Set();
+      let hass = {
         config: {
           unit_system: {
             temperature: "°C",
@@ -402,12 +405,25 @@
             return Promise.resolve(() => {});
           },
         },
-        callService(domain, service, data) {
+        async callService(domain, service, data) {
           window.demoServiceCalls ||= [];
           window.demoServiceCalls.push({ domain, service, data });
           console.log("mock callService", { domain, service, data });
+          applyDemoService(domain, service, data);
         },
       };
+
+      function applyDemoService(domain, service, data = {}) {
+        const nextHass = applyDemoServiceSnapshot(hass, domain, service, data);
+        if (nextHass === hass) return;
+        hass = nextHass;
+        queueMicrotask(() => {
+          for (const card of renderedCards) {
+            if (card.isConnected) card.hass = hass;
+            else renderedCards.delete(card);
+          }
+        });
+      }
 
       const livingLightSample = adaptiveBubbleControlCard();
       const basicSwitchSample = compactSwitchCard();
@@ -502,6 +518,7 @@
             const card = document.createElement("urdash-card");
             card.setConfig({ ...config, preview: true });
             card.hass = hass;
+            renderedCards.add(card);
             stack.appendChild(card);
           }
           section.appendChild(stack);
