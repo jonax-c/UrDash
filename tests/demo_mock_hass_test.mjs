@@ -17,6 +17,19 @@ const initial = {
       last_changed: "2026-01-01T00:00:00Z",
       last_updated: "2026-01-01T00:00:00Z",
     },
+    "climate.bedroom_suite": {
+      entity_id: "climate.bedroom_suite",
+      state: "heat_cool",
+      attributes: {
+        current_temperature: 23.4,
+        target_temp_low: 21,
+        target_temp_high: 25,
+        fan_mode: "auto",
+        preset_mode: "sleep",
+      },
+      last_changed: "2026-01-01T00:00:00Z",
+      last_updated: "2026-01-01T00:00:00Z",
+    },
   },
 };
 
@@ -35,6 +48,20 @@ assert.equal(dimmed.states["light.living_room_main"].state, "on");
 assert.equal(dimmed.states["light.living_room_main"].attributes.brightness, 128);
 assert.notEqual(dimmed, switchOn);
 assert.notEqual(dimmed.states, switchOn.states);
+
+const cooling = applyDemoServiceSnapshot(dimmed, "climate", "set_hvac_mode", {
+  entity_id: "climate.bedroom_suite",
+  hvac_mode: "cool",
+});
+assert.equal(cooling.states["climate.bedroom_suite"].state, "cool");
+
+const comfortRange = applyDemoServiceSnapshot(cooling, "climate", "set_temperature", {
+  entity_id: "climate.bedroom_suite",
+  target_temp_low: 20.5,
+  target_temp_high: 24.5,
+});
+assert.equal(comfortRange.states["climate.bedroom_suite"].attributes.target_temp_low, 20.5);
+assert.equal(comfortRange.states["climate.bedroom_suite"].attributes.target_temp_high, 24.5);
 
 assert.equal(
   applyDemoServiceSnapshot(dimmed, "switch", "toggle", { entity_id: "switch.missing" }),

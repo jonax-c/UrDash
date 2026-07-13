@@ -1281,6 +1281,10 @@ accent, visibility, and disabled state. Interactive nodes use the existing
 allowlisted action manifest. Sliders pass their bounded numeric result through
 the local `value` expression and always require an explicit action.
 
+Buttons may set `icon_only: true` to visually hide their label while retaining
+it as the accessible name and hover tooltip. Icon-only buttons must declare an
+`icon` or `icon_ref`; blank interactive targets are rejected by validation.
+
 Layout is tokenized: direction, gap, padding, alignment, justification, width,
 grow, and stack placement. Styling is tokenized through surface, shape, tone,
 emphasis, size, opacity, and a validated accent color. Accent inherits through

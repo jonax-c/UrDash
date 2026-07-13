@@ -97,6 +97,27 @@ compactComponentConfig.card.layout.blocks[0].grid = { col: 1, row: 1, w: 12, h: 
 card._card = compactComponentConfig.card;
 assert.equal(card.getCardSize(), 6);
 card._card = null;
+
+const demoHtml = await readFile(new URL("../dev/demo/index.html", import.meta.url), "utf8");
+const climateStart = demoHtml.indexOf("      function capabilityClimateCard() {");
+const climateEnd = demoHtml.indexOf("      function capabilityFanCard() {", climateStart);
+assert.ok(climateStart >= 0 && climateEnd > climateStart, "demo climate card factory should be discoverable");
+const climateFactorySource = demoHtml.slice(climateStart, climateEnd);
+const climateConfig = Function(
+  "baseCard",
+  `${climateFactorySource}\nreturn capabilityClimateCard();`,
+)(({ heightMode = "auto", assets, dataSources, intent, layout }) => ({
+  type: "custom:urdash-card",
+  urdash_schema: 2,
+  height_mode: heightMode,
+  card: {
+    ...(assets ? { assets } : {}),
+    ...(dataSources ? { data_sources: dataSources } : {}),
+    intent,
+    layout,
+  },
+}));
+assert.equal(card._normalizeConfig(climateConfig).card.intent.title, "Climate Halo");
 assert.throws(
   () => card._normalizeConfig({ ...validConfig, raw_html: "<script>alert(1)</script>" }),
   (error) => error.diagnostics?.[0]?.code === "schema.additional_property",

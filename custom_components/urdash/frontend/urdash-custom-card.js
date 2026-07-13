@@ -473,8 +473,14 @@ class UrDashCard extends HTMLElement {
     if (type === "color_picker") return this._componentColorPicker(config);
     if (type === "select") return this._componentSelect(config);
     if (type === "button") {
-      const button = this._actionButton(config.label || config.text || "Action", config.icon, config.action, config.icon_ref);
+      const buttonLabel = config.label || config.text || "Action";
+      const button = this._actionButton(buttonLabel, config.icon, config.action, config.icon_ref);
       this._configureComponentElement(button, config, type);
+      if (config.icon_only === true) {
+        button.classList.add("component-button-icon-only");
+        button.setAttribute("aria-label", this._resolveDisplay(buttonLabel));
+        button.title = this._resolveDisplay(buttonLabel);
+      }
       if (this._componentDisabled(config)) button.disabled = true;
       return button;
     }
@@ -3549,6 +3555,43 @@ const styles = `
     align-items: center;
     padding: 10px;
     text-align: left;
+  }
+
+  .component-button.component-surface-soft {
+    border-color: color-mix(in srgb, var(--component-accent) 26%, transparent);
+    background: color-mix(in srgb, var(--component-accent) 13%, rgba(255,255,255,0.08));
+  }
+
+  .component-button.component-surface-solid {
+    border-color: color-mix(in srgb, var(--component-accent) 44%, transparent);
+    background: color-mix(in srgb, var(--component-accent) 26%, rgba(255,255,255,0.08));
+  }
+
+  .component-button.component-surface-ghost {
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .action-button.component-button ha-icon,
+  .action-button.component-button .resolved-vector-icon {
+    color: var(--component-accent);
+  }
+
+  .action-button.component-button-icon-only {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 8px;
+    text-align: center;
+  }
+
+  .action-button.component-button-icon-only > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .action-button:disabled {

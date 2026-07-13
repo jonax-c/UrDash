@@ -216,6 +216,15 @@
             "mdi:content-copy": `
               <rect x="8" y="8" width="11" height="12" rx="2" />
               <path d="M16 8V6A2 2 0 0 0 14 4H6A2 2 0 0 0 4 6V15A2 2 0 0 0 6 17H8" />`,
+            "mdi:autorenew": `
+              <path d="M5.2 7.2A8 8 0 0 1 18.5 6L21 8.5 M21 4V8.5H16.5 M18.8 16.8A8 8 0 0 1 5.5 18L3 15.5 M3 20V15.5H7.5" />`,
+            "mdi:snowflake": `
+              <path d="M12 2V22 M3.3 7L20.7 17 M3.3 17L20.7 7 M9 4.5L12 7L15 4.5 M9 19.5L12 17L15 19.5 M5.3 9.7L8.7 9.2L8 6 M16 18L15.3 14.8L18.7 14.3" />`,
+            "mdi:fire": `
+              <path class="soft-fill" d="M13.4 2.5C14.3 7.2 10.5 8.3 11.8 12.1C9.6 11.4 8.4 9.6 8.6 7.2C5.7 9.5 4.6 12.3 5.6 15.5C6.6 18.8 9.1 21 12.1 21C16.2 21 19 17.8 18.7 13.8C18.5 10.7 16.6 7.3 13.4 2.5Z" />
+              <path d="M13.4 2.5C14.3 7.2 10.5 8.3 11.8 12.1C9.6 11.4 8.4 9.6 8.6 7.2C5.7 9.5 4.6 12.3 5.6 15.5C6.6 18.8 9.1 21 12.1 21C16.2 21 19 17.8 18.7 13.8C18.5 10.7 16.6 7.3 13.4 2.5Z" />`,
+            "mdi:power": `
+              <path d="M12 2V12 M7.1 5.7A8 8 0 1 0 16.9 5.7" />`,
           };
           const glyph = glyphs[icon] || '<circle cx="12" cy="12" r="7" />';
           this.shadowRoot.innerHTML = `
@@ -249,7 +258,7 @@
         customElements.define("ha-icon", DemoHaIcon);
       }
 
-      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260712.7");
+      await import("../../custom_components/urdash/frontend/urdash-custom-card.js?v=20260714.1");
 
       const renderedCards = new Set();
       let hass = {
@@ -448,7 +457,7 @@
           renderConfigs: [stackedLivingLightSample, stackedBasicSwitchSample],
         },
         {
-          title: "Capability-driven Climate Studio",
+          title: "Climate Halo",
           config: capabilityClimateCard(),
         },
         {
@@ -974,14 +983,56 @@
 
       function capabilityClimateCard() {
         const climateEntity = "climate.bedroom_suite";
-        const localValue = { op: "local", name: "value" };
         const localSelected = { op: "local", name: "selected" };
+        const literal = (value) => ({ op: "literal", value });
+        const entity = (path) => ({ op: "entity", entity_id: climateEntity, path });
         const action = (service, data) => ({ type: "service", domain: "climate", service, entity_id: climateEntity, data });
+        const adjust = (path, amount) => ({
+          op: "clamp",
+          args: [{ op: amount > 0 ? "add" : "subtract", args: [entity(path), literal(Math.abs(amount))] }],
+          min: 16,
+          max: 30,
+        });
+        const modeAccent = (mode, active) => ({
+          op: "if",
+          condition: { op: "eq", args: [entity("state"), literal(mode)] },
+          then: literal(active),
+          else: literal("#536a70"),
+        });
+        const modeButton = (label, icon, mode, accent) => ({
+          type: "button",
+          label,
+          icon,
+          icon_only: true,
+          style: { surface: "solid", shape: "pill", size: "xs", accent: modeAccent(mode, accent) },
+          layout: { grow: 1 },
+          action: action("set_hvac_mode", { hvac_mode: mode }),
+        });
+        const stepButton = (label, path, amount, disabled) => ({
+          type: "button",
+          label,
+          disabled,
+          style: { surface: "ghost", shape: "circle", size: "xs", accent: "#b8f3eb" },
+          action: action("set_temperature", { [path.split(".").pop()]: adjust(path, amount) }),
+        });
+        const conditionLabel = {
+          op: "map",
+          args: [entity("state")],
+          cases: [
+            { when: "heat_cool", value: literal("AUTO COMFORT") },
+            { when: "cool", value: literal("COOLING") },
+            { when: "heat", value: literal("HEATING") },
+            { when: "dry", value: literal("DRY AIR") },
+            { when: "fan_only", value: literal("AIRFLOW") },
+            { when: "off", value: literal("STANDBY") },
+          ],
+          default: entity("state"),
+        };
         return baseCard({
           intent: {
             goal: "climate_control",
-            title: "Bedroom Climate",
-            summary: "Temperature range, HVAC mode, fan, and preset controls.",
+            title: "Climate Halo",
+            summary: "An ambient climate instrument with direct mode, comfort range, fan, and preset controls.",
             risk_level: "low",
             primary_entities: [climateEntity],
             primary_actions: [
@@ -989,44 +1040,122 @@
             ],
           },
           layout: {
-            type: "grid",
+            type: "canvas",
             chrome: "art",
-            columns: 12,
+            aspect_ratio: "16/10",
+            mobile_aspect_ratio: "4/5",
             density: "compact",
-            theme: "calm",
-            blocks: [{
-              id: "bedroom-climate",
-              kind: "component_tree",
-              grid: { col: 1, row: 1, w: 12, h: 4 },
-              presentation: { surface: "naked", align: "stretch", scale: "normal" },
-              component: {
-                type: "surface",
-                style: { surface: "solid", shape: "soft", accent: "#4c8f91" },
-                layout: { width: "fill", direction: "column", padding: "sm", gap: "sm", align: "stretch" },
-                children: [
-                  { type: "row", layout: { width: "fill", gap: "sm", align: "center" }, children: [
-                    { type: "icon", icon: "mdi:thermostat", style: { surface: "glass", shape: "circle", size: "md" }, layout: { padding: "xs" } },
-                    { type: "text", text: "Bedroom", style: { size: "md", emphasis: "high" }, layout: { grow: 1 } },
-                    { type: "value", entity: climateEntity, bind: { value: "attributes.current_temperature" }, unit: "°C", style: { size: "md", emphasis: "high" } },
-                    { type: "select", entity: climateEntity, label: "Mode", bind: { value: "state" }, options: ["heat_cool", "heat", "cool", "dry", "fan_only", "off"].map((value) => ({ label: value.replace("_", " "), value })), action: action("set_hvac_mode", { hvac_mode: localSelected }) },
+            theme: "graphite",
+            blocks: [
+              {
+                id: "climate_atmosphere",
+                kind: "vector_icon",
+                label: "Thermal comfort field",
+                viewBox: "0 0 100 100",
+                render_budget: "art",
+                gradients: [
+                  { id: "climate_field", type: "linear", from: { x: 0, y: 0 }, to: { x: 100, y: 100 }, stops: [
+                    { offset: 0, color: "#071c23", opacity: 1 }, { offset: 0.52, color: "#10343b", opacity: 1 }, { offset: 1, color: "#17242f", opacity: 1 },
                   ] },
-                  { type: "row", layout: { width: "fill", gap: "sm", align: "center" }, children: [
-                    { type: "text", text: "Low", style: { size: "xs", emphasis: "low" }, layout: { width: "content" } },
-                    { type: "slider", entity: climateEntity, label: "Minimum temperature", bind: { value: "attributes.target_temp_low" }, range: { min: 16, max: 30, step: 0.5 }, layout: { grow: 1, width: "fill" }, action: action("set_temperature", { target_temp_low: localValue }) },
-                    { type: "value", entity: climateEntity, bind: { value: "attributes.target_temp_low" }, unit: "°C", style: { size: "xs", emphasis: "high" } },
+                  { id: "thermal_lens", type: "radial", center: { x: 78, y: 27 }, radius: 38, stops: [
+                    { offset: 0, color: "#f6d39a", opacity: 0.76 }, { offset: 0.28, color: "#70e4d1", opacity: 0.42 }, { offset: 0.7, color: "#429ab4", opacity: 0.13 }, { offset: 1, color: "#071c23", opacity: 0 },
                   ] },
-                  { type: "row", layout: { width: "fill", gap: "sm", align: "center" }, children: [
-                    { type: "text", text: "High", style: { size: "xs", emphasis: "low" }, layout: { width: "content" } },
-                    { type: "slider", entity: climateEntity, label: "Maximum temperature", bind: { value: "attributes.target_temp_high" }, range: { min: 16, max: 30, step: 0.5 }, layout: { grow: 1, width: "fill" }, action: action("set_temperature", { target_temp_high: localValue }) },
-                    { type: "value", entity: climateEntity, bind: { value: "attributes.target_temp_high" }, unit: "°C", style: { size: "xs", emphasis: "high" } },
-                  ] },
-                  { type: "wrap", layout: { width: "fill", gap: "sm", align: "end" }, children: [
-                    { type: "select", entity: climateEntity, label: "Fan", bind: { value: "attributes.fan_mode" }, options: ["auto", "low", "medium", "high"].map((value) => ({ label: value, value })), layout: { grow: 1 }, action: action("set_fan_mode", { fan_mode: localSelected }) },
-                    { type: "select", entity: climateEntity, label: "Preset", bind: { value: "attributes.preset_mode" }, options: ["none", "eco", "comfort", "sleep"].map((value) => ({ label: value, value })), layout: { grow: 1 }, action: action("set_preset_mode", { preset_mode: localSelected }) },
+                  { id: "thermal_ring", type: "linear", from: { x: 52, y: 10 }, to: { x: 96, y: 52 }, stops: [
+                    { offset: 0, color: "#67e8d0", opacity: 0.26 }, { offset: 0.48, color: "#eafef9", opacity: 0.9 }, { offset: 0.74, color: "#f5bd7d", opacity: 0.72 }, { offset: 1, color: "#67e8d0", opacity: 0.12 },
                   ] },
                 ],
+                shapes: [
+                  { type: "rect", x: 0, y: 0, width: 100, height: 100, fill: "gradient:climate_field", stroke: "none" },
+                  { type: "circle", cx: 78, cy: 27, r: 30, fill: "gradient:thermal_lens", stroke: "none", opacity: 0.9, blend_mode: "screen", effects: { filter_preset: "svg_blur", std_deviation: 2.4 } },
+                  { type: "circle", cx: 78, cy: 27, r: 21, fill: "none", stroke: "gradient:thermal_ring", stroke_width: 0.7, stroke_dasharray: [19, 7], stroke_linecap: "round", opacity: 0.84, animation: { preset: "dash_flow", speed: "slow", intensity: "subtle" } },
+                  { type: "circle", cx: 78, cy: 27, r: 15, fill: "none", stroke: "#dffcf5", stroke_width: 0.22, opacity: 0.28 },
+                  { type: "path", d: "M 42 16 C 53 9, 61 15, 69 9", fill: "none", stroke: "#78e6d7", stroke_width: 0.45, stroke_dasharray: [5, 7], stroke_linecap: "round", opacity: 0.42, animation: { preset: "dash_flow", speed: "slow", intensity: "subtle" } },
+                  { type: "path", d: "M 37 27 C 49 20, 57 29, 69 20", fill: "none", stroke: "#9ceee3", stroke_width: 0.32, stroke_dasharray: [4, 8], stroke_linecap: "round", opacity: 0.3, animation: { preset: "dash_flow", speed: "normal", intensity: "subtle" } },
+                  { type: "line", x1: 6, y1: 52, x2: 94, y2: 52, stroke: "#dffcf5", stroke_width: 0.18, opacity: 0.16 },
+                ],
+                frame: { x: 0, y: 0, w: 100, h: 100 },
+                responsive: { mobile: { frame: { x: 0, y: 0, w: 100, h: 100 } } },
+                presentation: { surface: "naked", layer: "backdrop", align: "stretch", scale: "full" },
               },
-            }],
+              {
+                id: "climate_room",
+                kind: "text",
+                text: "BEDROOM / CLIMATE HALO",
+                variant: "caption",
+                frame: { x: 6, y: 7, w: 38, h: 5 },
+                responsive: { mobile: { frame: { x: 7, y: 6, w: 58, h: 5 } } },
+                style: { accent: "#9ad8d0", emphasis: "normal" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
+              },
+              {
+                id: "climate_temperature",
+                kind: "text",
+                text: { op: "concat", args: [{ op: "format_number", args: [entity("attributes.current_temperature")], decimals: 1 }, literal("°")] },
+                variant: "display",
+                frame: { x: 5.5, y: 15, w: 34, h: 17 },
+                responsive: { mobile: { frame: { x: 7, y: 14, w: 45, h: 16 } } },
+                style: { accent: "#f1fffb", emphasis: "high" },
+                presentation: { surface: "naked", layer: "overlay", align: "start", scale: "large" },
+              },
+              {
+                id: "climate_state",
+                kind: "text",
+                text: { op: "concat", args: [conditionLabel, literal("  /  "), { op: "map", args: [entity("attributes.hvac_action")], cases: [{ when: "idle", value: literal("ROOM STABLE") }], default: entity("attributes.hvac_action") }] },
+                variant: "label",
+                frame: { x: 6, y: 34, w: 36, h: 5 },
+                responsive: { mobile: { frame: { x: 7, y: 31, w: 62, h: 6 } } },
+                style: { accent: "#74e2d2", emphasis: "high" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
+              },
+              {
+                id: "climate_range",
+                kind: "text",
+                text: { op: "concat", args: [literal("COMFORT  "), entity("attributes.target_temp_low"), literal("°  —  "), entity("attributes.target_temp_high"), literal("°")] },
+                variant: "body",
+                frame: { x: 6, y: 42, w: 38, h: 6 },
+                responsive: { mobile: { frame: { x: 7, y: 38, w: 58, h: 6 } } },
+                style: { accent: "#b7cac9", emphasis: "normal" },
+                presentation: { surface: "naked", layer: "overlay", align: "start" },
+              },
+              {
+                id: "climate_controls",
+                kind: "component_tree",
+                frame: { x: 4, y: 50, w: 92, h: 46 },
+                responsive: { mobile: { frame: { x: 5, y: 48, w: 90, h: 47 } } },
+                presentation: { surface: "naked", layer: "overlay", align: "stretch", scale: "normal", clip: false },
+                component: {
+                  type: "surface",
+                  style: { surface: "glass", shape: "soft", accent: "#65d9ca" },
+                  layout: { width: "fill", direction: "column", padding: "sm", gap: "xs", align: "stretch" },
+                  children: [
+                    { type: "row", layout: { width: "fill", gap: "xs", align: "center" }, children: [
+                      modeButton("Auto", "mdi:autorenew", "heat_cool", "#74e2d2"),
+                      modeButton("Cool", "mdi:snowflake", "cool", "#67c8f2"),
+                      modeButton("Heat", "mdi:fire", "heat", "#f1ad70"),
+                      modeButton("Off", "mdi:power", "off", "#a8b5b7"),
+                    ] },
+                    { type: "row", layout: { width: "fill", gap: "xs", align: "center" }, children: [
+                      { type: "surface", style: { surface: "soft", shape: "pill", accent: "#65bfe1" }, layout: { grow: 1, width: "fill", gap: "xs", padding: "xs", align: "center", justify: "between" }, children: [
+                        { type: "icon", icon: "mdi:snowflake", style: { size: "xs", accent: "#8ad9f2" } },
+                        stepButton("−", "attributes.target_temp_low", -0.5, { op: "lte", args: [entity("attributes.target_temp_low"), literal(16)] }),
+                        { type: "value", entity: climateEntity, bind: { value: "attributes.target_temp_low" }, unit: "°", style: { size: "sm", emphasis: "high" } },
+                        stepButton("+", "attributes.target_temp_low", 0.5, { op: "gte", args: [entity("attributes.target_temp_low"), { op: "subtract", args: [entity("attributes.target_temp_high"), literal(0.5)] }] }),
+                      ] },
+                      { type: "surface", style: { surface: "soft", shape: "pill", accent: "#dda66c" }, layout: { grow: 1, width: "fill", gap: "xs", padding: "xs", align: "center", justify: "between" }, children: [
+                        { type: "icon", icon: "mdi:white-balance-sunny", style: { size: "xs", accent: "#f0c88a" } },
+                        stepButton("−", "attributes.target_temp_high", -0.5, { op: "lte", args: [entity("attributes.target_temp_high"), { op: "add", args: [entity("attributes.target_temp_low"), literal(0.5)] }] }),
+                        { type: "value", entity: climateEntity, bind: { value: "attributes.target_temp_high" }, unit: "°", style: { size: "sm", emphasis: "high" } },
+                        stepButton("+", "attributes.target_temp_high", 0.5, { op: "gte", args: [entity("attributes.target_temp_high"), literal(30)] }),
+                      ] },
+                    ] },
+                    { type: "row", layout: { width: "fill", gap: "xs", align: "end" }, children: [
+                      { type: "select", entity: climateEntity, label: "Airflow", bind: { value: "attributes.fan_mode" }, options: ["auto", "low", "medium", "high"].map((value) => ({ label: value, value })), layout: { grow: 1, width: "fill" }, action: action("set_fan_mode", { fan_mode: localSelected }) },
+                      { type: "select", entity: climateEntity, label: "Scene", bind: { value: "attributes.preset_mode" }, options: ["none", "eco", "comfort", "sleep"].map((value) => ({ label: value, value })), layout: { grow: 1, width: "fill" }, action: action("set_preset_mode", { preset_mode: localSelected }) },
+                    ] },
+                  ],
+                },
+              },
+            ],
           },
         });
       }

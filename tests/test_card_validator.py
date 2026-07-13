@@ -458,6 +458,20 @@ class CardValidatorTests(unittest.TestCase):
         card = base_card([{"id": "deep", "kind": "component_tree", "component": node}])
         self.assertIn("budget.component_depth", {item["code"] for item in errors(card)})
 
+    def test_icon_only_button_requires_a_visible_icon(self):
+        button = {
+            "type": "button",
+            "label": "Desk light",
+            "icon": "mdi:lightbulb",
+            "icon_only": True,
+            "action": {"type": "service", "domain": "light", "service": "toggle", "entity_id": "light.desk"},
+        }
+        card = base_card([{"id": "mode", "kind": "component_tree", "component": button}])
+        self.assertEqual(errors(card, {"light.toggle"}), [])
+
+        button.pop("icon")
+        self.assertIn("component.icon_only_missing_icon", {item["code"] for item in errors(card, {"light.toggle"})})
+
     def test_component_tree_supports_complete_light_controls(self):
         local_value = {"op": "local", "name": "value"}
         selected_value = {"op": "local", "name": "selected"}

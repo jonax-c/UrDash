@@ -575,6 +575,7 @@ COMPONENT_DEFINITION: dict[str, Any] = {
         },
         "icon": DISPLAY_VALUE_SCHEMA,
         "icon_ref": ICON_REF_SCHEMA,
+        "icon_only": {"type": "boolean"},
         "action": ACTION_SCHEMA,
         "range": {
             "type": "object",

@@ -607,6 +607,14 @@ def _validate_component_tree(
                 f"{node_type.replace('_', ' ').title()} components require an explicit safe action.",
                 "Add an allowlisted service action using the local value.",
             )
+        if node.get("icon_only") is True and node_type == "button" and not (node.get("icon") or node.get("icon_ref")):
+            _diagnostic(
+                diagnostics,
+                f"{node_path}.icon_only",
+                "component.icon_only_missing_icon",
+                "Icon-only buttons require an icon or icon reference.",
+                "Add icon or icon_ref so the control remains visible.",
+            )
         range_config = node.get("range")
         if isinstance(range_config, dict):
             minimum = range_config.get("min")
