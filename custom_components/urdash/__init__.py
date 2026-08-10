@@ -25,7 +25,7 @@ except ImportError:
 from .ai_client import AiGenerationError, async_generate_with_codex
 from .ai_client import CARD_V2_SCHEMA
 from .card_validator import format_diagnostics, has_errors, validate_card_config
-from .codex_runtime import RUNTIME_KEY, get_codex_runtime
+from .chatgpt_session import SESSION_KEY, get_chatgpt_session
 from .const import (
     CONF_DEFAULT_HEIGHT_MODE,
     CONF_DEFAULT_THEME,
@@ -89,9 +89,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload UrDash."""
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-    runtime = hass.data.get(DOMAIN, {}).pop(RUNTIME_KEY, None)
-    if runtime is not None:
-        await runtime.async_close()
+    session = hass.data.get(DOMAIN, {}).pop(SESSION_KEY, None)
+    if session is not None:
+        await session.async_close()
     frontend.async_remove_panel(hass, PANEL_URL)
     return True
 
@@ -212,7 +212,7 @@ async def websocket_settings(
 ) -> None:
     """Return non-secret UrDash settings."""
     settings = _settings(hass)
-    account = await get_codex_runtime(hass).async_account_status()
+    account = await get_chatgpt_session(hass).async_account_status()
     connection.send_result(
         msg["id"],
         {
@@ -404,8 +404,8 @@ async def _async_generate_from_hass(
         entities = [entity for entity in entities if entity["entity_id"] in selected]
 
     settings = _settings(hass)
-    runtime = get_codex_runtime(hass)
-    account = await runtime.async_account_status()
+    session = get_chatgpt_session(hass)
+    account = await session.async_account_status()
     if not account["authenticated"]:
         return {
             "error": account["error"] or "ChatGPT account is not connected.",
@@ -417,7 +417,7 @@ async def _async_generate_from_hass(
     try:
         preferred_theme, style_guidance = resolve_style(style, theme)
         result = await async_generate_with_codex(
-            runtime,
+            session,
             model=settings[CONF_MODEL],
             request=request,
             entities=entities,
@@ -520,7 +520,7 @@ def _settings(hass: HomeAssistant) -> dict[str, Any]:
         data.update(entries[0].options)
 
     return {
-        CONF_MODEL: data.get(CONF_MODEL, DEFAULT_CODEX_MODEL),
+        CONF_MODEL: data.get(CONF_MODEL) or DEFAULT_CODEX_MODEL,
         CONF_DEFAULT_THEME: data.get(CONF_DEFAULT_THEME, DEFAULT_THEME),
         CONF_DEFAULT_HEIGHT_MODE: data.get(CONF_DEFAULT_HEIGHT_MODE, DEFAULT_HEIGHT_MODE),
     }

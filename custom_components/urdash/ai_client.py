@@ -1023,7 +1023,7 @@ class AiGenerationError(Exception):
 
 
 async def async_generate_with_codex(
-    runtime: Any,
+    session: Any,
     *,
     model: str,
     request: str,
@@ -1062,7 +1062,7 @@ async def async_generate_with_codex(
         "provided input. Never attempt to inspect the working directory or host environment."
     )
     try:
-        output_text = await runtime.async_generate_structured(
+        output_text = await session.async_generate_structured(
             developer_instructions=developer_instructions,
             input_text=generation_input,
             output_schema=STRICT_GENERATION_SCHEMA,
@@ -1090,7 +1090,7 @@ async def async_generate_with_codex(
     if has_errors(diagnostics):
         if not _repair_attempt:
             repaired = await async_generate_with_codex(
-                runtime,
+                session,
                 model=model,
                 request=(
                     f"{request}\n\nThe previous card failed UrDash validation. "
@@ -1126,7 +1126,7 @@ async def async_generate_with_codex(
         "notes": generated.get("notes", []),
         "engine": "ai",
         "schema": 2,
-        "model": model or DEFAULT_CODEX_MODEL or "Codex default",
+        "model": model or DEFAULT_CODEX_MODEL,
         "diagnostics": diagnostics,
     }
 

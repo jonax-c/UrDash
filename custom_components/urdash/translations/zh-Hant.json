@@ -6,7 +6,7 @@
     "error": {
       "authorization_failed": "ChatGPT 授權失敗或已過期，請重新開始設定。",
       "authorization_pending": "尚未完成授權，請先完成登入，再次按下提交。",
-      "cannot_start_login": "UrDash 無法啟動 Codex 登入服務，請檢查 Home Assistant 日誌。"
+      "cannot_start_login": "UrDash 無法啟動 ChatGPT 裝置授權，請檢查 Home Assistant 日誌。"
     },
     "step": {
       "user": {
@@ -18,7 +18,7 @@
           "default_height_mode": "預設高度模式"
         },
         "data_description": {
-          "model": "選填。留空會使用您的 ChatGPT 帳號目前可用的預設模型。"
+          "model": "選填。留空會使用 UrDash 預設模型 gpt-5.6-sol。"
         }
       },
       "chatgpt": {
@@ -31,8 +31,8 @@
     "error": {
       "authorization_failed": "ChatGPT 授權失敗或已過期，請開始新的登入。",
       "authorization_pending": "尚未完成授權，請先完成登入，再次按下提交。",
-      "cannot_start_login": "UrDash 無法啟動 Codex 登入服務，請檢查 Home Assistant 日誌。",
-      "logout_failed": "UrDash 無法登出 Codex 帳號，請檢查 Home Assistant 日誌。"
+      "cannot_start_login": "UrDash 無法啟動 ChatGPT 裝置授權，請檢查 Home Assistant 日誌。",
+      "logout_failed": "UrDash 無法清除 ChatGPT 登入狀態，請檢查 Home Assistant 日誌。"
     },
     "step": {
       "init": {
@@ -45,7 +45,7 @@
           "account_action": "ChatGPT 帳號"
         },
         "data_description": {
-          "model": "選填。留空會使用您的 ChatGPT 帳號目前可用的預設模型。"
+          "model": "選填。留空會使用 UrDash 預設模型 gpt-5.6-sol。"
         }
       },
       "chatgpt": {

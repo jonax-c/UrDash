@@ -321,7 +321,7 @@ class UrDashPanel extends HTMLElement {
 
   async _loadUrDashCard() {
     if (customElements.get("urdash-card")) return;
-    await import("/urdash/static/urdash-custom-card.js?v=20260810.1");
+    await import("/urdash/static/urdash-custom-card.js?v=20260810.2");
   }
 
   _refreshPreviewHass() {
@@ -576,7 +576,7 @@ class UrDashPanel extends HTMLElement {
           </button>
           ${this._selectedEntityCount() ? "" : '<p class="warning">Select at least one entity before generating.</p>'}
           <p class="model-caption">${escapeHtml(this._settings.ai_enabled
-            ? `${planLabel} · ${this._settings.model || "Codex default model"}`
+            ? `${planLabel} · ${this._settings.model || "gpt-5.6-sol"}`
             : this._settings.auth_error || "Sign in with ChatGPT from the UrDash integration options")}</p>
         </aside>
 

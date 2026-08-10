@@ -27,9 +27,12 @@ Complete Home Assistant onboarding with a throwaway local user.
 
 1. Go to **Settings > Devices & services > Add integration**.
 2. Search for **UrDash**.
-3. Add any dummy API key, for example `validation-only`.
+3. Choose the card defaults and continue to ChatGPT device authorization.
+4. Open the displayed OpenAI URL, enter the one-time code, and sign in with an
+   eligible ChatGPT subscription.
 
-The validation fixture does not call the AI provider, so the key does not need to be valid.
+The renderer validation itself does not call OpenAI, but UrDash requires a completed
+ChatGPT login before Home Assistant creates its config entry and registers the panel.
 
 ## Validate Preview Rendering
 

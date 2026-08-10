@@ -6,7 +6,7 @@
     "error": {
       "authorization_failed": "ChatGPT authorization failed or expired. Start setup again.",
       "authorization_pending": "Authorization is not complete yet. Finish signing in, then submit again.",
-      "cannot_start_login": "UrDash could not start the Codex login service. Check the Home Assistant logs."
+      "cannot_start_login": "UrDash could not start ChatGPT device authorization. Check the Home Assistant logs."
     },
     "step": {
       "user": {
@@ -18,7 +18,7 @@
           "default_height_mode": "Default height mode"
         },
         "data_description": {
-          "model": "Optional. Leave empty to use the default model available to your ChatGPT account."
+          "model": "Optional. Leave empty to use UrDash's default model, gpt-5.6-sol."
         }
       },
       "chatgpt": {
@@ -31,8 +31,8 @@
     "error": {
       "authorization_failed": "ChatGPT authorization failed or expired. Start a new login attempt.",
       "authorization_pending": "Authorization is not complete yet. Finish signing in, then submit again.",
-      "cannot_start_login": "UrDash could not start the Codex login service. Check the Home Assistant logs.",
-      "logout_failed": "UrDash could not sign out of the Codex account. Check the Home Assistant logs."
+      "cannot_start_login": "UrDash could not start ChatGPT device authorization. Check the Home Assistant logs.",
+      "logout_failed": "UrDash could not clear the ChatGPT session. Check the Home Assistant logs."
     },
     "step": {
       "init": {
@@ -45,7 +45,7 @@
           "account_action": "ChatGPT account"
         },
         "data_description": {
-          "model": "Optional. Leave empty to use the default model available to your ChatGPT account."
+          "model": "Optional. Leave empty to use UrDash's default model, gpt-5.6-sol."
         }
       },
       "chatgpt": {

@@ -35,13 +35,15 @@ After setup, UrDash appears in the sidebar.
 
 ## ChatGPT Setup
 
-UrDash authenticates through the official OpenAI Codex device-code flow, so users can generate cards with an eligible ChatGPT subscription instead of creating an API key. During setup, Home Assistant shows an OpenAI verification URL and a one-time code. Open the URL, sign in to ChatGPT, authorize Codex, then return to Home Assistant and submit the form.
+UrDash authenticates through OpenAI's ChatGPT/Codex device-code flow, so users can generate cards with an eligible ChatGPT subscription instead of creating an API key. During setup, Home Assistant shows an OpenAI verification URL and a one-time code. Open the URL, sign in to ChatGPT, authorize Codex, then return to Home Assistant and submit the form.
 
-Codex stores and refreshes its OAuth credentials inside Home Assistant's private `.storage/urdash_codex` directory. Passwords and OAuth tokens are never stored in the integration entry, included in card YAML, or sent to the UrDash frontend. The integration uses the official `openai-codex` Python SDK and its matching runtime dependency.
+UrDash stores and refreshes its OAuth credentials in Home Assistant's private `.storage/urdash_chatgpt_auth.json` file. Passwords and OAuth tokens are never stored in the integration entry, included in card YAML, or sent to the UrDash frontend.
+
+Generation uses Home Assistant's built-in HTTP client to connect directly to OpenAI's subscription-backed Codex Responses endpoint. It uses the current WebSocket `response.create` protocol first and falls back to HTTP/SSE when needed. It does not install the Codex CLI/SDK runtime, launch a subprocess, or expose shell and filesystem tools to the model.
 
 Defaults:
 
-- Model: the default model available to the connected ChatGPT account
+- Model: `gpt-5.6-sol`
 - Theme: `aurora`
 - Height mode: `auto`
 
@@ -52,7 +54,7 @@ An optional model override is available in the integration options. If the ChatG
 Before using generated YAML in Lovelace, add the UrDash card resource:
 
 ```text
-/urdash/static/urdash-custom-card.js?v=20260810.1
+/urdash/static/urdash-custom-card.js?v=20260810.2
 ```
 
 Set the resource type to `JavaScript module`.

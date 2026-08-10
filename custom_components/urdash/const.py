@@ -1,15 +1,16 @@
 DOMAIN = "urdash"
+INTEGRATION_VERSION = "0.2.1"
 PANEL_URL = "urdash"
 PANEL_TITLE = "UrDash"
 PANEL_ICON = "mdi:card-plus-outline"
 FRONTEND_DIR = "frontend"
 FRONTEND_JS = "urdash-panel.js"
-FRONTEND_VERSION = "20260810.1"
+FRONTEND_VERSION = "20260810.2"
 STATIC_URL = f"/{DOMAIN}/static"
 
 DEFAULT_THEME = "aurora"
 DEFAULT_HEIGHT_MODE = "auto"
-DEFAULT_CODEX_MODEL = ""
+DEFAULT_CODEX_MODEL = "gpt-5.6-sol"
 
 CONF_MODEL = "model"
 CONF_DEFAULT_THEME = "default_theme"

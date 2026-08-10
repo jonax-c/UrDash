@@ -8,7 +8,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers import selector
 
-from .codex_runtime import CodexRuntimeError, get_codex_runtime
+from .chatgpt_session import ChatGptSessionError, get_chatgpt_session
 from .const import (
     CONF_ACCOUNT_ACTION,
     CONF_DEFAULT_HEIGHT_MODE,
@@ -39,8 +39,10 @@ class _DeviceLoginMixin:
 
     async def _async_start_login(self):
         try:
-            self._login_data = await get_codex_runtime(self.hass).async_start_device_login()
-        except CodexRuntimeError as err:
+            self._login_data = await get_chatgpt_session(
+                self.hass
+            ).async_start_device_login()
+        except ChatGptSessionError as err:
             _LOGGER.error("Could not start ChatGPT login: %s", err)
             return None
         self._login_id = self._login_data["login_id"]
@@ -49,7 +51,7 @@ class _DeviceLoginMixin:
     async def _async_check_login(self):
         if self._login_id is None or self._login_data is None:
             return {"status": "expired"}
-        return await get_codex_runtime(self.hass).async_login_status(self._login_id)
+        return await get_chatgpt_session(self.hass).async_login_status(self._login_id)
 
     def _async_show_login_form(self, error: str | None = None):
         errors = {"base": error} if error else {}
@@ -138,8 +140,8 @@ class UrDashOptionsFlow(_DeviceLoginMixin, config_entries.OptionsFlow):
                 )
             if account_action == "logout":
                 try:
-                    await get_codex_runtime(self.hass).async_logout()
-                except CodexRuntimeError:
+                    await get_chatgpt_session(self.hass).async_logout()
+                except ChatGptSessionError:
                     return self.async_show_form(
                         step_id="init",
                         data_schema=_options_schema(self._pending_data),
@@ -217,7 +219,8 @@ def _options_schema(current: dict[str, Any]) -> vol.Schema:
 
 def _normalize_preferences(user_input: dict[str, Any]) -> dict[str, Any]:
     return {
-        CONF_MODEL: str(user_input.get(CONF_MODEL, DEFAULT_CODEX_MODEL)).strip(),
+        CONF_MODEL: str(user_input.get(CONF_MODEL, DEFAULT_CODEX_MODEL)).strip()
+        or DEFAULT_CODEX_MODEL,
         CONF_DEFAULT_THEME: user_input.get(CONF_DEFAULT_THEME, DEFAULT_THEME),
         CONF_DEFAULT_HEIGHT_MODE: user_input.get(
             CONF_DEFAULT_HEIGHT_MODE, DEFAULT_HEIGHT_MODE
