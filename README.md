@@ -33,25 +33,26 @@ Until UrDash is published as a default HACS repository, add it as a custom repos
 
 After setup, UrDash appears in the sidebar.
 
-## AI Setup
+## ChatGPT Setup
 
-During setup, users enter their own OpenAI API key, select a model, and configure the OpenAI API endpoint. The model selector includes common OpenAI models and accepts a custom model ID for OpenAI-compatible providers. The API key is stored in Home Assistant's integration entry and is used only by the Home Assistant backend. It is never sent to the UrDash frontend panel.
+UrDash authenticates through the official OpenAI Codex device-code flow, so users can generate cards with an eligible ChatGPT subscription instead of creating an API key. During setup, Home Assistant shows an OpenAI verification URL and a one-time code. Open the URL, sign in to ChatGPT, authorize Codex, then return to Home Assistant and submit the form.
+
+Codex stores and refreshes its OAuth credentials inside Home Assistant's private `.storage/urdash_codex` directory. Passwords and OAuth tokens are never stored in the integration entry, included in card YAML, or sent to the UrDash frontend. The integration uses the official `openai-codex` Python SDK and its matching runtime dependency.
 
 Defaults:
 
-- Model: `gpt-5.2`
-- Base URL: `https://api.openai.com/v1`
+- Model: the default model available to the connected ChatGPT account
 - Theme: `aurora`
 - Height mode: `auto`
 
-The base URL can be changed for OpenAI-compatible providers. If the AI request fails or no key is configured, UrDash returns an error instead of generating a fallback.
+An optional model override is available in the integration options. If the ChatGPT session expires, open **Settings -> Devices & services -> UrDash -> Configure**, choose **Sign in with ChatGPT**, and complete device authorization again. Existing API-key entries are migrated without retaining the legacy key and require this one-time ChatGPT login.
 
 ## Using Generated Cards
 
 Before using generated YAML in Lovelace, add the UrDash card resource:
 
 ```text
-/urdash/static/urdash-custom-card.js?v=20260714.1
+/urdash/static/urdash-custom-card.js?v=20260810.1
 ```
 
 Set the resource type to `JavaScript module`.

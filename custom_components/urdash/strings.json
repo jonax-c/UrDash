@@ -3,42 +3,54 @@
     "abort": {
       "single_instance_allowed": "UrDash is already configured."
     },
+    "error": {
+      "authorization_failed": "ChatGPT authorization failed or expired. Start setup again.",
+      "authorization_pending": "Authorization is not complete yet. Finish signing in, then submit again.",
+      "cannot_start_login": "UrDash could not start the Codex login service. Check the Home Assistant logs."
+    },
     "step": {
       "user": {
         "title": "Set up UrDash",
-        "description": "Configure the OpenAI-compatible provider used by the UrDash card design agent.",
+        "description": "Choose your defaults. The next step securely connects UrDash to your ChatGPT subscription through OpenAI Codex.",
         "data": {
-          "api_key": "OpenAI API key",
-          "base_url": "OpenAI API endpoint",
-          "model": "Model",
+          "model": "Codex model override",
           "default_theme": "Default card theme",
           "default_height_mode": "Default height mode"
         },
         "data_description": {
-          "api_key": "Stored only in the Home Assistant integration entry and never sent to the browser.",
-          "base_url": "Responses API base URL, for example https://api.openai.com/v1. OpenAI-compatible endpoints are supported.",
-          "model": "Choose a common model or enter the model ID supported by your endpoint."
+          "model": "Optional. Leave empty to use the default model available to your ChatGPT account."
         }
+      },
+      "chatgpt": {
+        "title": "Sign in with ChatGPT",
+        "description": "Open [OpenAI device login]({verification_url}) and enter code **{user_code}**. Return here after authorization and press Submit. UrDash never receives your password or exposes Codex tokens to the browser."
       }
     }
   },
   "options": {
+    "error": {
+      "authorization_failed": "ChatGPT authorization failed or expired. Start a new login attempt.",
+      "authorization_pending": "Authorization is not complete yet. Finish signing in, then submit again.",
+      "cannot_start_login": "UrDash could not start the Codex login service. Check the Home Assistant logs.",
+      "logout_failed": "UrDash could not sign out of the Codex account. Check the Home Assistant logs."
+    },
     "step": {
       "init": {
         "title": "UrDash options",
-        "description": "Configure the OpenAI-compatible provider used by the UrDash card design agent.",
+        "description": "Manage the ChatGPT subscription used by Codex and the default card preferences.",
         "data": {
-          "api_key": "OpenAI API key",
-          "base_url": "OpenAI API endpoint",
-          "model": "Model",
+          "model": "Codex model override",
           "default_theme": "Default card theme",
-          "default_height_mode": "Default height mode"
+          "default_height_mode": "Default height mode",
+          "account_action": "ChatGPT account"
         },
         "data_description": {
-          "api_key": "Stored only in the Home Assistant integration entry and never sent to the browser.",
-          "base_url": "Responses API base URL, for example https://api.openai.com/v1. OpenAI-compatible endpoints are supported.",
-          "model": "Choose a common model or enter the model ID supported by your endpoint."
+          "model": "Optional. Leave empty to use the default model available to your ChatGPT account."
         }
+      },
+      "chatgpt": {
+        "title": "Sign in with ChatGPT",
+        "description": "Open [OpenAI device login]({verification_url}) and enter code **{user_code}**. Return here after authorization and press Submit."
       }
     }
   }

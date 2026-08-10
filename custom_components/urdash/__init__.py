@@ -22,18 +22,16 @@ try:
 except ImportError:
     StaticPathConfig = None
 
-from .ai_client import AiGenerationError, async_generate_with_openai
+from .ai_client import AiGenerationError, async_generate_with_codex
 from .ai_client import CARD_V2_SCHEMA
 from .card_validator import format_diagnostics, has_errors, validate_card_config
+from .codex_runtime import RUNTIME_KEY, get_codex_runtime
 from .const import (
-    CONF_API_KEY,
-    CONF_BASE_URL,
     CONF_DEFAULT_HEIGHT_MODE,
     CONF_DEFAULT_THEME,
     CONF_MODEL,
     DEFAULT_HEIGHT_MODE,
-    DEFAULT_OPENAI_BASE_URL,
-    DEFAULT_OPENAI_MODEL,
+    DEFAULT_CODEX_MODEL,
     DEFAULT_THEME,
     DOMAIN,
     FRONTEND_DIR,
@@ -91,7 +89,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload UrDash."""
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+    runtime = hass.data.get(DOMAIN, {}).pop(RUNTIME_KEY, None)
+    if runtime is not None:
+        await runtime.async_close()
     frontend.async_remove_panel(hass, PANEL_URL)
+    return True
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate legacy API-key entries to ChatGPT subscription authentication."""
+    if entry.version > 2:
+        return False
+    if entry.version == 2:
+        return True
+
+    existing = {**entry.data, **entry.options}
+    data = {
+        CONF_MODEL: "",
+        CONF_DEFAULT_THEME: existing.get(CONF_DEFAULT_THEME, DEFAULT_THEME),
+        CONF_DEFAULT_HEIGHT_MODE: existing.get(
+            CONF_DEFAULT_HEIGHT_MODE, DEFAULT_HEIGHT_MODE
+        ),
+    }
+    hass.config_entries.async_update_entry(entry, data=data, options={}, version=2)
     return True
 
 
@@ -192,11 +212,15 @@ async def websocket_settings(
 ) -> None:
     """Return non-secret UrDash settings."""
     settings = _settings(hass)
+    account = await get_codex_runtime(hass).async_account_status()
     connection.send_result(
         msg["id"],
         {
-            "ai_provider": "openai",
-            "ai_enabled": bool(settings[CONF_API_KEY]),
+            "ai_provider": "openai_codex",
+            "ai_enabled": account["authenticated"],
+            "auth_mode": account["auth_mode"],
+            "plan_type": account["plan_type"],
+            "auth_error": account["error"],
             "model": settings[CONF_MODEL],
             "default_theme": settings[CONF_DEFAULT_THEME],
             "default_height_mode": settings[CONF_DEFAULT_HEIGHT_MODE],
@@ -380,20 +404,20 @@ async def _async_generate_from_hass(
         entities = [entity for entity in entities if entity["entity_id"] in selected]
 
     settings = _settings(hass)
-    if not settings[CONF_API_KEY]:
+    runtime = get_codex_runtime(hass)
+    account = await runtime.async_account_status()
+    if not account["authenticated"]:
         return {
-            "error": "OpenAI API key is not configured.",
-            "summary": "Configure an API key in UrDash integration options.",
+            "error": account["error"] or "ChatGPT account is not connected.",
+            "summary": "Sign in with ChatGPT from the UrDash integration options.",
             "engine": "ai",
             "schema": 2,
         }
 
     try:
         preferred_theme, style_guidance = resolve_style(style, theme)
-        result = await async_generate_with_openai(
-            hass,
-            api_key=settings[CONF_API_KEY],
-            base_url=settings[CONF_BASE_URL],
+        result = await async_generate_with_codex(
+            runtime,
             model=settings[CONF_MODEL],
             request=request,
             entities=entities,
@@ -496,9 +520,7 @@ def _settings(hass: HomeAssistant) -> dict[str, Any]:
         data.update(entries[0].options)
 
     return {
-        CONF_API_KEY: data.get(CONF_API_KEY, ""),
-        CONF_MODEL: data.get(CONF_MODEL, DEFAULT_OPENAI_MODEL),
-        CONF_BASE_URL: data.get(CONF_BASE_URL, DEFAULT_OPENAI_BASE_URL),
+        CONF_MODEL: data.get(CONF_MODEL, DEFAULT_CODEX_MODEL),
         CONF_DEFAULT_THEME: data.get(CONF_DEFAULT_THEME, DEFAULT_THEME),
         CONF_DEFAULT_HEIGHT_MODE: data.get(CONF_DEFAULT_HEIGHT_MODE, DEFAULT_HEIGHT_MODE),
     }

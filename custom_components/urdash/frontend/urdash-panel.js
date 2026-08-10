@@ -21,7 +21,10 @@ class UrDashPanel extends HTMLElement {
     this._entities = [];
     this._settings = {
       ai_enabled: false,
-      ai_provider: "openai",
+      ai_provider: "openai_codex",
+      auth_mode: null,
+      plan_type: null,
+      auth_error: null,
       model: "",
       default_theme: "aurora",
       default_height_mode: "auto",
@@ -318,7 +321,7 @@ class UrDashPanel extends HTMLElement {
 
   async _loadUrDashCard() {
     if (customElements.get("urdash-card")) return;
-    await import("/urdash/static/urdash-custom-card.js?v=20260714.1");
+    await import("/urdash/static/urdash-custom-card.js?v=20260810.1");
   }
 
   _refreshPreviewHass() {
@@ -476,8 +479,11 @@ class UrDashPanel extends HTMLElement {
 
   _render() {
     const hasResult = Boolean(this._result?.card_config);
-    const canGenerate = Boolean(this._requestDraft.trim() && this._selectedEntityCount() && !this._generating);
+    const canGenerate = Boolean(this._settings.ai_enabled && this._requestDraft.trim() && this._selectedEntityCount() && !this._generating);
     const style = this._selectedStyle();
+    const planLabel = this._settings.plan_type
+      ? `${this._settings.plan_type.replaceAll("_", " ")} plan`
+      : "ChatGPT subscription";
     this.shadowRoot.innerHTML = `
       <style>${styles}</style>
       <main class="studio">
@@ -489,7 +495,7 @@ class UrDashPanel extends HTMLElement {
               <p>UrDash generation console</p>
             </div>
             <span class="ready-state ${this._settings.ai_enabled ? "ready" : ""}">
-              ${this._settings.ai_enabled ? "AI ready" : "API key required"}
+              ${this._settings.ai_enabled ? "Codex ready" : "ChatGPT login required"}
             </span>
           </header>
 
@@ -569,7 +575,9 @@ class UrDashPanel extends HTMLElement {
             ${this._generating ? "Designing card" : hasResult ? "Generate another" : "Generate card"}
           </button>
           ${this._selectedEntityCount() ? "" : '<p class="warning">Select at least one entity before generating.</p>'}
-          <p class="model-caption">${escapeHtml(this._settings.ai_enabled ? this._settings.model : "Configure the OpenAI API key in integration options")}</p>
+          <p class="model-caption">${escapeHtml(this._settings.ai_enabled
+            ? `${planLabel} · ${this._settings.model || "Codex default model"}`
+            : this._settings.auth_error || "Sign in with ChatGPT from the UrDash integration options")}</p>
         </aside>
 
         <section class="workspace">

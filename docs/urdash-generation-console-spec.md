@@ -154,7 +154,7 @@ Installation rules:
 - High-risk operations remain confirmation-gated in preview and after installation.
 - A candidate can reference only entities included in its generation scope unless
   the user explicitly regenerates with a different scope.
-- Log generation and installation failures without logging API keys or sensitive
+- Log generation and installation failures without logging OAuth tokens or sensitive
   entity attributes.
 
 ## Accessibility, Responsiveness, And Performance
@@ -299,4 +299,3 @@ arbitrary dashboard payload from the browser.
 - Automatically writing YAML-managed dashboard files.
 - Batch generation or installation of multiple cards.
 - Cloud sharing, public templates, and cross-instance candidate synchronization.
-

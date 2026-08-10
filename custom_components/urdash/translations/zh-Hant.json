@@ -3,42 +3,54 @@
     "abort": {
       "single_instance_allowed": "UrDash 已經設定完成。"
     },
+    "error": {
+      "authorization_failed": "ChatGPT 授權失敗或已過期，請重新開始設定。",
+      "authorization_pending": "尚未完成授權，請先完成登入，再次按下提交。",
+      "cannot_start_login": "UrDash 無法啟動 Codex 登入服務，請檢查 Home Assistant 日誌。"
+    },
     "step": {
       "user": {
         "title": "設定 UrDash",
-        "description": "設定 UrDash 卡片設計 Agent 使用的 OpenAI 相容服務。",
+        "description": "選擇預設值。下一步會透過 OpenAI Codex 安全連接您的 ChatGPT 訂閱。",
         "data": {
-          "api_key": "OpenAI API 金鑰",
-          "base_url": "OpenAI API Endpoint",
-          "model": "模型",
+          "model": "指定 Codex 模型",
           "default_theme": "預設卡片主題",
           "default_height_mode": "預設高度模式"
         },
         "data_description": {
-          "api_key": "只會儲存在 Home Assistant 整合項目中，不會傳送到瀏覽器。",
-          "base_url": "Responses API 基礎網址，例如 https://api.openai.com/v1；亦支援 OpenAI 相容服務。",
-          "model": "選擇常用模型，或輸入 Endpoint 支援的自訂模型 ID。"
+          "model": "選填。留空會使用您的 ChatGPT 帳號目前可用的預設模型。"
         }
+      },
+      "chatgpt": {
+        "title": "使用 ChatGPT 登入",
+        "description": "開啟 [OpenAI 裝置登入頁面]({verification_url}) 並輸入代碼 **{user_code}**。完成授權後回到此處按下提交。UrDash 不會取得您的密碼，也不會把 Codex token 傳送到瀏覽器。"
       }
     }
   },
   "options": {
+    "error": {
+      "authorization_failed": "ChatGPT 授權失敗或已過期，請開始新的登入。",
+      "authorization_pending": "尚未完成授權，請先完成登入，再次按下提交。",
+      "cannot_start_login": "UrDash 無法啟動 Codex 登入服務，請檢查 Home Assistant 日誌。",
+      "logout_failed": "UrDash 無法登出 Codex 帳號，請檢查 Home Assistant 日誌。"
+    },
     "step": {
       "init": {
         "title": "UrDash 選項",
-        "description": "設定 UrDash 卡片設計 Agent 使用的 OpenAI 相容服務。",
+        "description": "管理 Codex 使用的 ChatGPT 訂閱與預設卡片設定。",
         "data": {
-          "api_key": "OpenAI API 金鑰",
-          "base_url": "OpenAI API Endpoint",
-          "model": "模型",
+          "model": "指定 Codex 模型",
           "default_theme": "預設卡片主題",
-          "default_height_mode": "預設高度模式"
+          "default_height_mode": "預設高度模式",
+          "account_action": "ChatGPT 帳號"
         },
         "data_description": {
-          "api_key": "只會儲存在 Home Assistant 整合項目中，不會傳送到瀏覽器。",
-          "base_url": "Responses API 基礎網址，例如 https://api.openai.com/v1；亦支援 OpenAI 相容服務。",
-          "model": "選擇常用模型，或輸入 Endpoint 支援的自訂模型 ID。"
+          "model": "選填。留空會使用您的 ChatGPT 帳號目前可用的預設模型。"
         }
+      },
+      "chatgpt": {
+        "title": "使用 ChatGPT 登入",
+        "description": "開啟 [OpenAI 裝置登入頁面]({verification_url}) 並輸入代碼 **{user_code}**。完成授權後回到此處按下提交。"
       }
     }
   }
