@@ -19,6 +19,11 @@ This branch intentionally drops the legacy dashboard, new-tab, reference-dashboa
 
 The v2 schema is documented in [UrDash Card Spec v2](docs/urdash-card-v2-spec.md).
 
+The next product stage expands this card foundation into a personalized dashboard
+designer. Delivery stages, architecture decisions, and acceptance criteria are
+documented in the [Next-Stage Plan](docs/urdash-next-stage-plan.md). Dashboard-level
+generation is planned; the current release generates individual cards.
+
 ## Install With HACS
 
 Until UrDash is published as a default HACS repository, add it as a custom repository:

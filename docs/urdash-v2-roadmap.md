@@ -7,6 +7,13 @@ device interactions.
 
 Last reviewed: 2026-07-10
 
+Product direction updated: 2026-11-08. The
+[Next-Stage Plan](urdash-next-stage-plan.md) defines the active delivery order:
+reliability gates, persistent projects/refinement, generation quality, responsive
+runtime composition, real data, and dashboard-level planning/publication. This
+document retains the detailed runtime backlog; historical checkbox status has
+not been re-audited in full.
+
 ## Status Legend
 
 - `[ ]` Not started
@@ -300,6 +307,9 @@ The product workflow and acceptance criteria are defined in
 
 ## Recommended Delivery Order
 
+The following order records the original v2 runtime work. Use the
+[Next-Stage Plan](urdash-next-stage-plan.md#delivery-order) for new product work.
+
 1. Capability model and shared action manifest.
 2. Canonical schema, compiler, and runtime validation.
 3. Safe expression AST and incremental binding engine.
@@ -312,6 +322,11 @@ The product workflow and acceptance criteria are defined in
 ## Progress Log
 
 Add dated entries here when a milestone is started or completed.
+
+- 2026-11-08: Added the next-stage product plan for evolving the card runtime into
+  a personalized dashboard designer, starting with persistent projects and
+  recoverable targeted refinement. Linked the active delivery order without
+  changing historical completion status.
 
 - 2026-07-10: Initial architecture audit converted into a trackable roadmap.
 - 2026-07-10: Added capability descriptor v1, service-registry filtering, core

@@ -3,6 +3,12 @@
 Status: Planned  
 Last updated: 2026-07-11
 
+Scope note added 2026-11-08: This specification describes the original single-card
+console. The [Next-Stage Plan](urdash-next-stage-plan.md) extends it with persistent
+projects, candidate history, targeted refinement, quality evaluation, and later
+dashboard composition. Its delivery order supersedes the original phase order
+below; dashboard generation remains planned rather than an implemented feature.
+
 ## Product Goal
 
 The UrDash generation console is a focused Home Assistant workspace for turning a
